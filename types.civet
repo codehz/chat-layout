@@ -8,7 +8,6 @@ export interface Context<C < CanvasRenderingContext2D> < RendererOptions, Contex
   remainingWidth: number
 
   measureNode(node: Node<C>): Box
-  invalidateNode(node: Node<C>): void
 
   with<T>(this: Context<C>, cb: (g: C) => T): T
 
@@ -25,5 +24,4 @@ export interface Node<C < CanvasRenderingContext2D>
   measure(ctx: Context<C>): Box
   draw(ctx: Context<C>, x: number, y: number): boolean
   hittest(ctx: Context<C>, test: HitTest): boolean
-  invalidate?(ctx: Context<C>): void
   readonly flex: boolean

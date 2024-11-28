@@ -1,5 +1,6 @@
 type { RendererOptions, Context, Node, Box, HitTest } from "./types.civet"
 { shallow, shallowMerge } from "./utils.civet"
+{ getNodeParent } from "./registry.civet"
 
 export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
   graphics: C
@@ -19,7 +20,6 @@ export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
       set remainingWidth(value)
         Object.defineProperty(this, "remainingWidth", value: value, writable: true)
       measureNode(node: Node<C>) self.measureNode node, this
-      @@invalidateNode
       with<T>(cb: (g: C) => T): T
         @graphics.save()
         finally @graphics.restore()
@@ -29,7 +29,9 @@ export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
 
   invalidateNode(node: Node<C>): void
     #cache.delete node
-    node.invalidate? @context
+    it: Node<C>? .= node
+    while it = getNodeParent it
+      #cache.delete it
 
   measureNode(node: Node<C>, ctx?: Context<C>): Box
     if #lastWidth != @graphics.canvas.clientWidth

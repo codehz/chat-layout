@@ -1,9 +1,12 @@
 type { Box, Context, Node, HitTest } from "./types.civet";
 { layoutText, layoutFirstLine, type TextLayout } from "./text.civet";
 { shallow, shallowMerge, resolveDynValue, type DynValue } from "./utils.civet"
+{ registerNodeParent } from "./registry.civet"
 
 export abstract class Group<C < CanvasRenderingContext2D> <: Node<C>
   @(readonly children: Node<C>[])
+    for each child of children
+      registerNodeParent child, this
 
   abstract measure(ctx: Context<C>): Box
   abstract draw(ctx: Context<C>, x: number, y: number): boolean
@@ -11,9 +14,6 @@ export abstract class Group<C < CanvasRenderingContext2D> <: Node<C>
   get flex()
     for some each item of @children
       item.flex
-
-  invalidate(ctx: Context<C>): void
-    ctx.invalidateNode child for each child of @children
 
 export class VStack<C < CanvasRenderingContext2D> < Group<C>
   @(children: Node<C>[], readonly options: { gap?: number } = {})
@@ -126,6 +126,7 @@ export class HStack<C < CanvasRenderingContext2D> < Group<C>
 
 export class Wrapper<C < CanvasRenderingContext2D> <: Node<C>
   @(readonly inner: Node<C>)
+    registerNodeParent inner, this
 
   get flex() @inner.flex
 
@@ -137,9 +138,6 @@ export class Wrapper<C < CanvasRenderingContext2D> <: Node<C>
 
   hittest(ctx: Context<C>, test: HitTest): boolean
     @inner.hittest ctx, test
-
-  invalidate(ctx: Context<C>): void
-    ctx.invalidateNode @inner
 
 export class PaddingBox<C < CanvasRenderingContext2D> < Wrapper<C>
   @(

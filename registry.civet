@@ -1,0 +1,9 @@
+type { Node } from "./types.civet"
+
+registry := new WeakMap<Node<any>, Node<any>>()
+
+export function registerNodeParent<C < CanvasRenderingContext2D>(node: Node<C>, parent: Node<C>): void
+  registry.set node, parent
+
+export function getNodeParent<C < CanvasRenderingContext2D>(node: Node<C>): Node<C>?
+  registry.get node
