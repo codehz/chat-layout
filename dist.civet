@@ -34,11 +34,10 @@ createBundle
 
 await $`rm *.d.ts`
 
-await cp(file, `dist/${file}`) for file of [
-  "LICENSE"
-  "README.md"
-  "tsconfig.json"
-]
+await cp(file, `dist/${file}`) for file of
+  . "LICENSE"
+  . "README.md"
+  . "tsconfig.json"
 
 contents := readFile("package.json", "utf-8") |> await |> JSON.parse
 delete contents["private"]
