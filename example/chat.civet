@@ -118,7 +118,13 @@ list.pushAll
   . sender: "A"
     content: lorem.generateWords 20
   . sender: "B"
-    content: "content 1"
+    content: "aaaa"
+  . sender: "B"
+    content: "aaaabbb"
+  . sender: "B"
+    content: "测试中文"
+  . sender: "B"
+    content: "测试aa中文aaa"
   . sender: "B"
     content: lorem.generateWords 5
 

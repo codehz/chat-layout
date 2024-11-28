@@ -16,12 +16,12 @@ export function layoutFirstLine<C < CanvasRenderingContext2D>(
     |> .split "\n", 1
     |> &[0]
     |> .trim()
-  { width: textWidth, actualBoundingBoxAscent: shift, actualBoundingBoxDescent: lineHeight } := ctx.graphics.measureText line
+  { width: textWidth, fontBoundingBoxAscent: shift, fontBoundingBoxDescent: lineHeight } := ctx.graphics.measureText line
   if textWidth <= maxWidth
-    { width: textWidth, text: line, shift, lineHeight }
+    { width: textWidth, text: line, shift: shift / 2, lineHeight }
   else
     { width, text } := splitToFitText ctx, line, maxWidth, textWidth
-    { width, text, shift, lineHeight }
+    { width, text, shift: shift / 2, lineHeight }
 
 export function layoutText<C < CanvasRenderingContext2D>(
   ctx: Context<C>
@@ -38,20 +38,20 @@ export function layoutText<C < CanvasRenderingContext2D>(
   width .= 0
   lines: TextLayout[] := []
   for each let line of inputLines
-    { width: textWidth, actualBoundingBoxAscent: shift, actualBoundingBoxDescent: lineHeight } .= ctx.graphics.measureText line
+    { width: textWidth, fontBoundingBoxAscent: shift, fontBoundingBoxDescent: lineHeight } .= ctx.graphics.measureText line
     if textWidth <= maxWidth
       width = Math.max width, textWidth
-      lines.push width: textWidth, text: line, shift: shift, lineHeight: lineHeight
+      lines.push width: textWidth, text: line, shift: shift / 2, lineHeight: lineHeight
     else
       while textWidth > maxWidth
         splited := splitToFitText ctx, line, maxWidth, textWidth
         width = Math.max width, splited.width
-        lines.push text: splited.text, width: splited.width, shift: shift, lineHeight: lineHeight
+        lines.push text: splited.text, width: splited.width, shift: shift / 2, lineHeight: lineHeight
         line = splited.rest
         { width: textWidth } = ctx.graphics.measureText line
       if textWidth > 0
         width = Math.max width, textWidth
-        lines.push width: textWidth, text: line, shift: shift, lineHeight: lineHeight
+        lines.push width: textWidth, text: line, shift: shift / 2, lineHeight: lineHeight
   { width, lines }
 
 function splitToFitText<C < CanvasRenderingContext2D>(
