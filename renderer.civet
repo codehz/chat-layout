@@ -1,0 +1,284 @@
+type { RendererOptions, Context, Node, Box, HitTest } from "./types.civet"
+{ shallow, shallowMerge } from "./utils.civet"
+
+export class BaseRenderer<O = {}>
+  graphics: CanvasRenderingContext2D
+  #ctx: Context
+  #lastWidth: number
+  #cache = new WeakMap<Node, Box>()
+
+  protected get context() shallow #ctx
+
+  @(@graphics: CanvasRenderingContext2D, readonly options: RendererOptions & O)
+    @graphics.textBaseline = 'top'
+    @graphics.textRendering = 'optimizeLegibility'
+    self := this
+    #ctx = {}
+      @graphics
+      get remainingWidth() @graphics.canvas.clientWidth
+      set remainingWidth(value)
+        Object.defineProperty(this, "remainingWidth", value: value, writable: true)
+      measureNode(node: Node) self.measureNode node, this
+      @@invalidateNode
+      with<T>(cb: (g: CanvasRenderingContext2D) => T): T
+        @graphics.save()
+        finally @graphics.restore()
+        cb @graphics
+      splitText(text: string) options.splitText text
+    #lastWidth = @graphics.canvas.clientWidth
+
+  invalidateNode(node: Node): void
+    #cache.delete node
+    node.invalidate? @context
+
+  measureNode(node: Node, ctx?: Context): Box
+    if #lastWidth != @graphics.canvas.clientWidth
+      #cache = new WeakMap<Node, Box>()
+    else if result? := #cache.get(node)
+      return result
+    result := node.measure ctx ?? @context
+    #cache.set node, result
+    result
+
+export class DebugRenderer < BaseRenderer
+  draw(node: Node): boolean
+    { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
+    @graphics.clearRect 0, 0, viewportWidth, viewportHeight
+    node.draw @context, 0, 0
+
+  hittest(node: Node, test: HitTest): boolean
+    node.hittest @context, test
+
+export function memoRenderItem<T < {}>(renderItem: (item: T) => Node)
+  cache := new WeakMap<T, Node>()
+  function fn(item: T): Node
+    return result if result? := cache.get item
+    result := renderItem item
+    cache.set item, result
+    result
+  Object.assign fn, reset: cache@delete
+
+export abstract class VirtualizedRenderer<T < {}> < BaseRenderer<{
+  renderItem: (item: T) => Node
+}>
+  protected offset = 0
+  protected position = NaN
+  protected items: T[] = []
+
+  unshift(...items: T[]) @unshiftAll items
+
+  unshiftAll(items: T[])
+    @position += items#
+    @items = items ++ @items
+
+  push(...items: T[]) @pushAll items
+
+  pushAll(items: T[]) @items ++= items
+
+  reset(): void
+    @items = []
+    @offset = 0
+    @position = -1
+
+  applyScroll(delta: number)
+    @offset += delta
+
+  get pos() @position
+  get length() @items#
+
+  abstract render(): boolean
+  abstract hittest(test: HitTest): boolean
+
+export class TimelineRenderer<T < {}> < VirtualizedRenderer<T>
+  #action: "idle" | "scrollToTop" = "idle"
+
+  render(): boolean
+    { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
+    @graphics.clearRect 0, 0, viewportWidth, viewportHeight
+
+    drawlength .= 0
+
+    @position = 0 if isNaN @position
+
+    if @offset > 0
+      if @position == 0
+        @offset = 0
+      else
+        for i of [@position - 1..>=0]
+          item := @items[i]
+          node := item |> @options.renderItem
+          { height } := @measureNode node
+          @position = i
+          @offset -= height
+          break if @offset <= 0
+        @offset = 0 if @position == 0 && @offset > 0
+
+    y .= @offset
+    drawlist: [Node, number][] := []
+
+    for i of [@position..<@items#]
+      item := @items[i]
+      node := item |> @options.renderItem
+      { height } := @measureNode node
+      if y + height > 0
+        drawlist.push [node, y]
+        drawlength += height
+      else
+        @offset += height
+        @position = i + 1
+      y += height
+      break if y >= viewportHeight
+
+    shift .= 0
+
+    if y < viewportHeight
+      if @position == 0 && drawlength < viewportHeight
+        shift = -@offset
+        @offset = 0
+      else
+        shift = viewportHeight - y
+        y = @offset += shift
+        lastidx .= -1
+        for i of [@position - 1..>=0]
+          item := @items[lastidx = i]
+          node := item |> @options.renderItem
+          { height } := @measureNode node
+          drawlength += height
+          y -= height
+          drawlist.push [node, y - shift]
+          break if y < 0
+        if lastidx == 0 && drawlength < viewportHeight
+          shift = -drawlist.-1.1
+          @position = 0
+          @offset = 0
+
+    result .= false
+    for each [node, y] of drawlist
+      request_redraw := node.draw @context, 0, y + shift
+      result ||= request_redraw
+
+    if #action === 'scrollToTop'
+      if @position === 0 && @offset === 0
+        #action = "idle"
+      else
+        @applyScroll 5 * (@position + 1)
+        return true
+    result
+
+  hittest(test: HitTest): boolean
+    viewportHeight := @graphics.canvas.clientHeight
+    y .= @offset
+    for i of [@position..<@items#]
+      item := @items[i]
+      node := item |> @options.renderItem
+      { height } := @measureNode node
+      if test.y < y + height
+        shallowMerge test, y: test.y - y
+          |> node.hittest @context, .
+          |> return
+      y += height
+      break if y >= viewportHeight
+    false
+
+  scrollToTop(): void
+    #action = "scrollToTop"
+
+export class ChatRenderer<T < {}> < VirtualizedRenderer<T>
+  #action: "idle" | "scrollToBottom" = "idle"
+
+  render()
+    { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
+    @graphics.clearRect 0, 0, viewportWidth, viewportHeight
+
+    drawlength .= 0
+    @position = @items# - 1 if isNaN @position
+
+    if @offset < 0
+      if @position == @items# - 1
+        @offset = 0
+      else
+        for i of [@position + 1..<@items#]
+          item := @items[i]
+          node := item |> @options.renderItem
+          { height } := @measureNode node
+          @position = i
+          @offset += height
+          break if @offset > 0
+
+    y .= viewportHeight + @offset
+    drawlist: [Node, number][] := []
+
+    for i of [@position..>=0]
+      item := @items[i]
+      node := item |> @options.renderItem
+      { height } := @measureNode node
+      y -= height
+      if y <= viewportHeight
+        drawlist.push [node, y]
+        drawlength += height
+      else
+        @offset -= height
+        @position = i - 1
+      break if y < 0
+
+    shift .= 0
+
+    if y > 0
+      shift = -y
+      if drawlength < viewportHeight
+        y = drawlength
+        for i of [@position + 1..<@items#]
+          item := @items[i]
+          node := item |> @options.renderItem
+          { height } := @measureNode node
+          drawlist.push [node, y - shift]
+          y = drawlength += height
+          @position = i
+          break if y >= viewportHeight
+        if drawlength < viewportHeight
+          @offset = 0
+        else
+          @offset = drawlength - viewportHeight
+      else
+        @offset = drawlength - viewportHeight
+
+    result .= false
+    for each [node, y] of drawlist
+      request_redraw := node.draw @context, 0, y + shift
+      result ||= request_redraw
+
+    if #action === 'scrollToBottom'
+      if @position === @items# - 1 && @offset === 0
+        #action = "idle"
+      else
+        @applyScroll -5 * (@items# - @position)
+        return true
+    result
+
+  hittest(test: HitTest): boolean
+    viewportHeight := @graphics.canvas.clientHeight
+
+    drawlength .= 0
+
+    heights := for i of [@position..>=0]
+      item := @items[i]
+      node := item |> @options.renderItem
+      { height } := @measureNode node
+      drawlength += height
+      [node, height] as const
+
+    y .= drawlength < viewportHeight ? drawlength : viewportHeight + @offset
+
+    return false if test.y > y
+
+    for each [node, height] of heights
+      y -= height
+      if test.y > y
+        shallowMerge test, y: test.y - y
+          |> node.hittest @context, .
+          |> return
+
+    false
+
+  scrollToBottom(): void
+    #action = "scrollToBottom"

@@ -1,0 +1,56 @@
+{ compile } from '@danielx/civet'
+{ file, $ } from 'bun'
+{ createBundle } from 'dts-buddy'
+{ cp, readFile } from "node:fs/promises";
+
+await $`rm -rf dist/*`
+
+{ success, logs } := await Bun.build {
+  entrypoints: ["index.civet"]
+  target: 'bun'
+  outdir: 'dist'
+  plugins: [{
+    name: 'civet'
+    setup(build)
+      build.onLoad filter: /\.civet$/, ({path}) =>
+        source := file path |> .text() |> await
+        contents .= await compile source, parseOptions: comptime: true
+        return {
+          contents
+          loader: 'tsx'
+        }
+  }]
+}
+console.log item for item of logs
+
+await $`bun x --bun civet --emit-declaration *.civet`
+
+createBundle
+  project: 'tsconfig.json'
+  output: 'dist/index.d.ts'
+  modules:
+    '.': 'index.civet.d.ts'
+
+await $`rm *.d.ts`
+
+await cp(file, `dist/${file}`) for file of [
+  "LICENSE"
+  "README.md"
+  "tsconfig.json"
+]
+
+contents := readFile("package.json", "utf-8") |> await |> JSON.parse
+delete contents["private"]
+delete contents.scripts
+contents.version =
+  $`git describe --tags --always`
+    |> .text()
+    |> await
+    |> .trim()
+    |> .replace /-[[:digit:]]\+-g/, "+"
+    |> .replace /^v/, ""
+contents.devDependencies = {}
+contents.module = "index.js"
+await Bun.write "dist/package.json", JSON.stringify contents, null, 2
+
+process.exit(-1) if !success

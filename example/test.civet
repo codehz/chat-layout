@@ -1,0 +1,79 @@
+{ DebugRenderer, Text, MultilineText, VStack, HStack, PaddingBox, Wrapper, AlignBox, resolveDynValue, type DynValue, type Context, type Node, type HitTest } from ".."
+
+class RoundedBox < PaddingBox
+  readonly radii: number | DOMPointInit | (number | DOMPointInit)[]
+  readonly stroke: DynValue string?
+  readonly fill: DynValue string?
+
+  @(
+    inner: Node
+    { @radii, @stroke, @fill, ...options}:
+      top: number
+      bottom: number
+      left: number
+      right: number
+      stroke?: DynValue string?
+      fill?: DynValue string?
+      radii: number | DOMPointInit | (number | DOMPointInit)[]
+  )
+    super(inner, options)
+  draw(ctx: Context, x: number, y: number): boolean
+    { width, height } := ctx.measureNode @
+    ctx.with (g) =>
+      fill := resolveDynValue @fill if @fill?
+      stroke := resolveDynValue @stroke if @stroke?
+      g.beginPath()
+      g.roundRect x, y, width, height, @radii
+      g.fillStyle = fill if fill?
+      g.strokeStyle = stroke if stroke?
+      g.fill() if fill?
+      g.stroke() if stroke?
+    super.draw ctx, x, y
+
+canvas := document.createElement "canvas"
+document.body.appendChild canvas
+canvas.width = canvas.clientWidth * devicePixelRatio
+canvas.height = canvas.clientHeight * devicePixelRatio
+unless ctx? := canvas.getContext "2d"
+  throw new Error "Failed to initial canvas"
+ctx.scale(devicePixelRatio, devicePixelRatio)
+renderer := new DebugRenderer ctx, splitText: (text: string) => text.split('')
+color .= 'green'
+
+class ClickDetect < Wrapper
+  hittest()
+    color = 'red'
+    true
+
+node := new VStack
+    . new MultilineText "测试居中".repeat(20), lineHeight: 20, font: "400 16px monospace", alignment: "center", style: "black"
+      |> new AlignBox ., alignment: "center"
+    . new HStack
+        . new Text "测试3".repeat(2), lineHeight: 20, font: "400 16px monospace", style: => color
+          |> new RoundedBox ., left: 14, right: 14, bottom: 10, top: 10, fill: "#aaa", radii: 8
+          |> new ClickDetect
+        . new MultilineText "测试2".repeat(5), lineHeight: 16, font: "400 12px monospace", alignment: "center", style: "black"
+          |> new RoundedBox ., left: 10, right: 10, bottom: 5, top: 5, fill: "#aaa", radii: 8
+        reverse: true
+        gap: 10
+      |> new RoundedBox ., left: 10, right: 10, bottom: 10, top: 10, fill: "#ddd", radii: 16
+      |> new AlignBox ., alignment: "center"
+    . new MultilineText "文本右对齐".repeat(10), lineHeight: 20, font: "400 16px monospace", alignment: "right", style: "black"
+        |> new RoundedBox ., left: 10, right: 10, bottom: 10, top: 10, fill: "#ccc", radii: 16
+        |> new AlignBox ., alignment: "center"
+    gap: 10
+  |> new RoundedBox ., left: 10, right: 10, bottom: 10, top: 10, fill: "#eee", radii: 20
+renderer.measureNode node |> console.log
+renderer.draw node
+
+requestAnimationFrame function fn
+  renderer.draw node
+  requestAnimationFrame fn
+
+canvas.addEventListener "pointermove", (e) =>
+  { top, left } := canvas.getBoundingClientRect()
+  result := renderer.hittest node, {}
+    x: e.clientX - left
+    y: e.clientY - top
+    type: "hover"
+  color = 'green' unless result

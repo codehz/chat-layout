@@ -1,0 +1,79 @@
+type { Context } from "./types.civet"
+
+export TextLayout ::=
+  width: number
+  text: string
+  shift: number
+  lineHeight: number
+
+export function layoutFirstLine(
+  ctx: Context
+  text: string
+  maxWidth: number
+): TextLayout
+  line := text
+    |> .replaceAll /[^\S\n]+/g, " "
+    |> .split "\n", 1
+    |> &[0]
+    |> .trim()
+  { width: textWidth, actualBoundingBoxAscent: shift, actualBoundingBoxDescent: lineHeight } := ctx.graphics.measureText line
+  if textWidth <= maxWidth
+    { width: textWidth, text: line, shift, lineHeight }
+  else
+    { width, text } := splitToFitText ctx, line, maxWidth, textWidth
+    { width, text, shift, lineHeight }
+
+export function layoutText(
+  ctx: Context
+  text: string
+  maxWidth: number
+): { width: number; lines: TextLayout[] }
+  inputLines := for each line of text
+      .replaceAll /[^\S\n]+/g, " "
+      .split "\n"
+    trimed := line.trim()
+    continue unless trimed
+    trimed
+  return { width: 0, lines: [] } if inputLines# === 0
+  width .= 0
+  lines: TextLayout[] := []
+  for each let line of inputLines
+    { width: textWidth, actualBoundingBoxAscent: shift, actualBoundingBoxDescent: lineHeight } .= ctx.graphics.measureText line
+    if textWidth <= maxWidth
+      width = Math.max width, textWidth
+      lines.push width: textWidth, text: line, shift: shift, lineHeight: lineHeight
+    else
+      while textWidth > maxWidth
+        splited := splitToFitText ctx, line, maxWidth, textWidth
+        width = Math.max width, splited.width
+        lines.push text: splited.text, width: splited.width, shift: shift, lineHeight: lineHeight
+        line = splited.rest
+        { width: textWidth } = ctx.graphics.measureText line
+      if textWidth > 0
+        width = Math.max width, textWidth
+        lines.push width: textWidth, text: line, shift: shift, lineHeight: lineHeight
+  { width, lines }
+
+function splitToFitText(
+  ctx: Context
+  text: string
+  width: number
+  totalWidth: number
+): { text: string, width: number, rest: string }
+  arr := ctx.splitText text
+  guess .= Math.floor (width / totalWidth) * arr#
+  let guessText
+  { width: guessWidth } .= ctx.graphics.measureText guessText = arr[...guess].join ""
+  until guessWidth >= width
+    guess++
+    { width: guessWidth } = ctx.graphics.measureText guessText = arr[...guess].join ""
+  while guessWidth > width
+    lastSpace := arr.lastIndexOf " ", guess - 1
+    if lastSpace > 0
+      guess = lastSpace
+    else
+      guess--
+    { width: guessWidth } = ctx.graphics.measureText guessText = arr[...guess].join ""
+  text: guessText
+  width: guessWidth
+  rest: arr[guess..] |> .join "" |> .trimStart()

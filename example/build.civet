@@ -1,0 +1,20 @@
+import { compile } from '@danielx/civet'
+import { file } from 'bun'
+
+{ success, logs } := await Bun.build {
+  entrypoints: ["chat.civet"]
+  outdir: 'build'
+  plugins: [{
+    name: 'civet'
+    setup(build)
+      build.onLoad filter: /\.civet$/, ({path}) =>
+        source := file path |> .text() |> await
+        contents .= await compile source, parseOptions: comptime: true
+        return {
+          contents
+          loader: 'tsx'
+        }
+  }]
+}
+console.log item for item of logs
+process.exit(-1) if !success

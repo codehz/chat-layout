@@ -1,0 +1,296 @@
+type { Box, Context, Node, HitTest } from "./types.civet";
+{ layoutText, layoutFirstLine, type TextLayout } from "./text.civet";
+{ shallow, shallowMerge, resolveDynValue, type DynValue } from "./utils.civet"
+
+export abstract class Group <: Node
+  @(readonly children: Node[])
+
+  abstract measure(ctx: Context): Box
+  abstract draw(ctx: Context, x: number, y: number): boolean
+  abstract hittest(ctx: Context, test: HitTest): boolean
+  get flex()
+    for some each item of @children
+      item.flex
+
+  invalidate(ctx: Context): void
+    ctx.invalidateNode child for each child of @children
+
+export class VStack < Group
+  @(children: Node[], readonly options: { gap?: number } = {})
+    super children
+
+  measure(ctx: Context): Box
+    width .= 0
+    height .= 0
+    for each child, index of @children
+      height += @options.gap if @options.gap? and index !== 0
+      result .= shallow ctx |> .measureNode child
+      height += result.height
+      width = Math.max width, result.width
+    ctx.remainingWidth -= width
+    { width, height }
+
+  draw(ctx: Context, x: number, y: number)
+    result .= false
+    for each child, index of @children
+      y += @options.gap if @options.gap? and index !== 0
+      request_redraw := child.draw ctx, x, y
+      result ||= request_redraw
+      { height } .= shallow ctx |> .measureNode child
+      y += height
+    result
+
+  hittest(ctx: Context, test: HitTest): boolean
+    y .= 0
+    for each child, index of @children
+      y += @options.gap if @options.gap? and index !== 0
+      curctx := shallow ctx
+      { height } .= curctx.measureNode child
+      if test.y >= y and test.y < y + height
+        return child.hittest curctx, shallowMerge test,
+          y: test.y - y
+      y += height
+    false
+
+export class HStack < Group
+  @(
+    readonly children: Node[]
+    readonly options: { reverse?: boolean; gap?: number } = {}
+  ) super children
+
+  measure(ctx: Context): Box
+    width .= 0
+    height .= 0
+    let firstflex: Node?
+    for each child, index of @children
+      width += @options.gap if @options.gap? and index !== 0
+      if !firstflex? && child.flex
+        firstflex = child
+        continue
+      curctx := shallow ctx
+      curctx.remainingWidth = ctx.remainingWidth - width
+      result := curctx.measureNode child
+      width += result.width
+      height = Math.max height, result.height
+
+    if firstflex?
+      curctx := shallow ctx
+      curctx.remainingWidth = ctx.remainingWidth - width
+      result := curctx.measureNode firstflex
+      width += result.width
+      height = Math.max height, result.height
+
+    { width, height }
+
+  draw(ctx: Context, x: number, y: number): boolean
+    result .= false
+    if @options.reverse
+      x += ctx.measureNode this |> .width
+      for each child, index of @children
+        x -= @options.gap if @options.gap? and index !== 0
+        { width } := shallow ctx |> .measureNode child
+        x -= width
+        request_redraw := child.draw ctx, x, y
+        result ||= request_redraw
+    else
+      for each child, index of @children
+        x += @options.gap if @options.gap? and index !== 0
+        request_redraw := child.draw ctx, x, y
+        result ||= request_redraw
+        { width } := shallow ctx |> .measureNode child
+        x += width
+    result
+
+  hittest(ctx: Context, test: HitTest): boolean
+    if @options.reverse
+      x .= ctx.measureNode this |> .width
+      for each child, index of @children
+        x -= @options.gap if @options.gap? and index !== 0
+        curctx := shallow ctx
+        { width } := curctx.measureNode child
+        x -= width
+        if x <= test.x <= x + width
+          return child.hittest curctx, shallowMerge test,
+            x: test.x - x
+    else
+      x .= 0
+      for each child, index of @children
+        x += @options.gap if @options.gap? and index !== 0
+        curctx := shallow ctx
+        { width } := curctx.measureNode child
+        if x <= test.x <= x + width
+          return child.hittest curctx, shallowMerge test,
+            x: test.x - x
+        x += width
+    false
+
+export class Wrapper <: Node
+  @(readonly inner: Node)
+
+  get flex() @inner.flex
+
+  measure(ctx: Context): Box
+    @inner.measure ctx
+
+  draw(ctx: Context, x: number, y: number): boolean
+    @inner.draw ctx, x, y
+
+  hittest(ctx: Context, test: HitTest): boolean
+    @inner.hittest ctx, test
+
+  invalidate(ctx: Context): void
+    ctx.invalidateNode @inner
+
+export class PaddingBox < Wrapper
+  @(
+    inner: Node
+    readonly padding:
+      top?: number
+      bottom?: number
+      left?: number
+      right?: number
+    = {}
+  ) super inner
+
+  get #top() @padding.top ?? 0
+  get #bottom() @padding.bottom ?? 0
+  get #left() @padding.left ?? 0
+  get #right() @padding.right ?? 0
+
+  measure(ctx: Context): Box
+    ctx = shallow ctx
+    ctx.remainingWidth -= #left + #right
+    { width, height } := ctx.measureNode @inner
+    width: width + #left + #right,
+    height: height + #top + #bottom,
+
+  draw(ctx: Context, x: number, y: number): boolean
+    @inner.draw ctx, x + #left, y + #top
+
+  hittest(ctx: Context, test: HitTest): boolean
+    { width, height } := ctx.measureNode @inner
+    if
+      (and)
+        0 <= test.x - #left < width
+        0 <= test.y - #top < height
+      return @inner.hittest ctx, shallowMerge test,
+        x: test.x - #left
+        y: test.y - #top
+    false
+
+export class AlignBox < Wrapper
+  #shift = 0
+
+  @(
+    inner: Node
+    readonly options:
+      alignment: "left" | "center" | "right"
+  ) super inner
+
+  measure(ctx: Context): Box
+    { width, height } := ctx.measureNode @inner
+    #shift = switch @options.alignment
+      when 'center' then (ctx.remainingWidth - width) / 2
+      when 'right' then ctx.remainingWidth - width
+      else 0
+    width: ctx.remainingWidth
+    height: height
+
+  draw(ctx: Context, x: number, y: number): boolean
+    @inner.draw ctx, x + #shift, y
+
+  hittest(ctx: Context, test: HitTest): boolean
+    { width } := ctx.measureNode @inner
+    if 0 <= test.x - #shift < width
+      return @inner.hittest ctx, shallowMerge test,
+        x: test.x - #shift
+    false
+
+export class MultilineText <: Node
+  #width: number = 0
+  #lines: TextLayout[] = []
+
+  @(
+    readonly text: string
+    readonly options:
+      lineHeight: number
+      font: string
+      alignment: "left" | "center" | "right"
+      style: DynValue string
+  )
+
+  get flex() true
+
+  measure(ctx: Context): Box
+    ctx.with (g) =>
+      g.font = @options.font
+      { #width, #lines } := layoutText ctx, @text, ctx.remainingWidth
+      { #width, height: #lines# * @options.lineHeight }
+
+  draw(ctx: Context, x: number, y: number): boolean
+    ctx.with (g) =>
+      g.font = @options.font
+      g.fillStyle = resolveDynValue @options.style
+      switch @options.alignment
+        when 'left'
+          for each { text, shift, lineHeight } of #lines
+            g.fillText text, x, y + shift + (@options.lineHeight - lineHeight) / 2
+            y += @options.lineHeight
+        when 'right'
+          x += #width
+          g.textAlign = "right"
+          for each { text, shift, lineHeight } of #lines
+            g.fillText text, x, y + shift + (@options.lineHeight - lineHeight) / 2
+            y += @options.lineHeight
+        when 'center'
+          x += #width / 2
+          g.textAlign = "center"
+          for each { text, shift, lineHeight } of #lines
+            g.fillText text, x, y + shift + (@options.lineHeight - lineHeight) / 2
+            y += @options.lineHeight
+      false
+
+  hittest(ctx: Context, test: HitTest) false
+
+export class Text <: Node
+  @(
+    readonly text: string
+    readonly options:
+      lineHeight: number
+      font: string
+      style: DynValue string
+  )
+
+  #width = 0
+  #text = ""
+  #shift = 0
+  #lineHeight = 0
+
+  get flex() false
+
+  measure(ctx: Context): Box
+    ctx.with (g) =>
+      g.font = @options.font
+      { #width, #text, #shift, #lineHeight } := layoutFirstLine ctx, @text, ctx.remainingWidth
+      { #width, height: @options.lineHeight }
+
+  draw(ctx: Context, x: number, y: number): boolean
+    ctx.with (g) =>
+      g.font = @options.font
+      g.fillStyle = resolveDynValue @options.style
+      g.fillText #text, x, y + #shift + (@options.lineHeight - #lineHeight) / 2
+      false
+
+  hittest(ctx: Context, test: HitTest) false
+
+export class Fixed <: Node
+  @(readonly width: number, readonly height: number)
+
+  get flex() false
+
+  measure(ctx: Context): Box
+    { @width, @height }
+
+  draw(ctx: Context, x: number, y: number) false
+
+  hittest(ctx: Context, test: HitTest) false

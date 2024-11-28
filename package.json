@@ -1,0 +1,19 @@
+{
+  "name": "chat-layout",
+  "private": true,
+  "module": "index.civet",
+  "type": "module",
+  "devDependencies": {
+    "@danielx/civet": "^0.8.16",
+    "@types/bun": "latest",
+    "dts-buddy": "^0.5.4",
+    "lorem-ipsum": "^2.0.8",
+    "npm-dts": "^1.3.13",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {},
+  "scripts": {
+    "dist": "bun run dist.civet",
+    "example": "cd example && bun run build.civet"
+  }
+}

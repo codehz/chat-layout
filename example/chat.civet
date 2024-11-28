@@ -1,0 +1,130 @@
+{ ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, type DynValue, type Node, type Context, resolveDynValue } from ".."
+{ LoremIpsum } from "lorem-ipsum"
+
+class RoundedBox < PaddingBox
+  readonly radii: number | DOMPointInit | (number | DOMPointInit)[]
+  readonly stroke: DynValue string?
+  readonly fill: DynValue string?
+
+  @(
+    inner: Node
+    { @radii, @stroke, @fill, ...options}:
+      top?: number
+      bottom?: number
+      left?: number
+      right?: number
+      stroke?: DynValue string?
+      fill?: DynValue string?
+      radii: number | DOMPointInit | (number | DOMPointInit)[]
+  )
+    super(inner, options)
+
+  draw(ctx: Context, x: number, y: number): boolean
+    { width, height } := ctx.measureNode @
+    ctx.with (g) =>
+      fill := resolveDynValue @fill if @fill?
+      stroke := resolveDynValue @stroke if @stroke?
+      g.beginPath()
+      g.roundRect x, y, width, height, @radii
+      g.fillStyle = fill if fill?
+      g.strokeStyle = stroke if stroke?
+      g.fill() if fill?
+      g.stroke() if stroke?
+    super.draw ctx, x, y
+
+class Circle < Fixed
+  @(readonly size: number, readonly options: { fill: DynValue string })
+    super size, size
+
+  draw(ctx: Context, x: number, y: number): boolean
+    ctx.with (g) =>
+      g.fillStyle = resolveDynValue @options.fill
+      g.beginPath()
+      radius := @size / 2
+      g.arc x + radius, y + radius, radius, 0, 2 * Math.PI, false
+      g.fill()
+    false
+
+function button(text: string, action: =>)
+  btn := document.createElement "button" ||> document.body.appendChild
+  btn.textContent = text
+  btn.onclick = action
+
+canvas := document.createElement "canvas" ||> document.body.appendChild
+canvas.width = canvas.clientWidth * devicePixelRatio
+canvas.height = canvas.clientHeight * devicePixelRatio
+unless ctx? := canvas.getContext "2d"
+  throw new Error "Failed to initial canvas"
+ctx.scale(devicePixelRatio, devicePixelRatio)
+
+ChatItem ::=
+  sender: string
+  content: string
+
+let current_hover: ChatItem?
+
+class HoverDetector < Wrapper
+  @(inner: Node, @item: ChatItem)
+    super inner
+
+  hittest()
+    current_hover = @item
+    true
+
+renderItem := memoRenderItem (item: ChatItem) =>
+  new HStack
+    . new Circle 32, fill: "red"
+    . new VStack
+        . new Text item.sender, lineHeight: 15, font: "12px system-ui", style: "black"
+          |> new AlignBox ., alignment: item.sender == 'A' ? 'right' : 'left'
+        . new MultilineText item.content, lineHeight: 20, font: "16px system-ui", style: "black", alignment: "left"
+          |> new RoundedBox ., top: 6, bottom: 6, left: 10, right: 10, radii: 8, fill: => current_hover == item ? "#aaa" : "#ccc"
+          |> new HoverDetector ., item
+          |> new AlignBox ., alignment: item.sender == 'A' ? 'right' : 'left'
+    . new Fixed 32, 0
+    gap: 4
+    reverse: item.sender == 'A'
+  |> new PaddingBox ., top: 4, bottom: 4, left: 4, right: 4
+
+renderer := new ChatRenderer ctx, {}
+  splitText(text) text.split ""
+  renderItem
+
+requestAnimationFrame function fn
+  renderer.render()
+  requestAnimationFrame fn
+
+canvas.addEventListener "wheel", (e) =>
+  renderer.applyScroll -e.deltaY
+
+canvas.addEventListener "pointermove", (e) =>
+  { top, left } := canvas.getBoundingClientRect()
+  result := renderer.hittest
+    x: e.clientX - left
+    y: e.clientY - top
+    type: "hover"
+  if !result
+    current_hover = undefined
+
+lorem := new LoremIpsum
+
+renderer.pushAll
+  . sender: "A"
+    content: lorem.generateWords 20
+  . sender: "B"
+    content: "content 1"
+  . sender: "B"
+    content: lorem.generateWords 5
+
+button "unshift", =>
+  renderer.unshift
+    sender: Math.random() < 0.5 ? "A" : "B"
+    content: lorem.generateWords 10 + Math.floor(20 * Math.random())
+
+button "push", =>
+  renderer.push
+    sender: Math.random() < 0.5 ? "A" : "B"
+    content: lorem.generateWords 10 + Math.floor(20 * Math.random())
+
+button "scrollToBottom", =>
+  renderer.scrollToBottom()

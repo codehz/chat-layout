@@ -1,0 +1,20 @@
+name: Publish Package to npmjs
+on:
+  push:
+  release:
+    types: [published]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      - run: bun i
+      - run: bun run dist
+      - run: bun publish
+        if: github.event_name == 'release' && github.event.action == 'created'
+        working-directory: dist
+        env:
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}

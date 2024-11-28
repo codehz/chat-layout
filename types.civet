@@ -1,0 +1,29 @@
+export RendererOptions ::=
+  splitText(text: string): string[]
+
+export interface ContextHelper
+
+export interface Context < RendererOptions, ContextHelper
+  graphics: CanvasRenderingContext2D
+  remainingWidth: number
+
+  measureNode(node: Node): Box
+  invalidateNode(node: Node): void
+
+  with<T>(this: Context, cb: (g: CanvasRenderingContext2D) => T): T
+
+export Box ::=
+  width: number
+  height: number
+
+export HitTest ::=
+  x: number
+  y: number
+  type: "click" | "auxclick" | "hover"
+
+export interface Node
+  measure(ctx: Context): Box
+  draw(ctx: Context, x: number, y: number): boolean
+  hittest(ctx: Context, test: HitTest): boolean
+  invalidate?(ctx: Context): void
+  readonly flex: boolean
