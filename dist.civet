@@ -5,10 +5,11 @@
 
 await $`rm -rf dist/*`.catch =>
 
-{ success, logs } := await Bun.build {
+{ success, logs } := await Bun.build
   entrypoints: ["index.civet"]
   target: 'bun'
   outdir: 'dist'
+  sourcemap: 'linked'
   plugins: [{
     name: 'civet'
     setup(build)
@@ -20,7 +21,7 @@ await $`rm -rf dist/*`.catch =>
           loader: 'tsx'
         }
   }]
-}
+
 console.log item for item of logs
 
 await $`bun x --bun civet --emit-declaration *.civet`
