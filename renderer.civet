@@ -58,12 +58,10 @@ export function memoRenderItem<C < CanvasRenderingContext2D, T < {}>(renderItem:
     result
   Object.assign fn, reset: cache@delete
 
-export abstract class VirtualizedRenderer<C < CanvasRenderingContext2D, T < {}> < BaseRenderer<C, {
-  renderItem: (item: T) => Node<C>
-}>
-  protected offset = 0
-  protected position = NaN
-  protected items: T[] = []
+export class ListState<T < {}>
+  offset = 0
+  position = NaN
+  items: T[] = []
 
   unshift(...items: T[]) @unshiftAll items
 
@@ -80,11 +78,20 @@ export abstract class VirtualizedRenderer<C < CanvasRenderingContext2D, T < {}> 
     @offset = 0
     @position = -1
 
-  applyScroll(delta: number)
-    @offset += delta
+  applyScroll(delta: number) @offset += delta
 
-  get pos() @position
-  get length() @items#
+export abstract class VirtualizedRenderer<C < CanvasRenderingContext2D, T < {}> < BaseRenderer<C, {
+  renderItem: (item: T) => Node<C>
+  list: ListState<T>
+}>
+  get position() @options.list.position
+  set position(value) @options.list.position = value
+
+  get offset() @options.list.offset
+  set offset(value) @options.list.offset = value
+
+  get items() @options.list.items
+  set items(value) @options.list.items = value
 
   abstract render(): boolean
   abstract hittest(test: HitTest): boolean
@@ -161,7 +168,7 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
       if @position === 0 && @offset === 0
         #action = "idle"
       else
-        @applyScroll 5 * (@position + 1)
+        @options.list.applyScroll 5 * (@position + 1)
         return true
     result
 
@@ -251,7 +258,7 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
       if @position === @items# - 1 && @offset === 0
         #action = "idle"
       else
-        @applyScroll -5 * (@items# - @position)
+        @options.list.applyScroll -5 * (@items# - @position)
         return true
     result
 

@@ -1,4 +1,4 @@
-{ ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, type DynValue, type Node, type Context, resolveDynValue } from ".."
+{ ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, ListState, type DynValue, type Node, type Context, resolveDynValue } from ".."
 { LoremIpsum } from "lorem-ipsum"
 
 C ::= CanvasRenderingContext2D
@@ -88,16 +88,19 @@ renderItem := memoRenderItem (item: ChatItem) =>
     reverse: item.sender == 'A'
   |> new PaddingBox ., top: 4, bottom: 4, left: 4, right: 4
 
+list := new ListState<ChatItem>
+
 renderer := new ChatRenderer ctx, {}
   splitText(text) text.split ""
   renderItem
+  list
 
 requestAnimationFrame function fn
   renderer.render()
   requestAnimationFrame fn
 
 canvas.addEventListener "wheel", (e) =>
-  renderer.applyScroll -e.deltaY
+  list.applyScroll -e.deltaY
 
 canvas.addEventListener "pointermove", (e) =>
   { top, left } := canvas.getBoundingClientRect()
@@ -110,7 +113,7 @@ canvas.addEventListener "pointermove", (e) =>
 
 lorem := new LoremIpsum
 
-renderer.pushAll
+list.pushAll
   . sender: "A"
     content: lorem.generateWords 20
   . sender: "B"
@@ -119,12 +122,12 @@ renderer.pushAll
     content: lorem.generateWords 5
 
 button "unshift", =>
-  renderer.unshift
+  list.unshift
     sender: Math.random() < 0.5 ? "A" : "B"
     content: lorem.generateWords 10 + Math.floor(20 * Math.random())
 
 button "push", =>
-  renderer.push
+  list.push
     sender: Math.random() < 0.5 ? "A" : "B"
     content: lorem.generateWords 10 + Math.floor(20 * Math.random())
 
