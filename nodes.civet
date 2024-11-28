@@ -1,7 +1,7 @@
 type { Box, Context, Node, HitTest } from "./types.civet";
 { layoutText, layoutFirstLine, type TextLayout } from "./text.civet";
 { shallow, shallowMerge, resolveDynValue, type DynValue } from "./utils.civet"
-{ registerNodeParent } from "./registry.civet"
+{ registerNodeParent, unregisterNodeParent } from "./registry.civet"
 
 export abstract class Group<C < CanvasRenderingContext2D> <: Node<C>
   @(readonly children: Node<C>[])
@@ -125,8 +125,15 @@ export class HStack<C < CanvasRenderingContext2D> < Group<C>
     false
 
 export class Wrapper<C < CanvasRenderingContext2D> <: Node<C>
-  @(readonly inner: Node<C>)
-    registerNodeParent inner, this
+  @(#inner: Node<C>)
+    registerNodeParent #inner, this
+
+  get inner() #inner
+  set inner(newnode: Node<C>)
+    return if newnode is #inner
+    unregisterNodeParent #inner
+    #inner = newnode
+    registerNodeParent newnode, this
 
   get flex() @inner.flex
 
