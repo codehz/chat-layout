@@ -76,7 +76,11 @@ export class ListState<T < {}>
   reset(): void
     @items = []
     @offset = 0
-    @position = -1
+    @position = NaN
+
+  resetScroll(): void
+    @offset = 0
+    @position = NaN
 
   applyScroll(delta: number) @offset += delta
 
