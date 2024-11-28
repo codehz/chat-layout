@@ -1,12 +1,12 @@
-{ ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, ListState, type DynValue, type Node, type Context, resolveDynValue } from ".."
+{ ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, ListState, type DynValue, type Node, type Context } from ".."
 { LoremIpsum } from "lorem-ipsum"
 
 C ::= CanvasRenderingContext2D
 
 class RoundedBox < PaddingBox<C>
   readonly radii: number | DOMPointInit | (number | DOMPointInit)[]
-  readonly stroke: DynValue string?
-  readonly fill: DynValue string?
+  readonly stroke: DynValue C, string?
+  readonly fill: DynValue C, string?
 
   @(
     inner: Node<C>
@@ -15,8 +15,8 @@ class RoundedBox < PaddingBox<C>
       bottom?: number
       left?: number
       right?: number
-      stroke?: DynValue string?
-      fill?: DynValue string?
+      stroke?: DynValue C, string?
+      fill?: DynValue C, string?
       radii: number | DOMPointInit | (number | DOMPointInit)[]
   )
     super(inner, options)
@@ -24,8 +24,8 @@ class RoundedBox < PaddingBox<C>
   draw(ctx: Context<C>, x: number, y: number): boolean
     { width, height } := ctx.measureNode @
     ctx.with (g) =>
-      fill := resolveDynValue @fill if @fill?
-      stroke := resolveDynValue @stroke if @stroke?
+      fill := ctx.resolveDynValue @fill if @fill?
+      stroke := ctx.resolveDynValue @stroke if @stroke?
       g.beginPath()
       g.roundRect x, y, width, height, @radii
       g.fillStyle = fill if fill?
@@ -35,12 +35,12 @@ class RoundedBox < PaddingBox<C>
     super.draw ctx, x, y
 
 class Circle < Fixed<C>
-  @(readonly size: number, readonly options: { fill: DynValue string })
+  @(readonly size: number, readonly options: { fill: DynValue C, string })
     super size, size
 
   draw(ctx: Context<C>, x: number, y: number): boolean
     ctx.with (g) =>
-      g.fillStyle = resolveDynValue @options.fill
+      g.fillStyle = ctx.resolveDynValue @options.fill
       g.beginPath()
       radius := @size / 2
       g.arc x + radius, y + radius, radius, 0, 2 * Math.PI, false

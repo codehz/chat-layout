@@ -1,11 +1,11 @@
-{ DebugRenderer, Text, MultilineText, VStack, HStack, PaddingBox, Wrapper, AlignBox, resolveDynValue, type DynValue, type Context, type Node, type HitTest } from ".."
+{ DebugRenderer, Text, MultilineText, VStack, HStack, PaddingBox, Wrapper, AlignBox, type DynValue, type Context, type Node, type HitTest } from ".."
 
 C ::= CanvasRenderingContext2D
 
 class RoundedBox < PaddingBox<C>
   readonly radii: number | DOMPointInit | (number | DOMPointInit)[]
-  readonly stroke: DynValue string?
-  readonly fill: DynValue string?
+  readonly stroke: DynValue C, string?
+  readonly fill: DynValue C, string?
 
   @(
     inner: Node<C>
@@ -14,16 +14,16 @@ class RoundedBox < PaddingBox<C>
       bottom: number
       left: number
       right: number
-      stroke?: DynValue string?
-      fill?: DynValue string?
+      stroke?: DynValue C, string?
+      fill?: DynValue C, string?
       radii: number | DOMPointInit | (number | DOMPointInit)[]
   )
     super(inner, options)
   draw(ctx: Context<C>, x: number, y: number): boolean
     { width, height } := ctx.measureNode @
     ctx.with (g) =>
-      fill := resolveDynValue @fill if @fill?
-      stroke := resolveDynValue @stroke if @stroke?
+      fill := ctx.resolveDynValue @fill if @fill?
+      stroke := ctx.resolveDynValue @stroke if @stroke?
       g.beginPath()
       g.roundRect x, y, width, height, @radii
       g.fillStyle = fill if fill?

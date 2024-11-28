@@ -1,6 +1,6 @@
-type { Box, Context, Node, HitTest } from "./types.civet";
+type { Box, Context, Node, HitTest, DynValue } from "./types.civet";
 { layoutText, layoutFirstLine, type TextLayout } from "./text.civet";
-{ shallow, shallowMerge, resolveDynValue, type DynValue } from "./utils.civet"
+{ shallow, shallowMerge } from "./utils.civet"
 { registerNodeParent, unregisterNodeParent } from "./registry.civet"
 
 export abstract class Group<C < CanvasRenderingContext2D> <: Node<C>
@@ -221,7 +221,7 @@ export class MultilineText<C < CanvasRenderingContext2D> <: Node<C>
       lineHeight: number
       font: string
       alignment: "left" | "center" | "right"
-      style: DynValue string
+      style: DynValue C, string
   )
 
   get flex() true
@@ -235,7 +235,7 @@ export class MultilineText<C < CanvasRenderingContext2D> <: Node<C>
   draw(ctx: Context<C>, x: number, y: number): boolean
     ctx.with (g) =>
       g.font = @options.font
-      g.fillStyle = resolveDynValue @options.style
+      g.fillStyle = ctx.resolveDynValue @options.style
       switch @options.alignment
         when 'left'
           for each { text, shift, lineHeight } of #lines
@@ -263,7 +263,7 @@ export class Text<C < CanvasRenderingContext2D> <: Node<C>
     readonly options:
       lineHeight: number
       font: string
-      style: DynValue string
+      style: DynValue C, string
   )
 
   #width = 0
@@ -282,7 +282,7 @@ export class Text<C < CanvasRenderingContext2D> <: Node<C>
   draw(ctx: Context<C>, x: number, y: number): boolean
     ctx.with (g) =>
       g.font = @options.font
-      g.fillStyle = resolveDynValue @options.style
+      g.fillStyle = ctx.resolveDynValue @options.style
       g.fillText #text, x, y + #shift + (@options.lineHeight - #lineHeight) / 2
       false
 

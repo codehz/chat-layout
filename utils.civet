@@ -4,12 +4,3 @@ export function shallow<T extends {}>(object: T): T
 export function shallowMerge<T extends {}, R extends {}>(object: T, other: R): T & R
   { __proto__: object, ...other } as unknown as T & R
 
-export DynValue<T> ::=
-  if T < Function
-    never
-  else
-    T | (-> T)
-
-export function resolveDynValue<T>(value: DynValue<T>): T
-  return (value as -> T)() if value <? 'function'
-  value as T
