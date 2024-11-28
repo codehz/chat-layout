@@ -1,7 +1,7 @@
 { compile } from '@danielx/civet'
 { file, $ } from 'bun'
 { createBundle } from 'dts-buddy'
-{ cp, readFile } from "node:fs/promises";
+{ cp, readFile } from "node:fs/promises"
 
 await $`mkdir -p dist`
 await $`rm -rf dist/*`
