@@ -6,8 +6,8 @@ export TextLayout ::=
   shift: number
   lineHeight: number
 
-export function layoutFirstLine(
-  ctx: Context
+export function layoutFirstLine<C < CanvasRenderingContext2D>(
+  ctx: Context<C>
   text: string
   maxWidth: number
 ): TextLayout
@@ -23,8 +23,8 @@ export function layoutFirstLine(
     { width, text } := splitToFitText ctx, line, maxWidth, textWidth
     { width, text, shift, lineHeight }
 
-export function layoutText(
-  ctx: Context
+export function layoutText<C < CanvasRenderingContext2D>(
+  ctx: Context<C>
   text: string
   maxWidth: number
 ): { width: number; lines: TextLayout[] }
@@ -54,8 +54,8 @@ export function layoutText(
         lines.push width: textWidth, text: line, shift: shift, lineHeight: lineHeight
   { width, lines }
 
-function splitToFitText(
-  ctx: Context
+function splitToFitText<C < CanvasRenderingContext2D>(
+  ctx: Context<C>
   text: string
   width: number
   totalWidth: number

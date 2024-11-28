@@ -1,12 +1,14 @@
 { DebugRenderer, Text, MultilineText, VStack, HStack, PaddingBox, Wrapper, AlignBox, resolveDynValue, type DynValue, type Context, type Node, type HitTest } from ".."
 
-class RoundedBox < PaddingBox
+C ::= CanvasRenderingContext2D
+
+class RoundedBox < PaddingBox<C>
   readonly radii: number | DOMPointInit | (number | DOMPointInit)[]
   readonly stroke: DynValue string?
   readonly fill: DynValue string?
 
   @(
-    inner: Node
+    inner: Node<C>
     { @radii, @stroke, @fill, ...options}:
       top: number
       bottom: number
@@ -17,7 +19,7 @@ class RoundedBox < PaddingBox
       radii: number | DOMPointInit | (number | DOMPointInit)[]
   )
     super(inner, options)
-  draw(ctx: Context, x: number, y: number): boolean
+  draw(ctx: Context<C>, x: number, y: number): boolean
     { width, height } := ctx.measureNode @
     ctx.with (g) =>
       fill := resolveDynValue @fill if @fill?
@@ -40,7 +42,7 @@ ctx.scale(devicePixelRatio, devicePixelRatio)
 renderer := new DebugRenderer ctx, splitText: (text: string) => text.split('')
 color .= 'green'
 
-class ClickDetect < Wrapper
+class ClickDetect < Wrapper<C>
   hittest()
     color = 'red'
     true

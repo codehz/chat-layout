@@ -1,13 +1,15 @@
 { ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, type DynValue, type Node, type Context, resolveDynValue } from ".."
 { LoremIpsum } from "lorem-ipsum"
 
-class RoundedBox < PaddingBox
+C ::= CanvasRenderingContext2D
+
+class RoundedBox < PaddingBox<C>
   readonly radii: number | DOMPointInit | (number | DOMPointInit)[]
   readonly stroke: DynValue string?
   readonly fill: DynValue string?
 
   @(
-    inner: Node
+    inner: Node<C>
     { @radii, @stroke, @fill, ...options}:
       top?: number
       bottom?: number
@@ -19,7 +21,7 @@ class RoundedBox < PaddingBox
   )
     super(inner, options)
 
-  draw(ctx: Context, x: number, y: number): boolean
+  draw(ctx: Context<C>, x: number, y: number): boolean
     { width, height } := ctx.measureNode @
     ctx.with (g) =>
       fill := resolveDynValue @fill if @fill?
@@ -32,11 +34,11 @@ class RoundedBox < PaddingBox
       g.stroke() if stroke?
     super.draw ctx, x, y
 
-class Circle < Fixed
+class Circle < Fixed<C>
   @(readonly size: number, readonly options: { fill: DynValue string })
     super size, size
 
-  draw(ctx: Context, x: number, y: number): boolean
+  draw(ctx: Context<C>, x: number, y: number): boolean
     ctx.with (g) =>
       g.fillStyle = resolveDynValue @options.fill
       g.beginPath()
@@ -63,8 +65,8 @@ ChatItem ::=
 
 let current_hover: ChatItem?
 
-class HoverDetector < Wrapper
-  @(inner: Node, @item: ChatItem)
+class HoverDetector < Wrapper<C>
+  @(inner: Node<C>, @item: ChatItem)
     super inner
 
   hittest()

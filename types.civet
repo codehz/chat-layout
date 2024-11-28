@@ -3,14 +3,14 @@ export RendererOptions ::=
 
 export interface ContextHelper
 
-export interface Context < RendererOptions, ContextHelper
-  graphics: CanvasRenderingContext2D
+export interface Context<C < CanvasRenderingContext2D> < RendererOptions, ContextHelper
+  graphics: C
   remainingWidth: number
 
-  measureNode(node: Node): Box
-  invalidateNode(node: Node): void
+  measureNode(node: Node<C>): Box
+  invalidateNode(node: Node<C>): void
 
-  with<T>(this: Context, cb: (g: CanvasRenderingContext2D) => T): T
+  with<T>(this: Context<C>, cb: (g: C) => T): T
 
 export Box ::=
   width: number
@@ -21,9 +21,9 @@ export HitTest ::=
   y: number
   type: "click" | "auxclick" | "hover"
 
-export interface Node
-  measure(ctx: Context): Box
-  draw(ctx: Context, x: number, y: number): boolean
-  hittest(ctx: Context, test: HitTest): boolean
-  invalidate?(ctx: Context): void
+export interface Node<C < CanvasRenderingContext2D>
+  measure(ctx: Context<C>): Box
+  draw(ctx: Context<C>, x: number, y: number): boolean
+  hittest(ctx: Context<C>, test: HitTest): boolean
+  invalidate?(ctx: Context<C>): void
   readonly flex: boolean

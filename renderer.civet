@@ -1,15 +1,15 @@
 type { RendererOptions, Context, Node, Box, HitTest } from "./types.civet"
 { shallow, shallowMerge } from "./utils.civet"
 
-export class BaseRenderer<O = {}>
-  graphics: CanvasRenderingContext2D
-  #ctx: Context
+export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
+  graphics: C
+  #ctx: Context<C>
   #lastWidth: number
-  #cache = new WeakMap<Node, Box>()
+  #cache = new WeakMap<Node<C>, Box>()
 
   protected get context() shallow #ctx
 
-  @(@graphics: CanvasRenderingContext2D, readonly options: RendererOptions & O)
+  @(@graphics: C, readonly options: RendererOptions & O)
     @graphics.textBaseline = 'top'
     @graphics.textRendering = 'optimizeLegibility'
     self := this
@@ -18,48 +18,48 @@ export class BaseRenderer<O = {}>
       get remainingWidth() @graphics.canvas.clientWidth
       set remainingWidth(value)
         Object.defineProperty(this, "remainingWidth", value: value, writable: true)
-      measureNode(node: Node) self.measureNode node, this
+      measureNode(node: Node<C>) self.measureNode node, this
       @@invalidateNode
-      with<T>(cb: (g: CanvasRenderingContext2D) => T): T
+      with<T>(cb: (g: C) => T): T
         @graphics.save()
         finally @graphics.restore()
         cb @graphics
       splitText(text: string) options.splitText text
     #lastWidth = @graphics.canvas.clientWidth
 
-  invalidateNode(node: Node): void
+  invalidateNode(node: Node<C>): void
     #cache.delete node
     node.invalidate? @context
 
-  measureNode(node: Node, ctx?: Context): Box
+  measureNode(node: Node<C>, ctx?: Context<C>): Box
     if #lastWidth != @graphics.canvas.clientWidth
-      #cache = new WeakMap<Node, Box>()
+      #cache = new WeakMap<Node<C>, Box>()
     else if result? := #cache.get(node)
       return result
     result := node.measure ctx ?? @context
     #cache.set node, result
     result
 
-export class DebugRenderer < BaseRenderer
-  draw(node: Node): boolean
+export class DebugRenderer<C < CanvasRenderingContext2D> < BaseRenderer<C>
+  draw(node: Node<C>): boolean
     { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
     @graphics.clearRect 0, 0, viewportWidth, viewportHeight
     node.draw @context, 0, 0
 
-  hittest(node: Node, test: HitTest): boolean
+  hittest(node: Node<C>, test: HitTest): boolean
     node.hittest @context, test
 
-export function memoRenderItem<T < {}>(renderItem: (item: T) => Node)
-  cache := new WeakMap<T, Node>()
-  function fn(item: T): Node
+export function memoRenderItem<C < CanvasRenderingContext2D, T < {}>(renderItem: (item: T) => Node<C>)
+  cache := new WeakMap<T, Node<C>>()
+  function fn(item: T): Node<C>
     return result if result? := cache.get item
     result := renderItem item
     cache.set item, result
     result
   Object.assign fn, reset: cache@delete
 
-export abstract class VirtualizedRenderer<T < {}> < BaseRenderer<{
-  renderItem: (item: T) => Node
+export abstract class VirtualizedRenderer<C < CanvasRenderingContext2D, T < {}> < BaseRenderer<C, {
+  renderItem: (item: T) => Node<C>
 }>
   protected offset = 0
   protected position = NaN
@@ -89,7 +89,7 @@ export abstract class VirtualizedRenderer<T < {}> < BaseRenderer<{
   abstract render(): boolean
   abstract hittest(test: HitTest): boolean
 
-export class TimelineRenderer<T < {}> < VirtualizedRenderer<T>
+export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRenderer<C, T>
   #action: "idle" | "scrollToTop" = "idle"
 
   render(): boolean
@@ -114,7 +114,7 @@ export class TimelineRenderer<T < {}> < VirtualizedRenderer<T>
         @offset = 0 if @position == 0 && @offset > 0
 
     y .= @offset
-    drawlist: [Node, number][] := []
+    drawlist: [Node<C>, number][] := []
 
     for i of [@position..<@items#]
       item := @items[i]
@@ -183,7 +183,7 @@ export class TimelineRenderer<T < {}> < VirtualizedRenderer<T>
   scrollToTop(): void
     #action = "scrollToTop"
 
-export class ChatRenderer<T < {}> < VirtualizedRenderer<T>
+export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRenderer<C, T>
   #action: "idle" | "scrollToBottom" = "idle"
 
   render()
@@ -206,7 +206,7 @@ export class ChatRenderer<T < {}> < VirtualizedRenderer<T>
           break if @offset > 0
 
     y .= viewportHeight + @offset
-    drawlist: [Node, number][] := []
+    drawlist: [Node<C>, number][] := []
 
     for i of [@position..>=0]
       item := @items[i]
