@@ -3,6 +3,7 @@
 { createBundle } from 'dts-buddy'
 { cp, readFile } from "node:fs/promises";
 
+await $`mkdir -p dist`
 await $`rm -rf dist/*`
 
 { success, logs } := await Bun.build {
