@@ -1,7 +1,7 @@
 { compile } from '@danielx/civet'
 { file, $ } from 'bun'
 { createBundle } from 'dts-buddy'
-{ cp, readFile } from "node:fs/promises"
+{ cp, readFile, writeFile } from "node:fs/promises"
 
 await $`rm -rf dist/*`.catch =>
 
@@ -33,24 +33,34 @@ createBundle
     '.': 'index.civet.d.ts'
 
 await $`rm *.d.ts`
+await $`rm dist/index.d.ts.map`
+
+readFile "dist/index.d.ts", "utf-8"
+  |> await
+  |> .split '\n'
+  |> &[1..-3]
+  |> .map &[1..]
+  |> .join '\n'
+  |> writeFile "dist/index.d.ts", .
+  |> await
 
 await cp(file, `dist/${file}`) for file of
   . "LICENSE"
   . "README.md"
   . "tsconfig.json"
 
-contents := readFile("package.json", "utf-8") |> await |> JSON.parse
-delete contents["private"]
-delete contents.scripts
-contents.version =
+packagejson := readFile "package.json", "utf-8" |> await |> JSON.parse
+delete packagejson["private"]
+delete packagejson.scripts
+packagejson.version =
   $`git describe --tags --always`
     |> .text()
     |> await
     |> .trim()
     |> .replace /-[[:digit:]]\+-g/, "+"
     |> .replace /^v/, ""
-contents.devDependencies = {}
-contents.module = "index.js"
-await Bun.write "dist/package.json", JSON.stringify contents, null, 2
+packagejson.devDependencies = {}
+packagejson.module = "index.js"
+await Bun.write "dist/package.json", JSON.stringify packagejson, null, 2
 
 process.exit(-1) if !success
