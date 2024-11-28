@@ -77,16 +77,21 @@ renderItem := memoRenderItem (item: ChatItem) =>
   new HStack
     . new Circle 32, fill: "red"
     . new VStack
-        . new Text item.sender, lineHeight: 15, font: "12px system-ui", style: "black"
-          |> new AlignBox ., alignment: item.sender == 'A' ? 'right' : 'left'
+        . new HStack
+            . new Text item.sender, lineHeight: 15, font: "12px system-ui", style: "black"
+              |> new RoundedBox ., top: 0, bottom: 0, left: 0, right: 0, radii: 2, fill: => current_hover == item ? "red" : "transparent"
+            . new Circle 15, fill: "blue"
+              |> new HoverDetector ., item
+            gap: 4
+            reverse: item.sender == 'A'
         . new MultilineText item.content, lineHeight: 20, font: "16px system-ui", style: "black", alignment: "left"
           |> new RoundedBox ., top: 6, bottom: 6, left: 10, right: 10, radii: 8, fill: => current_hover == item ? "#aaa" : "#ccc"
-          |> new HoverDetector ., item
-          |> new AlignBox ., alignment: item.sender == 'A' ? 'right' : 'left'
+        alignment: item.sender == 'A' ? 'right' : 'left'
     . new Fixed 32, 0
     gap: 4
     reverse: item.sender == 'A'
   |> new PaddingBox ., top: 4, bottom: 4, left: 4, right: 4
+  |> new AlignBox ., alignment: item.sender == 'A' ? 'right' : 'left'
 
 list := new ListState<ChatItem>
 

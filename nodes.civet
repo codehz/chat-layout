@@ -16,7 +16,7 @@ export abstract class Group<C < CanvasRenderingContext2D> <: Node<C>
       item.flex
 
 export class VStack<C < CanvasRenderingContext2D> < Group<C>
-  @(children: Node<C>[], readonly options: { gap?: number } = {})
+  @(children: Node<C>[], readonly options: { gap?: number, alignment?: "left" | "center" | "right" } = {})
     super children
 
   measure(ctx: Context<C>): Box
@@ -32,22 +32,32 @@ export class VStack<C < CanvasRenderingContext2D> < Group<C>
 
   draw(ctx: Context<C>, x: number, y: number)
     result .= false
+    fullwidth := ctx.measureNode @ |> .width
     for each child, index of @children
       y += @options.gap if @options.gap? and index !== 0
-      request_redraw := child.draw ctx, x, y
+      { width, height } .= shallow ctx |> .measureNode child
+      request_redraw :=
+        switch @options.alignment
+          "right"  child.draw ctx, x + fullwidth - width, y
+          "center" child.draw ctx, x + (fullwidth - width) / 2, y
+          else     child.draw ctx, x, y
       result ||= request_redraw
-      { height } .= shallow ctx |> .measureNode child
       y += height
     result
 
   hittest(ctx: Context<C>, test: HitTest): boolean
     y .= 0
+    fullwidth := ctx.measureNode @ |> .width
     for each child, index of @children
       y += @options.gap if @options.gap? and index !== 0
       curctx := shallow ctx
-      { height } .= curctx.measureNode child
+      { width, height } .= curctx.measureNode child
       if test.y >= y and test.y < y + height
         return child.hittest curctx, shallowMerge test,
+          x: switch @options.alignment
+            "right"  test.x - fullwidth + width
+            "center" test.x - (fullwidth - width) / 2
+            else     test.x
           y: test.y - y
       y += height
     false
