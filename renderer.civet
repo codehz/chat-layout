@@ -20,6 +20,7 @@ export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
       set remainingWidth(value)
         Object.defineProperty(this, "remainingWidth", value: value, writable: true)
       measureNode(node: Node<C>) self.measureNode node, this
+      @@invalidateNode
       resolveDynValue<T>(value: DynValue<C, T>): T
         if value <? "function"
           value @graphics

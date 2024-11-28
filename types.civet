@@ -14,6 +14,7 @@ export interface Context<C < CanvasRenderingContext2D> < RendererOptions, Contex
   remainingWidth: number
 
   measureNode(node: Node<C>): Box
+  invalidateNode(node: Node<C>): void
   resolveDynValue<T>(value: DynValue<C, T>): T
 
   with<T>(this: Context<C>, cb: (g: C) => T): T
