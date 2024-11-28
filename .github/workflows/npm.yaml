@@ -14,7 +14,7 @@ jobs:
       - run: bun i
       - run: bun run dist
       - run: bun publish
-        if: github.event_name == 'release' && github.event.action == 'created'
+        if: github.event_name == 'release'
         working-directory: dist
         env:
           NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
