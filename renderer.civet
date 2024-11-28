@@ -1,4 +1,4 @@
-type { RendererOptions, Context, Node, Box, HitTest, DynValue } from "./types.civet"
+type { RendererOptions, Context, Node, Box, HitTest, DynValue, RenderFeedback } from "./types.civet"
 { shallow, shallowMerge } from "./utils.civet"
 { getNodeParent } from "./registry.civet"
 
@@ -111,7 +111,7 @@ export abstract class VirtualizedRenderer<C < CanvasRenderingContext2D, T < {}> 
 export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRenderer<C, T>
   #action: "idle" | "scrollToTop" = "idle"
 
-  render(): boolean
+  render(feedback?: RenderFeedback): boolean
     { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
     @graphics.clearRect 0, 0, viewportWidth, viewportHeight
 
@@ -135,6 +135,8 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
     y .= @offset
     drawlist: [Node<C>, number][] := []
 
+    feedback?.minIdx = @position
+
     for i of [@position..<@items#]
       item := @items[i]
       node := item |> @options.renderItem
@@ -142,6 +144,7 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
       if y + height > 0
         drawlist.push [node, y]
         drawlength += height
+        feedback?.maxIdx = i
       else
         @offset += height
         @position = i + 1
@@ -165,6 +168,7 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
           drawlength += height
           y -= height
           drawlist.push [node, y - shift]
+          feedback?.minIdx = i
           break if y < 0
         if lastidx == 0 && drawlength < viewportHeight
           shift = -drawlist.-1.1
@@ -205,7 +209,7 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
 export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRenderer<C, T>
   #action: "idle" | "scrollToBottom" = "idle"
 
-  render()
+  render(feedback?: RenderFeedback)
     { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
     @graphics.clearRect 0, 0, viewportWidth, viewportHeight
 
@@ -227,6 +231,8 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
     y .= viewportHeight + @offset
     drawlist: [Node<C>, number][] := []
 
+    feedback?.maxIdx = @position
+
     for i of [@position..>=0]
       item := @items[i]
       node := item |> @options.renderItem
@@ -235,6 +241,7 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
       if y <= viewportHeight
         drawlist.push [node, y]
         drawlength += height
+        feedback?.minIdx = i
       else
         @offset -= height
         @position = i - 1
@@ -253,6 +260,7 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
           drawlist.push [node, y - shift]
           y = drawlength += height
           @position = i
+          feedback?.maxIdx = i
           break if y >= viewportHeight
         if drawlength < viewportHeight
           @offset = 0

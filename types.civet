@@ -7,9 +7,11 @@ export DynValue<C < CanvasRenderingContext2D, T> ::=
 export RendererOptions ::=
   splitText(text: string): string[]
 
-export interface ContextHelper
+export interface RenderFeedback
+  minIdx: number
+  maxIdx: number
 
-export interface Context<C < CanvasRenderingContext2D> < RendererOptions, ContextHelper
+export interface Context<C < CanvasRenderingContext2D> < RendererOptions
   graphics: C
   remainingWidth: number
 

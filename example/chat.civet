@@ -1,4 +1,4 @@
-{ ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, ListState, type DynValue, type Node, type Context } from ".."
+{ ChatRenderer, memoRenderItem, Wrapper, MultilineText, Text, PaddingBox, AlignBox, HStack, VStack, Fixed, ListState, type DynValue, type Node, type Context, type RenderFeedback } from ".."
 { LoremIpsum } from "lorem-ipsum"
 
 C ::= CanvasRenderingContext2D
@@ -96,7 +96,8 @@ renderer := new ChatRenderer ctx, {}
   list
 
 requestAnimationFrame function fn
-  renderer.render()
+  feedback: RenderFeedback := minIdx: NaN, maxIdx: NaN
+  renderer.render(feedback)
   requestAnimationFrame fn
 
 canvas.addEventListener "wheel", (e) =>
