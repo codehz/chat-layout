@@ -83,7 +83,6 @@ renderItem := memoRenderItem (item: ChatItem) =>
             . new Circle 15, fill: "blue"
               |> new HoverDetector ., item
             gap: 4
-            reverse: item.sender == 'A'
         . new MultilineText item.content, lineHeight: 20, font: "16px system-ui", style: "black", alignment: "left"
           |> new RoundedBox ., top: 6, bottom: 6, left: 10, right: 10, radii: 8, fill: => current_hover == item ? "#aaa" : "#ccc"
         alignment: item.sender == 'A' ? 'right' : 'left'

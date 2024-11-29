@@ -18,6 +18,7 @@ export interface Context<C < CanvasRenderingContext2D> < RendererOptions
 
   remainingWidth: number
   alignment: Alignment
+  reverse: boolean
 
   measureNode(node: Node<C>): Box
   invalidateNode(node: Node<C>): void

@@ -22,11 +22,10 @@ export class VStack<C < CanvasRenderingContext2D> < Group<C>
   measure(ctx: Context<C>): Box
     width .= 0
     height .= 0
+    ctx.alignment = @options.alignment if @options.alignment?
     for each child, index of @children
       height += @options.gap if @options.gap? and index !== 0
-      curctx := shallow ctx
-      curctx.alignment = @options.alignment if @options.alignment?
-      result .= curctx.measureNode child
+      result .= shallow ctx |> .measureNode child
       height += result.height
       width = Math.max width, result.width
     ctx.remainingWidth -= width
@@ -36,16 +35,16 @@ export class VStack<C < CanvasRenderingContext2D> < Group<C>
     result .= false
     fullwidth := ctx.measureNode @ |> .width
     alignment := @options.alignment ?? ctx.alignment
+    ctx.alignment = @options.alignment if @options.alignment?
     for each child, index of @children
       y += @options.gap if @options.gap? and index !== 0
+      { width, height } .= shallow ctx |> .measureNode child
       curctx := shallow ctx
-      curctx.alignment = @options.alignment if @options.alignment?
-      { width, height } .= curctx.measureNode child
       request_redraw :=
         switch alignment
-          "right"  child.draw ctx, x + fullwidth - width, y
-          "center" child.draw ctx, x + (fullwidth - width) / 2, y
-          else     child.draw ctx, x, y
+          "right"  child.draw curctx, x + fullwidth - width, y
+          "center" child.draw curctx, x + (fullwidth - width) / 2, y
+          else     child.draw curctx, x, y
       result ||= request_redraw
       y += height
     result
@@ -53,13 +52,15 @@ export class VStack<C < CanvasRenderingContext2D> < Group<C>
   hittest(ctx: Context<C>, test: HitTest): boolean
     y .= 0
     fullwidth := ctx.measureNode @ |> .width
+    alignment := @options.alignment ?? ctx.alignment
+    ctx.alignment = @options.alignment if @options.alignment?
     for each child, index of @children
       y += @options.gap if @options.gap? and index !== 0
+      { width, height } .= shallow ctx |> .measureNode child
       curctx := shallow ctx
-      { width, height } .= curctx.measureNode child
       if test.y >= y and test.y < y + height
         return child.hittest curctx, shallowMerge test,
-          x: switch @options.alignment
+          x: switch alignment
             "right"  test.x - fullwidth + width
             "center" test.x - (fullwidth - width) / 2
             else     test.x
@@ -99,44 +100,58 @@ export class HStack<C < CanvasRenderingContext2D> < Group<C>
 
   draw(ctx: Context<C>, x: number, y: number): boolean
     result .= false
-    if @options.reverse
+    reverse := @options.reverse ?? ctx.reverse
+    ctx.reverse = @options.reverse if @options.reverse
+    if reverse
       x += ctx.measureNode this |> .width
       for each child, index of @children
-        x -= @options.gap if @options.gap? and index !== 0
+        if gap := (@options.gap if @options.gap? and index !== 0)
+          x -= gap
+          ctx.remainingWidth -= gap
         { width } := shallow ctx |> .measureNode child
         x -= width
-        request_redraw := child.draw ctx, x, y
+        request_redraw := shallow ctx |> child.draw ., x, y
         result ||= request_redraw
+        ctx.remainingWidth -= width
     else
       for each child, index of @children
-        x += @options.gap if @options.gap? and index !== 0
-        request_redraw := child.draw ctx, x, y
+        if gap := (@options.gap if @options.gap? and index !== 0)
+          x += gap
+          ctx.remainingWidth -= gap
+        request_redraw := shallow ctx |> child.draw ., x, y
         result ||= request_redraw
         { width } := shallow ctx |> .measureNode child
+        ctx.remainingWidth -= width
         x += width
     result
 
   hittest(ctx: Context<C>, test: HitTest): boolean
-    if @options.reverse
+    reverse := @options.reverse ?? ctx.reverse
+    ctx.reverse = @options.reverse if @options.reverse
+    if reverse
       x .= ctx.measureNode this |> .width
       for each child, index of @children
-        x -= @options.gap if @options.gap? and index !== 0
-        curctx := shallow ctx
-        { width } := curctx.measureNode child
+        if gap := (@options.gap if @options.gap? and index !== 0)
+          x -= gap
+          ctx.remainingWidth -= gap
+        { width } := shallow ctx |> .measureNode child
         x -= width
         if x <= test.x <= x + width
-          return child.hittest curctx, shallowMerge test,
+          return shallow ctx |> child.hittest ., shallowMerge test,
             x: test.x - x
+        ctx.remainingWidth -= width
     else
       x .= 0
       for each child, index of @children
-        x += @options.gap if @options.gap? and index !== 0
-        curctx := shallow ctx
-        { width } := curctx.measureNode child
+        if gap := (@options.gap if @options.gap? and index !== 0)
+          x += gap
+          ctx.remainingWidth -= gap
+        { width } := shallow ctx |> .measureNode child
         if x <= test.x <= x + width
-          return child.hittest curctx, shallowMerge test,
+          return shallow ctx |> child.hittest ., shallowMerge test,
             x: test.x - x
         x += width
+        ctx.remainingWidth -= width
     false
 
 export class Wrapper<C < CanvasRenderingContext2D> <: Node<C>
@@ -178,22 +193,23 @@ export class PaddingBox<C < CanvasRenderingContext2D> < Wrapper<C>
   get #right() @padding.right ?? 0
 
   measure(ctx: Context<C>): Box
-    ctx = shallow ctx
     ctx.remainingWidth -= #left + #right
     { width, height } := ctx.measureNode @inner
     width: width + #left + #right,
     height: height + #top + #bottom,
 
   draw(ctx: Context<C>, x: number, y: number): boolean
+    ctx.remainingWidth -= #left + #right
     @inner.draw ctx, x + #left, y + #top
 
   hittest(ctx: Context<C>, test: HitTest): boolean
-    { width, height } := ctx.measureNode @inner
+    ctx.remainingWidth -= #left + #right
+    { width, height } := shallow ctx |> .measureNode @inner
     if
       (and)
         0 <= test.x - #left < width
         0 <= test.y - #top < height
-      return @inner.hittest ctx, shallowMerge test,
+      return shallow ctx |> @inner.hittest ., shallowMerge test,
         x: test.x - #left
         y: test.y - #top
     false
@@ -220,9 +236,9 @@ export class AlignBox<C < CanvasRenderingContext2D> < Wrapper<C>
     @inner.draw ctx, x + #shift, y
 
   hittest(ctx: Context<C>, test: HitTest): boolean
-    { width } := ctx.measureNode @inner
+    { width } := shallow ctx |> .measureNode @inner
     if 0 <= test.x - #shift < width
-      return @inner.hittest ctx, shallowMerge test,
+      return shallow ctx |> @inner.hittest ., shallowMerge test,
         x: test.x - #shift
     false
 
