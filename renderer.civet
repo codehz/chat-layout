@@ -19,6 +19,7 @@ export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
       get remainingWidth() @graphics.canvas.clientWidth
       set remainingWidth(value)
         Object.defineProperty(this, "remainingWidth", value: value, writable: true)
+      alignment: "left"
       measureNode(node: Node<C>) self.measureNode node, this
       @@invalidateNode
       resolveDynValue<T>(value: DynValue<C, T>): T

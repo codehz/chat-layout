@@ -24,7 +24,9 @@ export class VStack<C < CanvasRenderingContext2D> < Group<C>
     height .= 0
     for each child, index of @children
       height += @options.gap if @options.gap? and index !== 0
-      result .= shallow ctx |> .measureNode child
+      curctx := shallow ctx
+      curctx.alignment = @options.alignment if @options.alignment?
+      result .= curctx.measureNode child
       height += result.height
       width = Math.max width, result.width
     ctx.remainingWidth -= width
@@ -33,11 +35,14 @@ export class VStack<C < CanvasRenderingContext2D> < Group<C>
   draw(ctx: Context<C>, x: number, y: number)
     result .= false
     fullwidth := ctx.measureNode @ |> .width
+    alignment := @options.alignment ?? ctx.alignment
     for each child, index of @children
       y += @options.gap if @options.gap? and index !== 0
-      { width, height } .= shallow ctx |> .measureNode child
+      curctx := shallow ctx
+      curctx.alignment = @options.alignment if @options.alignment?
+      { width, height } .= curctx.measureNode child
       request_redraw :=
-        switch @options.alignment
+        switch alignment
           "right"  child.draw ctx, x + fullwidth - width, y
           "center" child.draw ctx, x + (fullwidth - width) / 2, y
           else     child.draw ctx, x, y

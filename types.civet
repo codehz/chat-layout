@@ -11,9 +11,13 @@ export interface RenderFeedback
   minIdx: number
   maxIdx: number
 
+export Alignment ::= "left" | "center" | "right"
+
 export interface Context<C < CanvasRenderingContext2D> < RendererOptions
   graphics: C
+
   remainingWidth: number
+  alignment: Alignment
 
   measureNode(node: Node<C>): Box
   invalidateNode(node: Node<C>): void
