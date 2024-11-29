@@ -138,8 +138,8 @@ export class HStack<C < CanvasRenderingContext2D> < Group<C>
           ctx.remainingWidth -= gap
         { width, height } := shallow ctx |> .measureNode child
         x -= width
-        if x <= test.x <= x + width
-          return false if test.y > height
+        if x <= test.x < x + width
+          return false if test.y >= height
           return shallow ctx |> child.hittest ., shallowMerge test,
             x: test.x - x
         ctx.remainingWidth -= width
@@ -150,8 +150,8 @@ export class HStack<C < CanvasRenderingContext2D> < Group<C>
           x += gap
           ctx.remainingWidth -= gap
         { width, height } := shallow ctx |> .measureNode child
-        if x <= test.x <= x + width
-          return false if test.y > height
+        if x <= test.x < x + width
+          return false if test.y >= height
           return shallow ctx |> child.hittest ., shallowMerge test,
             x: test.x - x
         x += width
