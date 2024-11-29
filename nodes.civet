@@ -1,4 +1,4 @@
-type { Box, Context, Node, HitTest, DynValue } from "./types.civet";
+type { Box, Context, Node, HitTest, DynValue, Alignment } from "./types.civet";
 { layoutText, layoutFirstLine, type TextLayout } from "./text.civet";
 { shallow, shallowMerge } from "./utils.civet"
 { registerNodeParent, unregisterNodeParent } from "./registry.civet"
@@ -219,11 +219,11 @@ export class AlignBox<C < CanvasRenderingContext2D> < Wrapper<C>
 
   @(
     inner: Node<C>
-    readonly options:
-      alignment: "left" | "center" | "right"
+    readonly options: alignment: Alignment
   ) super inner
 
   measure(ctx: Context<C>): Box
+    ctx.alignment = @options.alignment
     { width, height } := ctx.measureNode @inner
     #shift = switch @options.alignment
       when 'center' then (ctx.remainingWidth - width) / 2
@@ -233,9 +233,11 @@ export class AlignBox<C < CanvasRenderingContext2D> < Wrapper<C>
     height: height
 
   draw(ctx: Context<C>, x: number, y: number): boolean
+    ctx.alignment = @options.alignment
     @inner.draw ctx, x + #shift, y
 
   hittest(ctx: Context<C>, test: HitTest): boolean
+    ctx.alignment = @options.alignment
     { width } := shallow ctx |> .measureNode @inner
     if 0 <= test.x - #shift < width
       return shallow ctx |> @inner.hittest ., shallowMerge test,

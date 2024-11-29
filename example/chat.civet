@@ -85,7 +85,6 @@ renderItem := memoRenderItem (item: ChatItem) =>
             gap: 4
         . new MultilineText item.content, lineHeight: 20, font: "16px system-ui", style: "black", alignment: "left"
           |> new RoundedBox ., top: 6, bottom: 6, left: 10, right: 10, radii: 8, fill: => current_hover == item ? "#aaa" : "#ccc"
-        alignment: item.sender == 'A' ? 'right' : 'left'
     . new Fixed 32, 0
     gap: 4
     reverse: item.sender == 'A'
