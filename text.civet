@@ -11,6 +11,7 @@ export function layoutFirstLine<C < CanvasRenderingContext2D>(
   text: string
   maxWidth: number
 ): TextLayout
+  maxWidth = 0 if maxWidth < 0
   line := text
     |> .replaceAll /[^\S\n]+/g, " "
     |> .split "\n", 1
@@ -28,6 +29,7 @@ export function layoutText<C < CanvasRenderingContext2D>(
   text: string
   maxWidth: number
 ): { width: number; lines: TextLayout[] }
+  maxWidth = 0 if maxWidth < 0
   inputLines := for each line of text
       .replaceAll /[^\S\n]+/g, " "
       .split "\n"
@@ -45,6 +47,7 @@ export function layoutText<C < CanvasRenderingContext2D>(
     else
       while textWidth > maxWidth
         splited := splitToFitText ctx, line, maxWidth, textWidth
+        return { width: 0, lines: [] } if splited.width === 0
         width = Math.max width, splited.width
         lines.push text: splited.text, width: splited.width, shift: shift / 2, lineHeight: lineHeight
         line = splited.rest
