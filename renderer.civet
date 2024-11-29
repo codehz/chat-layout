@@ -44,6 +44,7 @@ export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
   measureNode(node: Node<C>, ctx?: Context<C>): Box
     if #lastWidth != @graphics.canvas.clientWidth
       #cache = new WeakMap<Node<C>, Box>()
+      #lastWidth = @graphics.canvas.clientWidth
     else if result? := #cache.get(node)
       return result
     result := node.measure ctx ?? @context
