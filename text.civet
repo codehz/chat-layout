@@ -4,7 +4,6 @@ export TextLayout ::=
   width: number
   text: string
   shift: number
-  lineHeight: number
 
 export function layoutFirstLine<C < CanvasRenderingContext2D>(
   ctx: Context<C>
@@ -17,12 +16,13 @@ export function layoutFirstLine<C < CanvasRenderingContext2D>(
     |> .split "\n", 1
     |> &[0]
     |> .trim()
-  { width: textWidth, fontBoundingBoxAscent: shift, fontBoundingBoxDescent: lineHeight } := ctx.graphics.measureText line
+  { width: textWidth, fontBoundingBoxAscent: ascent = 0, fontBoundingBoxDescent: descent = 0 } := ctx.graphics.measureText line
+  shift := ascent - descent
   if textWidth <= maxWidth
-    { width: textWidth, text: line, shift: shift / 2, lineHeight }
+    { width: textWidth, text: line, shift }
   else
     { width, text } := splitToFitText ctx, line, maxWidth, textWidth
-    { width, text, shift: shift / 2, lineHeight }
+    { width, text, shift }
 
 export function layoutText<C < CanvasRenderingContext2D>(
   ctx: Context<C>
@@ -40,21 +40,22 @@ export function layoutText<C < CanvasRenderingContext2D>(
   width .= 0
   lines: TextLayout[] := []
   for each let line of inputLines
-    { width: textWidth, fontBoundingBoxAscent: shift, fontBoundingBoxDescent: lineHeight } .= ctx.graphics.measureText line
+    { width: textWidth, fontBoundingBoxAscent: ascent = 0, fontBoundingBoxDescent: descent = 0 } .= ctx.graphics.measureText line
+    shift := ascent - descent
     if textWidth <= maxWidth
       width = Math.max width, textWidth
-      lines.push width: textWidth, text: line, shift: shift / 2, lineHeight: lineHeight
+      lines.push width: textWidth, text: line, shift: shift
     else
       while textWidth > maxWidth
         splited := splitToFitText ctx, line, maxWidth, textWidth
         return { width: 0, lines: [] } if splited.width === 0
         width = Math.max width, splited.width
-        lines.push text: splited.text, width: splited.width, shift: shift / 2, lineHeight: lineHeight
+        lines.push text: splited.text, width: splited.width, shift: shift
         line = splited.rest
         { width: textWidth } = ctx.graphics.measureText line
       if textWidth > 0
         width = Math.max width, textWidth
-        lines.push width: textWidth, text: line, shift: shift / 2, lineHeight: lineHeight
+        lines.push width: textWidth, text: line, shift: shift
   { width, lines }
 
 function splitToFitText<C < CanvasRenderingContext2D>(

@@ -275,20 +275,20 @@ export class MultilineText<C < CanvasRenderingContext2D> <: Node<C>
       g.fillStyle = ctx.resolveDynValue @options.style
       switch @options.alignment
         when 'left'
-          for each { text, shift, lineHeight } of #lines
-            g.fillText text, x, y + shift + (@options.lineHeight - lineHeight) / 2
+          for each { text, shift } of #lines
+            g.fillText text, x, y + (@options.lineHeight + shift) / 2
             y += @options.lineHeight
         when 'right'
           x += #width
           g.textAlign = "right"
-          for each { text, shift, lineHeight } of #lines
-            g.fillText text, x, y + shift + (@options.lineHeight - lineHeight) / 2
+          for each { text, shift } of #lines
+            g.fillText text, x, y + (@options.lineHeight + shift) / 2
             y += @options.lineHeight
         when 'center'
           x += #width / 2
           g.textAlign = "center"
-          for each { text, shift, lineHeight } of #lines
-            g.fillText text, x, y + shift + (@options.lineHeight - lineHeight) / 2
+          for each { text, shift } of #lines
+            g.fillText text, x, y + (@options.lineHeight + shift) / 2
             y += @options.lineHeight
       false
 
@@ -306,21 +306,20 @@ export class Text<C < CanvasRenderingContext2D> <: Node<C>
   #width = 0
   #text = ""
   #shift = 0
-  #lineHeight = 0
 
   get flex() false
 
   measure(ctx: Context<C>): Box
     ctx.with (g) =>
       g.font = @options.font
-      { #width, #text, #shift, #lineHeight } := layoutFirstLine ctx, @text, ctx.remainingWidth
+      { #width, #text, #shift } := layoutFirstLine ctx, @text, ctx.remainingWidth
       { #width, height: @options.lineHeight }
 
   draw(ctx: Context<C>, x: number, y: number): boolean
     ctx.with (g) =>
       g.font = @options.font
       g.fillStyle = ctx.resolveDynValue @options.style
-      g.fillText #text, x, y + #shift + (@options.lineHeight - #lineHeight) / 2
+      g.fillText #text, x, y + (@options.lineHeight + #shift) / 2
       false
 
   hittest(ctx: Context<C>, test: HitTest) false

@@ -11,7 +11,7 @@ export class BaseRenderer<C < CanvasRenderingContext2D, O < {} = {}>
   protected get context() shallow #ctx
 
   @(@graphics: C, readonly options: RendererOptions & O)
-    @graphics.textBaseline = 'top'
+    @graphics.textBaseline = 'middle'
     @graphics.textRendering = 'optimizeLegibility'
     self := this
     #ctx = {}
