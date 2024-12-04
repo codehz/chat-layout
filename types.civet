@@ -10,6 +10,8 @@ export RendererOptions ::=
 export interface RenderFeedback
   minIdx: number
   maxIdx: number
+  min: number
+  max: number
 
 export Alignment ::= "left" | "center" | "right"
 

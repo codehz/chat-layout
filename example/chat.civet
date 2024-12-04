@@ -99,8 +99,19 @@ renderer := new ChatRenderer ctx, {}
   list
 
 requestAnimationFrame function fn
-  feedback: RenderFeedback := minIdx: NaN, maxIdx: NaN
+  feedback: RenderFeedback := {} as unknown as RenderFeedback
   renderer.render(feedback)
+  ctx.save()
+  ctx.textBaseline = 'top'
+  ctx.font = '12px system-ui'
+  ctx.fillStyle = 'black'
+  ctx.strokeStyle = 'white'
+  ctx.lineWidth = 4
+  ctx.lineJoin = 'round'
+  text := JSON.stringify(feedback)
+  ctx.strokeText text, 10, 10
+  ctx.fillText text, 10, 10
+  ctx.restore()
   requestAnimationFrame fn
 
 canvas.addEventListener "wheel", (e) =>
@@ -140,6 +151,3 @@ button "push", =>
   list.push
     sender: Math.random() < 0.5 ? "A" : "B"
     content: lorem.generateWords 10 + Math.floor(20 * Math.random())
-
-button "scrollToBottom", =>
-  renderer.scrollToBottom()

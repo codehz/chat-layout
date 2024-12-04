@@ -94,6 +94,12 @@ export class ListState<T < {}>
 
   applyScroll(delta: number) @offset += delta
 
+DrawItem<C < CanvasRenderingContext2D> ::=
+  idx: number
+  node: Node<C>
+  offset: number
+  height: number
+
 export abstract class VirtualizedRenderer<C < CanvasRenderingContext2D, T < {}> < BaseRenderer<C, {
   renderItem: (item: T) => Node<C>
   list: ListState<T>
@@ -107,12 +113,26 @@ export abstract class VirtualizedRenderer<C < CanvasRenderingContext2D, T < {}> 
   get items() @options.list.items
   set items(value) @options.list.items = value
 
-  abstract render(): boolean
+  abstract render(feedback?: RenderFeedback): boolean
   abstract hittest(test: HitTest): boolean
 
-export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRenderer<C, T>
-  #action: "idle" | "scrollToTop" = "idle"
+  protected _renderDrawList(list: DrawItem<C>[], shift: number, feedback?: RenderFeedback): boolean
+    result .= false
+    viewportHeight := @graphics.canvas.clientHeight
+    for each { idx, node, offset, height } of list
+      y := offset + shift
+      continue if y + height < 0 || y > viewportHeight
+      if feedback?
+        feedback.minIdx = isNaN(feedback.minIdx) ? idx : Math.min idx, feedback.minIdx
+        feedback.maxIdx = isNaN(feedback.maxIdx) ? idx : Math.max idx, feedback.maxIdx
+        if feedback.minIdx === idx
+          feedback.min = idx - Math.min(0, y) / height
+        if feedback.maxIdx === idx
+          feedback.max = idx - Math.max(0, y + height - viewportHeight) / height
+      result = true if node.draw @context, 0, y
+    result
 
+export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRenderer<C, T>
   render(feedback?: RenderFeedback): boolean
     { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
     @graphics.clearRect 0, 0, viewportWidth, viewportHeight
@@ -135,18 +155,15 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
         @offset = 0 if @position == 0 && @offset > 0
 
     y .= @offset
-    drawlist: [Node<C>, number][] := []
-
-    feedback?.minIdx = @position
+    drawlist: DrawItem<C>[] := []
 
     for i of [@position..<@items#]
       item := @items[i]
       node := item |> @options.renderItem
       { height } := @measureNode node
       if y + height > 0
-        drawlist.push [node, y]
+        drawlist.push idx: i, node: node, offset: y, height: height
         drawlength += height
-        feedback?.maxIdx = i
       else
         @offset += height
         @position = i + 1
@@ -169,31 +186,14 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
           { height } := @measureNode node
           drawlength += height
           y -= height
-          drawlist.push [node, y - shift]
-          if feedback
-            feedback.minIdx = i
-            if isNaN feedback.maxIdx
-              feedback.maxIdx = i
-            else
-              feedback.maxIdx = Math.max feedback.maxIdx, i
+          drawlist.push idx: i, node: node, offset: y - shift, height: height
           break if y < 0
         if lastidx == 0 && drawlength < viewportHeight
-          shift = -drawlist.-1.1
+          shift = -drawlist.-1.offset
           @position = 0
           @offset = 0
 
-    result .= false
-    for each [node, y] of drawlist
-      request_redraw := node.draw @context, 0, y + shift
-      result ||= request_redraw
-
-    if #action === 'scrollToTop'
-      if @position === 0 && @offset === 0
-        #action = "idle"
-      else
-        @options.list.applyScroll 5 * (@position + 1)
-        return true
-    result
+    @_renderDrawList drawlist, shift, feedback
 
   hittest(test: HitTest): boolean
     viewportHeight := @graphics.canvas.clientHeight
@@ -210,12 +210,7 @@ export class TimelineRenderer<C < CanvasRenderingContext2D, T < {}> < Virtualize
       break if y >= viewportHeight
     false
 
-  scrollToTop(): void
-    #action = "scrollToTop"
-
 export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRenderer<C, T>
-  #action: "idle" | "scrollToBottom" = "idle"
-
   render(feedback?: RenderFeedback)
     { clientWidth: viewportWidth, clientHeight: viewportHeight } := @graphics.canvas
     @graphics.clearRect 0, 0, viewportWidth, viewportHeight
@@ -236,9 +231,7 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
           break if @offset > 0
 
     y .= viewportHeight + @offset
-    drawlist: [Node<C>, number][] := []
-
-    feedback?.maxIdx = @position
+    drawlist: DrawItem<C>[] := []
 
     for i of [@position..>=0]
       item := @items[i]
@@ -246,9 +239,8 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
       { height } := @measureNode node
       y -= height
       if y <= viewportHeight
-        drawlist.push [node, y]
+        drawlist.push idx: i, node: node, offset: y, height: height
         drawlength += height
-        feedback?.minIdx = i
       else
         @offset -= height
         @position = i - 1
@@ -264,15 +256,9 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
           item := @items[i]
           node := item |> @options.renderItem
           { height } := @measureNode node
-          drawlist.push [node, y - shift]
+          drawlist.push idx: i, node: node, offset: y - shift, height: height
           y = drawlength += height
           @position = i
-          if feedback
-            feedback.maxIdx = i
-            if isNaN feedback.minIdx
-              feedback.minIdx = i
-            else
-              feedback.minIdx = Math.min feedback.minIdx, i
           break if y >= viewportHeight
         if drawlength < viewportHeight
           @offset = 0
@@ -281,18 +267,7 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
       else
         @offset = drawlength - viewportHeight
 
-    result .= false
-    for each [node, y] of drawlist
-      request_redraw := node.draw @context, 0, y + shift
-      result ||= request_redraw
-
-    if #action === 'scrollToBottom'
-      if @position === @items# - 1 && @offset === 0
-        #action = "idle"
-      else
-        @options.list.applyScroll -5 * (@items# - @position)
-        return true
-    result
+    @_renderDrawList drawlist, shift, feedback
 
   hittest(test: HitTest): boolean
     viewportHeight := @graphics.canvas.clientHeight
@@ -318,6 +293,3 @@ export class ChatRenderer<C < CanvasRenderingContext2D, T < {}> < VirtualizedRen
           |> return
 
     false
-
-  scrollToBottom(): void
-    #action = "scrollToBottom"
