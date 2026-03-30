@@ -202,9 +202,6 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
 
 const list = new ListState<ChatItem>();
 const renderer = new ChatRenderer(ctx, {
-  splitText(text: string): string[] {
-    return text.split("");
-  },
   renderItem,
   list,
 });

@@ -79,11 +79,7 @@ if (context == null) {
 const ctx: C = context;
 ctx.scale(devicePixelRatio, devicePixelRatio);
 
-const renderer = new DebugRenderer(ctx, {
-  splitText(text: string): string[] {
-    return text.split("");
-  },
-});
+const renderer = new DebugRenderer(ctx, {});
 
 let color = "green";
 

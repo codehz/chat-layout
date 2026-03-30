@@ -2,9 +2,7 @@ export type DynValue<C extends CanvasRenderingContext2D, T> = T extends Function
   ? never
   : T | ((context: C) => T);
 
-export interface RendererOptions {
-  splitText(text: string): string[];
-}
+export interface RendererOptions {}
 
 export interface RenderFeedback {
   minIdx: number;
@@ -15,7 +13,7 @@ export interface RenderFeedback {
 
 export type Alignment = "left" | "center" | "right";
 
-export interface Context<C extends CanvasRenderingContext2D> extends RendererOptions {
+export interface Context<C extends CanvasRenderingContext2D> {
   graphics: C;
 
   remainingWidth: number;

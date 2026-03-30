@@ -47,9 +47,6 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
           this.graphics.restore();
         }
       },
-      splitText(text: string): string[] {
-        return options.splitText(text);
-      },
     };
     this.#lastWidth = this.graphics.canvas.clientWidth;
   }

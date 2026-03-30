@@ -8,7 +8,9 @@
     "tsdown": "^0.21.7",
     "typescript": "^5.9.3"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@chenglou/pretext": "0.0.3"
+  },
   "scripts": {
     "dist": "bun run scripts/dist.ts",
     "example": "cd example && bun run build.ts",
