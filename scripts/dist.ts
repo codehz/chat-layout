@@ -5,20 +5,7 @@ import { cp, readFile, rm, writeFile } from "node:fs/promises";
 await rm("dist", { recursive: true, force: true });
 await rm(".types", { recursive: true, force: true });
 
-const { success, logs } = await Bun.build({
-  entrypoints: ["src/index.ts"],
-  target: "bun",
-  outdir: "dist",
-  sourcemap: "linked",
-});
-
-for (const log of logs) {
-  console.log(log);
-}
-
-if (!success) {
-  process.exit(1);
-}
+await $`tsdown`;
 
 await $`bunx tsc -p tsconfig.build.json`;
 
@@ -80,12 +67,12 @@ const version = (await $`git describe --tags --always`
 
 packageJson.version = version;
 packageJson.type = "module";
-packageJson.main = "./index.js";
-packageJson.module = "./index.js";
+packageJson.main = "./index.mjs";
+packageJson.module = "./index.mjs";
 packageJson.types = "./index.d.ts";
 packageJson.exports = {
   ".": {
-    import: "./index.js",
+    import: "./index.mjs",
     types: "./index.d.ts",
   },
 };
