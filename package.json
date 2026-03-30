@@ -5,7 +5,6 @@
   "type": "module",
   "devDependencies": {
     "@types/bun": "latest",
-    "dts-buddy": "^0.5.4",
     "tsdown": "^0.21.7",
     "typescript": "^5.7.2"
   },
