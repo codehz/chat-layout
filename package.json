@@ -11,6 +11,9 @@
   "dependencies": {
     "@chenglou/pretext": "0.0.3"
   },
+  "repository": {
+    "url": "https://github.com/codehz/chat-layout.git"
+  },
   "scripts": {
     "dist": "bun run scripts/dist.ts",
     "example": "cd example && bun run build.ts",
