@@ -1,6 +1,0 @@
-export function shallow<T extends {}>(object: T): T
-  Object.create(object) as T
-
-export function shallowMerge<T extends {}, R extends {}>(object: T, other: R): T & R
-  { __proto__: object, ...other } as unknown as T & R
-
