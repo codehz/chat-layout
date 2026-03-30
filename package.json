@@ -18,5 +18,6 @@
     "dist": "bun run scripts/dist.ts",
     "example": "cd example && bun run build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
-  }
+  },
+  "version": "0.1.0"
 }
