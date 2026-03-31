@@ -5,9 +5,13 @@ export type DynValue<C extends CanvasRenderingContext2D, T> = T extends Function
 export interface RendererOptions {}
 
 export interface RenderFeedback {
+  /** Smallest visible item index that contributes a positive visible height. */
   minIdx: number;
+  /** Largest visible item index that contributes a positive visible height. */
   maxIdx: number;
+  /** Smallest visible continuous item position, expressed in item coordinates rather than pixels. */
   min: number;
+  /** Largest visible continuous item position, expressed in item coordinates rather than pixels. */
   max: number;
 }
 

@@ -153,6 +153,10 @@ type DrawItem<C extends CanvasRenderingContext2D> = {
   height: number;
 };
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T extends {}> extends BaseRenderer<
   C,
   {
@@ -187,26 +191,47 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   abstract render(feedback?: RenderFeedback): boolean;
   abstract hittest(test: HitTest): boolean;
 
+  protected _resetRenderFeedback(feedback?: RenderFeedback): void {
+    if (feedback == null) {
+      return;
+    }
+    feedback.minIdx = Number.NaN;
+    feedback.maxIdx = Number.NaN;
+    feedback.min = Number.NaN;
+    feedback.max = Number.NaN;
+  }
+
+  protected _accumulateRenderFeedback(feedback: RenderFeedback, idx: number, top: number, height: number): void {
+    if (!Number.isFinite(top) || !Number.isFinite(height) || height <= 0) {
+      return;
+    }
+
+    const viewportHeight = this.graphics.canvas.clientHeight;
+    const visibleTop = clamp(-top, 0, height);
+    const visibleBottom = clamp(viewportHeight - top, 0, height);
+    if (visibleBottom <= visibleTop) {
+      return;
+    }
+
+    const itemMin = idx + visibleTop / height;
+    const itemMax = idx + visibleBottom / height;
+    feedback.minIdx = Number.isNaN(feedback.minIdx) ? idx : Math.min(idx, feedback.minIdx);
+    feedback.maxIdx = Number.isNaN(feedback.maxIdx) ? idx : Math.max(idx, feedback.maxIdx);
+    feedback.min = Number.isNaN(feedback.min) ? itemMin : Math.min(itemMin, feedback.min);
+    feedback.max = Number.isNaN(feedback.max) ? itemMax : Math.max(itemMax, feedback.max);
+  }
+
   protected _renderDrawList(list: DrawItem<C>[], shift: number, feedback?: RenderFeedback): boolean {
     let result = false;
     const viewportHeight = this.graphics.canvas.clientHeight;
 
     for (const { idx, node, offset, height } of list) {
       const y = offset + shift;
+      if (feedback != null) {
+        this._accumulateRenderFeedback(feedback, idx, y, height);
+      }
       if (y + height < 0 || y > viewportHeight) {
         continue;
-      }
-      if (feedback != null) {
-        feedback.minIdx = Number.isNaN(feedback.minIdx) ? idx : Math.min(idx, feedback.minIdx);
-        feedback.maxIdx = Number.isNaN(feedback.maxIdx) ? idx : Math.max(idx, feedback.maxIdx);
-        const min = idx - Math.min(0, y) / height;
-        const max = idx + 1 - Math.max(0, y + height - viewportHeight) / height;
-        if (feedback.minIdx === idx) {
-          feedback.min = min;
-        }
-        if (feedback.maxIdx === idx) {
-          feedback.max = max;
-        }
       }
       if (node.draw(this.context, 0, y)) {
         result = true;
@@ -221,6 +246,7 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
   render(feedback?: RenderFeedback): boolean {
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
+    this._resetRenderFeedback(feedback);
 
     let drawLength = 0;
     if (Number.isNaN(this.position)) {
@@ -326,6 +352,7 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
   render(feedback?: RenderFeedback): boolean {
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
+    this._resetRenderFeedback(feedback);
 
     let drawLength = 0;
     if (Number.isNaN(this.position)) {
