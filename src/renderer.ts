@@ -199,11 +199,13 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       if (feedback != null) {
         feedback.minIdx = Number.isNaN(feedback.minIdx) ? idx : Math.min(idx, feedback.minIdx);
         feedback.maxIdx = Number.isNaN(feedback.maxIdx) ? idx : Math.max(idx, feedback.maxIdx);
+        const min = idx - Math.min(0, y) / height;
+        const max = idx + 1 - Math.max(0, y + height - viewportHeight) / height;
         if (feedback.minIdx === idx) {
-          feedback.min = idx - Math.min(0, y) / height;
+          feedback.min = min;
         }
         if (feedback.maxIdx === idx) {
-          feedback.max = idx - Math.max(0, y + height - viewportHeight) / height;
+          feedback.max = max;
         }
       }
       if (node.draw(this.context, 0, y)) {

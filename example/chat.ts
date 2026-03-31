@@ -286,13 +286,13 @@ list.pushAll([
 button("unshift", () => {
   list.unshift({
     sender: Math.random() < 0.5 ? "A" : "B",
-    content: randomText(10 + Math.floor(20 * Math.random())),
+    content: randomText(10 + Math.floor(200 * Math.random())),
   });
 });
 
 button("push", () => {
   list.push({
     sender: Math.random() < 0.5 ? "A" : "B",
-    content: randomText(10 + Math.floor(20 * Math.random())),
+    content: randomText(10 + Math.floor(200 * Math.random())),
   });
 });
