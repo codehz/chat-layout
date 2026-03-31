@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { ChatRenderer, ListState, TimelineRenderer } from "./renderer";
+import { ChatRenderer, ListState, TimelineRenderer, memoRenderItem } from "./renderer";
 import type { Box, Context, HitTest, Node, RenderFeedback } from "./types";
 
 type C = CanvasRenderingContext2D;
@@ -56,6 +56,37 @@ function expectNaNFeedback(feedback: RenderFeedback): void {
   expect(Number.isNaN(feedback.maxIdx)).toBe(true);
   expect(Number.isNaN(feedback.min)).toBe(true);
   expect(Number.isNaN(feedback.max)).toBe(true);
+}
+
+function mockPerformanceNow(now: { current: number }): () => void {
+  const original = performance.now;
+  Object.defineProperty(performance, "now", {
+    configurable: true,
+    value: () => now.current,
+  });
+  return () => {
+    Object.defineProperty(performance, "now", {
+      configurable: true,
+      value: original,
+    });
+  };
+}
+
+function clampIndex(index: number, length: number): number {
+  return Math.min(Math.max(index, 0), length - 1);
+}
+
+function readTimelineAnchor(list: ListState<number>, heights: number[]): number {
+  const position = clampIndex(Number.isFinite(list.position) ? Math.trunc(list.position) : 0, heights.length);
+  const height = heights[position];
+  return height > 0 ? position - list.offset / height : position;
+}
+
+function readChatAnchor(list: ListState<number>, heights: number[]): number {
+  const fallback = heights.length - 1;
+  const position = clampIndex(Number.isFinite(list.position) ? Math.trunc(list.position) : fallback, heights.length);
+  const height = heights[position];
+  return height > 0 ? position + 1 - list.offset / height : position + 1;
 }
 
 describe("RenderFeedback", () => {
@@ -224,5 +255,286 @@ describe("RenderFeedback", () => {
     expect(feedback.maxIdx).toBe(2);
     expect(feedback.min).toBeCloseTo(0);
     expect(feedback.max).toBeCloseTo(2.5);
+  });
+
+  test("TimelineRenderer jumpTo without animation matches direct positioning", () => {
+    const heights = [40, 50, 60, 70, 80];
+    const jumpedList = new ListState<number>();
+    jumpedList.pushAll(heights);
+    const jumpedRenderer = new TimelineRenderer(createGraphics(100), {
+      list: jumpedList,
+      renderItem: (height) => createNode(height),
+    });
+
+    jumpedRenderer.jumpTo(3, { animated: false });
+    const jumpedFeedback = createFeedback();
+    jumpedRenderer.render(jumpedFeedback);
+
+    const manualList = new ListState<number>();
+    manualList.pushAll(heights);
+    manualList.position = 3;
+    manualList.offset = 0;
+    const manualRenderer = new TimelineRenderer(createGraphics(100), {
+      list: manualList,
+      renderItem: (height) => createNode(height),
+    });
+    const manualFeedback = createFeedback();
+    manualRenderer.render(manualFeedback);
+
+    expect(jumpedList.position).toBe(manualList.position);
+    expect(jumpedList.offset).toBeCloseTo(manualList.offset);
+    expect(jumpedFeedback).toEqual(manualFeedback);
+  });
+
+  test("ChatRenderer jumpTo without animation matches direct positioning", () => {
+    const heights = [40, 50, 60, 70, 80];
+    const jumpedList = new ListState<number>();
+    jumpedList.pushAll(heights);
+    const jumpedRenderer = new ChatRenderer(createGraphics(100), {
+      list: jumpedList,
+      renderItem: (height) => createNode(height),
+    });
+
+    jumpedRenderer.jumpTo(1, { animated: false });
+    const jumpedFeedback = createFeedback();
+    jumpedRenderer.render(jumpedFeedback);
+
+    const manualList = new ListState<number>();
+    manualList.pushAll(heights);
+    manualList.position = 1;
+    manualList.offset = 0;
+    const manualRenderer = new ChatRenderer(createGraphics(100), {
+      list: manualList,
+      renderItem: (height) => createNode(height),
+    });
+    const manualFeedback = createFeedback();
+    manualRenderer.render(manualFeedback);
+
+    expect(jumpedList.position).toBe(manualList.position);
+    expect(jumpedList.offset).toBe(manualList.offset);
+    expect(jumpedFeedback).toEqual(manualFeedback);
+  });
+
+  test("jumpTo clamps indices and ignores empty lists", () => {
+    const emptyTimelineList = new ListState<number>();
+    const emptyTimeline = new TimelineRenderer(createGraphics(100), {
+      list: emptyTimelineList,
+      renderItem: (height) => createNode(height),
+    });
+    emptyTimeline.jumpTo(10);
+    expect(emptyTimeline.render()).toBe(false);
+
+    const timelineList = new ListState<number>();
+    timelineList.push(20, 20, 20);
+    const timeline = new TimelineRenderer(createGraphics(100), {
+      list: timelineList,
+      renderItem: (height) => createNode(height),
+    });
+    timeline.jumpTo(-10, { animated: false });
+    timeline.render();
+    expect(timelineList.position).toBe(0);
+
+    const chatList = new ListState<number>();
+    chatList.push(20, 20, 20);
+    const chat = new ChatRenderer(createGraphics(100), {
+      list: chatList,
+      renderItem: (height) => createNode(height),
+    });
+    chat.jumpTo(99, { animated: false });
+    chat.render();
+    expect(chatList.position).toBe(2);
+  });
+
+  test("TimelineRenderer default jumpTo animates smoothly and settles", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const heights = [40, 40, 40, 40, 40, 40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = new TimelineRenderer(createGraphics(100), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpTo(3);
+
+      const anchors: number[] = [];
+      const feedbacks: RenderFeedback[] = [];
+      const returns: boolean[] = [];
+
+      for (const time of [0, 80, 160, 240, 320]) {
+        now.current = time;
+        const feedback = createFeedback();
+        returns.push(renderer.render(feedback));
+        anchors.push(readTimelineAnchor(list, heights));
+        feedbacks.push({ ...feedback });
+      }
+
+      expect(returns.slice(0, -1).every(Boolean)).toBe(true);
+      expect(returns[returns.length - 1]).toBe(false);
+      for (let i = 1; i < anchors.length; i += 1) {
+        expect(anchors[i]).toBeGreaterThanOrEqual(anchors[i - 1]);
+        expect(feedbacks[i].min).toBeGreaterThanOrEqual(feedbacks[i - 1].min);
+        expect(feedbacks[i].max).toBeGreaterThanOrEqual(feedbacks[i - 1].max);
+      }
+      expect(anchors[anchors.length - 1]).toBeCloseTo(3);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("ChatRenderer default jumpTo animates smoothly and settles", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const heights = [40, 40, 40, 40, 40, 40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = new ChatRenderer(createGraphics(100), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpTo(4);
+
+      const anchors: number[] = [];
+      const feedbacks: RenderFeedback[] = [];
+      const returns: boolean[] = [];
+
+      for (const time of [0, 80, 160, 240, 320]) {
+        now.current = time;
+        const feedback = createFeedback();
+        returns.push(renderer.render(feedback));
+        anchors.push(readChatAnchor(list, heights));
+        feedbacks.push({ ...feedback });
+      }
+
+      expect(returns.slice(0, -1).every(Boolean)).toBe(true);
+      expect(returns[returns.length - 1]).toBe(false);
+      for (let i = 1; i < anchors.length; i += 1) {
+        expect(anchors[i]).toBeLessThanOrEqual(anchors[i - 1]);
+        expect(feedbacks[i].min).toBeLessThanOrEqual(feedbacks[i - 1].min);
+        expect(feedbacks[i].max).toBeLessThanOrEqual(feedbacks[i - 1].max);
+      }
+      expect(anchors[anchors.length - 1]).toBeCloseTo(5);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("new jumpTo overrides an in-flight animation", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const heights = [40, 40, 40, 40, 40, 40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = new TimelineRenderer(createGraphics(100), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpTo(6);
+      now.current = 80;
+      renderer.render();
+
+      renderer.jumpTo(2);
+      for (const time of [80, 160, 240, 320]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(heights);
+      expectedList.position = 2;
+      expectedList.offset = 0;
+      const expected = new TimelineRenderer(createGraphics(100), {
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expected.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("external scroll changes cancel an in-flight animation", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const heights = [40, 40, 40, 40, 40, 40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = new ChatRenderer(createGraphics(100), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpTo(2);
+      now.current = 80;
+      expect(renderer.render()).toBe(true);
+
+      list.position = 6;
+      list.offset = 5;
+      now.current = 160;
+      expect(renderer.render()).toBe(false);
+
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(heights);
+      expectedList.position = 6;
+      expectedList.offset = 5;
+      const expected = new ChatRenderer(createGraphics(100), {
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expected.render();
+
+      now.current = 320;
+      renderer.render();
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBe(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("far jump renders without measuring the whole list", () => {
+    type Item = { height: number };
+
+    const makeItems = (): Item[] => Array.from({ length: 1000 }, () => ({ height: 12 }));
+    const measureCount = { count: 0 };
+    const renderItem = memoRenderItem<C, Item>((item) => ({
+      flex: false,
+      measure(_ctx: Context<C>): Box {
+        measureCount.count += 1;
+        return { width: 320, height: item.height };
+      },
+      draw(_ctx: Context<C>, _x: number, _y: number): boolean {
+        return false;
+      },
+      hittest(_ctx: Context<C>, _test: HitTest): boolean {
+        return false;
+      },
+    }));
+
+    const list = new ListState<Item>();
+    list.pushAll(makeItems());
+    const renderer = new TimelineRenderer(createGraphics(120), {
+      list,
+      renderItem,
+    });
+
+    renderer.jumpTo(700, { animated: false });
+    renderer.render();
+
+    expect(measureCount.count).toBeLessThan(20);
   });
 });

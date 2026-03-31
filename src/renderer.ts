@@ -153,8 +153,38 @@ type DrawItem<C extends CanvasRenderingContext2D> = {
   height: number;
 };
 
+export interface JumpToOptions {
+  animated?: boolean;
+  duration?: number;
+}
+
+type ControlledState = {
+  position: number;
+  offset: number;
+};
+
+type JumpAnimation = {
+  startAnchor: number;
+  targetAnchor: number;
+  startTime: number;
+  duration: number;
+  needsMoreFrames: boolean;
+};
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function sameState(state: ControlledState, position: number, offset: number): boolean {
+  return Object.is(state.position, position) && Object.is(state.offset, offset);
+}
+
+function smoothstep(value: number): number {
+  return value * value * (3 - 2 * value);
+}
+
+function getNow(): number {
+  return globalThis.performance?.now() ?? Date.now();
 }
 
 export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T extends {}> extends BaseRenderer<
@@ -164,6 +194,13 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     list: ListState<T>;
   }
 > {
+  static readonly MIN_JUMP_DURATION = 160;
+  static readonly MAX_JUMP_DURATION = 420;
+  static readonly JUMP_DURATION_PER_ITEM = 28;
+
+  #controlledState: ControlledState | undefined;
+  #jumpAnimation: JumpAnimation | undefined;
+
   get position(): number {
     return this.options.list.position;
   }
@@ -190,6 +227,57 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
   abstract render(feedback?: RenderFeedback): boolean;
   abstract hittest(test: HitTest): boolean;
+
+  jumpTo(index: number, options: JumpToOptions = {}): void {
+    if (this.items.length === 0) {
+      this.#cancelJumpAnimation();
+      return;
+    }
+
+    const targetIndex = this._clampItemIndex(index);
+    this._prepareAnchorState();
+    const targetAnchor = this._getTargetAnchor(targetIndex);
+
+    const animated = options.animated ?? true;
+    if (!animated) {
+      this.#cancelJumpAnimation();
+      this._applyAnchor(targetAnchor);
+      return;
+    }
+
+    const startAnchor = this._readAnchor();
+    if (!Number.isFinite(startAnchor)) {
+      this.#cancelJumpAnimation();
+      this._applyAnchor(targetAnchor);
+      return;
+    }
+
+    const duration = clamp(
+      options.duration ??
+        VirtualizedRenderer.MIN_JUMP_DURATION +
+          Math.abs(targetAnchor - startAnchor) * VirtualizedRenderer.JUMP_DURATION_PER_ITEM,
+      0,
+      VirtualizedRenderer.MAX_JUMP_DURATION,
+    );
+
+    if (duration <= 0 || Math.abs(targetAnchor - startAnchor) <= Number.EPSILON) {
+      this.#cancelJumpAnimation();
+      this._applyAnchor(targetAnchor);
+      return;
+    }
+
+    this.#jumpAnimation = {
+      startAnchor,
+      targetAnchor,
+      startTime: getNow(),
+      duration,
+      needsMoreFrames: true,
+    };
+    this.#controlledState = {
+      position: this.position,
+      offset: this.offset,
+    };
+  }
 
   protected _resetRenderFeedback(feedback?: RenderFeedback): void {
     if (feedback == null) {
@@ -240,10 +328,111 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
     return result;
   }
+
+  protected _prepareRender(): boolean {
+    const animation = this.#jumpAnimation;
+    if (animation == null) {
+      return false;
+    }
+    if (this.items.length === 0) {
+      this.#cancelJumpAnimation();
+      return false;
+    }
+    if (this.#controlledState != null && !sameState(this.#controlledState, this.position, this.offset)) {
+      this.#cancelJumpAnimation();
+      return false;
+    }
+
+    const progress = clamp((getNow() - animation.startTime) / animation.duration, 0, 1);
+    const eased = progress >= 1 ? 1 : smoothstep(progress);
+    const anchor = animation.startAnchor + (animation.targetAnchor - animation.startAnchor) * eased;
+    this._applyAnchor(anchor);
+    animation.needsMoreFrames = progress < 1;
+    return animation.needsMoreFrames;
+  }
+
+  protected _finishRender(requestRedraw: boolean): boolean {
+    const animation = this.#jumpAnimation;
+    if (animation == null) {
+      return requestRedraw;
+    }
+
+    if (animation.needsMoreFrames) {
+      this.#controlledState = {
+        position: this.position,
+        offset: this.offset,
+      };
+      return true;
+    }
+
+    this.#cancelJumpAnimation();
+    return requestRedraw;
+  }
+
+  protected _clampItemIndex(index: number): number {
+    return clamp(Number.isFinite(index) ? Math.trunc(index) : 0, 0, this.items.length - 1);
+  }
+
+  protected _getItemHeight(index: number): number {
+    const item = this.items[index];
+    const node = this.options.renderItem(item);
+    return this.measureNode(node).height;
+  }
+
+  protected abstract _prepareAnchorState(): void;
+  protected abstract _readAnchor(): number;
+  protected abstract _applyAnchor(anchor: number): void;
+  protected abstract _getTargetAnchor(index: number): number;
+
+  #cancelJumpAnimation(): void {
+    this.#jumpAnimation = undefined;
+    this.#controlledState = undefined;
+  }
 }
 
 export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
+  protected _prepareAnchorState(): void {
+    if (this.items.length === 0) {
+      return;
+    }
+    if (!Number.isFinite(this.position)) {
+      this.position = 0;
+      this.offset = 0;
+      return;
+    }
+    this.position = this._clampItemIndex(this.position);
+    if (!Number.isFinite(this.offset)) {
+      this.offset = 0;
+    }
+  }
+
+  protected _readAnchor(): number {
+    this._prepareAnchorState();
+    if (this.items.length === 0) {
+      return 0;
+    }
+    const height = this._getItemHeight(this.position);
+    return height > 0 ? this.position - this.offset / height : this.position;
+  }
+
+  protected _applyAnchor(anchor: number): void {
+    if (this.items.length === 0) {
+      return;
+    }
+    const clampedAnchor = clamp(anchor, 0, this.items.length);
+    const position = clamp(Math.floor(clampedAnchor), 0, this.items.length - 1);
+    const height = this._getItemHeight(position);
+    this.position = position;
+    const offset = height > 0 ? -(clampedAnchor - position) * height : 0;
+    this.offset = Object.is(offset, -0) ? 0 : offset;
+  }
+
+  protected _getTargetAnchor(index: number): number {
+    return index;
+  }
+
   render(feedback?: RenderFeedback): boolean {
+    const keepAnimating = this._prepareRender();
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     this._resetRenderFeedback(feedback);
@@ -320,7 +509,8 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
       }
     }
 
-    return this._renderDrawList(drawList, shift, feedback);
+    const requestRedraw = this._renderDrawList(drawList, shift, feedback);
+    return this._finishRender(keepAnimating || requestRedraw);
   }
 
   hittest(test: HitTest): boolean {
@@ -349,7 +539,48 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
 }
 
 export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
+  protected _prepareAnchorState(): void {
+    if (this.items.length === 0) {
+      return;
+    }
+    if (!Number.isFinite(this.position)) {
+      this.position = this.items.length - 1;
+      this.offset = 0;
+      return;
+    }
+    this.position = this._clampItemIndex(this.position);
+    if (!Number.isFinite(this.offset)) {
+      this.offset = 0;
+    }
+  }
+
+  protected _readAnchor(): number {
+    this._prepareAnchorState();
+    if (this.items.length === 0) {
+      return 0;
+    }
+    const height = this._getItemHeight(this.position);
+    return height > 0 ? this.position + 1 - this.offset / height : this.position + 1;
+  }
+
+  protected _applyAnchor(anchor: number): void {
+    if (this.items.length === 0) {
+      return;
+    }
+    const clampedAnchor = clamp(anchor, 0, this.items.length);
+    const position = clamp(Math.ceil(clampedAnchor) - 1, 0, this.items.length - 1);
+    const height = this._getItemHeight(position);
+    this.position = position;
+    const offset = height > 0 ? (position + 1 - clampedAnchor) * height : 0;
+    this.offset = Object.is(offset, -0) ? 0 : offset;
+  }
+
+  protected _getTargetAnchor(index: number): number {
+    return index + 1;
+  }
+
   render(feedback?: RenderFeedback): boolean {
+    const keepAnimating = this._prepareRender();
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     this._resetRenderFeedback(feedback);
@@ -421,7 +652,8 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
       }
     }
 
-    return this._renderDrawList(drawList, shift, feedback);
+    const requestRedraw = this._renderDrawList(drawList, shift, feedback);
+    return this._finishRender(keepAnimating || requestRedraw);
   }
 
   hittest(test: HitTest): boolean {

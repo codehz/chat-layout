@@ -296,3 +296,13 @@ button("push", () => {
     content: randomText(10 + Math.floor(200 * Math.random())),
   });
 });
+
+button("jump middle", () => {
+  renderer.jumpTo(Math.floor(list.items.length / 2));
+});
+
+button("jump latest (no anim)", () => {
+  renderer.jumpTo(list.items.length - 1, {
+    animated: false,
+  });
+});
