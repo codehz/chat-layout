@@ -301,6 +301,12 @@ button("jump middle", () => {
   renderer.jumpTo(Math.floor(list.items.length / 2));
 });
 
+button("jump middle (center)", () => {
+  renderer.jumpTo(Math.floor(list.items.length / 2), {
+    block: "center",
+  });
+});
+
 button("jump latest (no anim)", () => {
   renderer.jumpTo(list.items.length - 1, {
     animated: false,

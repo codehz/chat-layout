@@ -89,6 +89,74 @@ function readChatAnchor(list: ListState<number>, heights: number[]): number {
   return height > 0 ? position + 1 - list.offset / height : position + 1;
 }
 
+function readAnchorAtOffset(heights: number[], index: number, offset: number): number {
+  let currentIndex = clampIndex(index, heights.length);
+  let remaining = Number.isFinite(offset) ? offset : 0;
+
+  while (true) {
+    if (remaining < 0) {
+      if (currentIndex === 0) {
+        return 0;
+      }
+      currentIndex -= 1;
+      const height = heights[currentIndex];
+      if (height > 0) {
+        remaining += height;
+      }
+      continue;
+    }
+
+    const height = heights[currentIndex];
+    if (height > 0) {
+      if (remaining <= height) {
+        return currentIndex + remaining / height;
+      }
+      remaining -= height;
+    } else if (remaining === 0) {
+      return currentIndex;
+    }
+
+    if (currentIndex === heights.length - 1) {
+      return heights.length;
+    }
+    currentIndex += 1;
+  }
+}
+
+function expectedTimelineAnchor(
+  heights: number[],
+  viewportHeight: number,
+  index: number,
+  block: "start" | "center" | "end",
+): number {
+  const height = heights[index];
+  switch (block) {
+    case "start":
+      return readAnchorAtOffset(heights, index, 0);
+    case "center":
+      return readAnchorAtOffset(heights, index, height / 2 - viewportHeight / 2);
+    case "end":
+      return readAnchorAtOffset(heights, index, height - viewportHeight);
+  }
+}
+
+function expectedChatAnchor(
+  heights: number[],
+  viewportHeight: number,
+  index: number,
+  block: "start" | "center" | "end",
+): number {
+  const height = heights[index];
+  switch (block) {
+    case "start":
+      return readAnchorAtOffset(heights, index, viewportHeight);
+    case "center":
+      return readAnchorAtOffset(heights, index, height / 2 + viewportHeight / 2);
+    case "end":
+      return readAnchorAtOffset(heights, index, height);
+  }
+}
+
 describe("RenderFeedback", () => {
   test("TimelineRenderer reports a monotonic visible range for an oversized item", () => {
     const list = new ListState<number>();
@@ -343,6 +411,174 @@ describe("RenderFeedback", () => {
     chat.jumpTo(99, { animated: false });
     chat.render();
     expect(chatList.position).toBe(2);
+  });
+
+  test("TimelineRenderer block start matches the default jump target", () => {
+    const heights = [40, 50, 60, 70];
+    const viewportHeight = 100;
+    const defaultList = new ListState<number>();
+    defaultList.pushAll(heights);
+    const defaultRenderer = new TimelineRenderer(createGraphics(viewportHeight), {
+      list: defaultList,
+      renderItem: (height) => createNode(height),
+    });
+
+    const explicitList = new ListState<number>();
+    explicitList.pushAll(heights);
+    const explicitRenderer = new TimelineRenderer(createGraphics(viewportHeight), {
+      list: explicitList,
+      renderItem: (height) => createNode(height),
+    });
+
+    defaultRenderer.jumpTo(2, { animated: false });
+    explicitRenderer.jumpTo(2, { animated: false, block: "start" });
+    defaultRenderer.render();
+    explicitRenderer.render();
+
+    expect(readTimelineAnchor(defaultList, heights)).toBeCloseTo(readTimelineAnchor(explicitList, heights));
+  });
+
+  test("ChatRenderer block end matches the default jump target", () => {
+    const heights = [40, 50, 60, 70];
+    const viewportHeight = 100;
+    const defaultList = new ListState<number>();
+    defaultList.pushAll(heights);
+    const defaultRenderer = new ChatRenderer(createGraphics(viewportHeight), {
+      list: defaultList,
+      renderItem: (height) => createNode(height),
+    });
+
+    const explicitList = new ListState<number>();
+    explicitList.pushAll(heights);
+    const explicitRenderer = new ChatRenderer(createGraphics(viewportHeight), {
+      list: explicitList,
+      renderItem: (height) => createNode(height),
+    });
+
+    defaultRenderer.jumpTo(1, { animated: false });
+    explicitRenderer.jumpTo(1, { animated: false, block: "end" });
+    defaultRenderer.render();
+    explicitRenderer.render();
+
+    expect(readChatAnchor(defaultList, heights)).toBeCloseTo(readChatAnchor(explicitList, heights));
+  });
+
+  test("TimelineRenderer block center aligns the item center to the viewport center", () => {
+    const heights = [30, 40, 120, 50];
+    const viewportHeight = 100;
+    const list = new ListState<number>();
+    list.pushAll(heights);
+    const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    renderer.jumpTo(2, { animated: false, block: "center" });
+    renderer.render();
+
+    expect(readTimelineAnchor(list, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 2, "center"));
+  });
+
+  test("ChatRenderer block center aligns the item center to the viewport center", () => {
+    const heights = [30, 120, 40, 50];
+    const viewportHeight = 100;
+    const list = new ListState<number>();
+    list.pushAll(heights);
+    const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    renderer.jumpTo(1, { animated: false, block: "center" });
+    renderer.render();
+
+    expect(readChatAnchor(list, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "center"));
+  });
+
+  test("TimelineRenderer block end aligns the item bottom to the viewport bottom", () => {
+    const heights = [40, 60, 80, 50];
+    const viewportHeight = 100;
+    const list = new ListState<number>();
+    list.pushAll(heights);
+    const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    renderer.jumpTo(2, { animated: false, block: "end" });
+    renderer.render();
+
+    expect(readTimelineAnchor(list, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 2, "end"));
+  });
+
+  test("ChatRenderer block start aligns the item top to the viewport top", () => {
+    const heights = [40, 60, 80, 50];
+    const viewportHeight = 100;
+    const list = new ListState<number>();
+    list.pushAll(heights);
+    const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    renderer.jumpTo(1, { animated: false, block: "start" });
+    renderer.render();
+
+    expect(readChatAnchor(list, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "start"));
+  });
+
+  test("block center on an oversized item keeps the target centered", () => {
+    const heights = [40, 180, 40];
+    const viewportHeight = 100;
+
+    const timelineList = new ListState<number>();
+    timelineList.pushAll(heights);
+    const timeline = new TimelineRenderer(createGraphics(viewportHeight), {
+      list: timelineList,
+      renderItem: (height) => createNode(height),
+    });
+    timeline.jumpTo(1, { animated: false, block: "center" });
+    timeline.render();
+    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 1, "center"));
+
+    const chatList = new ListState<number>();
+    chatList.pushAll(heights);
+    const chat = new ChatRenderer(createGraphics(viewportHeight), {
+      list: chatList,
+      renderItem: (height) => createNode(height),
+    });
+    chat.jumpTo(1, { animated: false, block: "center" });
+    chat.render();
+    expect(readChatAnchor(chatList, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "center"));
+  });
+
+  test("block alignment clamps cleanly near list edges", () => {
+    const heights = [40, 40, 40];
+    const viewportHeight = 100;
+
+    const timelineList = new ListState<number>();
+    timelineList.pushAll(heights);
+    const timeline = new TimelineRenderer(createGraphics(viewportHeight), {
+      list: timelineList,
+      renderItem: (height) => createNode(height),
+    });
+    timeline.jumpTo(0, { animated: false, block: "end" });
+    timeline.render();
+    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 0, "end"));
+    expect(Number.isFinite(timelineList.position)).toBe(true);
+    expect(Number.isFinite(timelineList.offset)).toBe(true);
+
+    const chatList = new ListState<number>();
+    chatList.pushAll(heights);
+    const chat = new ChatRenderer(createGraphics(viewportHeight), {
+      list: chatList,
+      renderItem: (height) => createNode(height),
+    });
+    chat.jumpTo(2, { animated: false, block: "start" });
+    chat.render();
+    expect(readChatAnchor(chatList, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 2, "start"));
+    expect(Number.isFinite(chatList.position)).toBe(true);
+    expect(Number.isFinite(chatList.offset)).toBe(true);
   });
 
   test("jumpTo onComplete runs immediately for non-animated success", () => {
@@ -668,5 +904,32 @@ describe("RenderFeedback", () => {
     renderer.render();
 
     expect(measureCount.count).toBeLessThan(20);
+  });
+
+  test("animated block jump settles at the requested alignment", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const heights = [40, 60, 80, 50, 30];
+      const viewportHeight = 100;
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpTo(1, { block: "start", duration: 200 });
+
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      expect(readChatAnchor(list, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "start"));
+    } finally {
+      restoreNow();
+    }
   });
 });

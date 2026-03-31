@@ -155,6 +155,7 @@ type DrawItem<C extends CanvasRenderingContext2D> = {
 
 export interface JumpToOptions {
   animated?: boolean;
+  block?: "start" | "center" | "end";
   duration?: number;
   onComplete?: () => void;
 }
@@ -238,7 +239,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
     const targetIndex = this._clampItemIndex(index);
     this._prepareAnchorState();
-    const targetAnchor = this._getTargetAnchor(targetIndex);
+    const targetBlock = options.block ?? this._getDefaultJumpBlock();
+    const targetAnchor = this._getTargetAnchor(targetIndex, targetBlock);
 
     const animated = options.animated ?? true;
     if (!animated) {
@@ -387,10 +389,48 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     return this.measureNode(node).height;
   }
 
+  protected _getAnchorAtOffset(index: number, offset: number): number {
+    if (this.items.length === 0) {
+      return 0;
+    }
+
+    let currentIndex = this._clampItemIndex(index);
+    let remaining = Number.isFinite(offset) ? offset : 0;
+    while (true) {
+      if (remaining < 0) {
+        if (currentIndex === 0) {
+          return 0;
+        }
+        currentIndex -= 1;
+        const height = this._getItemHeight(currentIndex);
+        if (height > 0) {
+          remaining += height;
+        }
+        continue;
+      }
+
+      const height = this._getItemHeight(currentIndex);
+      if (height > 0) {
+        if (remaining <= height) {
+          return currentIndex + remaining / height;
+        }
+        remaining -= height;
+      } else if (remaining === 0) {
+        return currentIndex;
+      }
+
+      if (currentIndex === this.items.length - 1) {
+        return this.items.length;
+      }
+      currentIndex += 1;
+    }
+  }
+
   protected abstract _prepareAnchorState(): void;
   protected abstract _readAnchor(): number;
   protected abstract _applyAnchor(anchor: number): void;
-  protected abstract _getTargetAnchor(index: number): number;
+  protected abstract _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]>;
+  protected abstract _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number;
 
   #cancelJumpAnimation(): void {
     this.#jumpAnimation = undefined;
@@ -399,6 +439,10 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 }
 
 export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
+  protected _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]> {
+    return "start";
+  }
+
   protected _prepareAnchorState(): void {
     if (this.items.length === 0) {
       return;
@@ -435,8 +479,18 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
     this.offset = Object.is(offset, -0) ? 0 : offset;
   }
 
-  protected _getTargetAnchor(index: number): number {
-    return index;
+  protected _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number {
+    const height = this._getItemHeight(index);
+    const viewportHeight = this.graphics.canvas.clientHeight;
+
+    switch (block) {
+      case "start":
+        return this._getAnchorAtOffset(index, 0);
+      case "center":
+        return this._getAnchorAtOffset(index, height / 2 - viewportHeight / 2);
+      case "end":
+        return this._getAnchorAtOffset(index, height - viewportHeight);
+    }
   }
 
   render(feedback?: RenderFeedback): boolean {
@@ -547,6 +601,10 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
 }
 
 export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
+  protected _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]> {
+    return "end";
+  }
+
   protected _prepareAnchorState(): void {
     if (this.items.length === 0) {
       return;
@@ -583,8 +641,18 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
     this.offset = Object.is(offset, -0) ? 0 : offset;
   }
 
-  protected _getTargetAnchor(index: number): number {
-    return index + 1;
+  protected _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number {
+    const height = this._getItemHeight(index);
+    const viewportHeight = this.graphics.canvas.clientHeight;
+
+    switch (block) {
+      case "start":
+        return this._getAnchorAtOffset(index, viewportHeight);
+      case "center":
+        return this._getAnchorAtOffset(index, height / 2 + viewportHeight / 2);
+      case "end":
+        return this._getAnchorAtOffset(index, height);
+    }
   }
 
   render(feedback?: RenderFeedback): boolean {
