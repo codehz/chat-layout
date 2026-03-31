@@ -156,6 +156,7 @@ type DrawItem<C extends CanvasRenderingContext2D> = {
 export interface JumpToOptions {
   animated?: boolean;
   duration?: number;
+  onComplete?: () => void;
 }
 
 type ControlledState = {
@@ -169,6 +170,7 @@ type JumpAnimation = {
   startTime: number;
   duration: number;
   needsMoreFrames: boolean;
+  onComplete: (() => void) | undefined;
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -242,6 +244,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     if (!animated) {
       this.#cancelJumpAnimation();
       this._applyAnchor(targetAnchor);
+      options.onComplete?.();
       return;
     }
 
@@ -249,6 +252,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     if (!Number.isFinite(startAnchor)) {
       this.#cancelJumpAnimation();
       this._applyAnchor(targetAnchor);
+      options.onComplete?.();
       return;
     }
 
@@ -263,6 +267,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     if (duration <= 0 || Math.abs(targetAnchor - startAnchor) <= Number.EPSILON) {
       this.#cancelJumpAnimation();
       this._applyAnchor(targetAnchor);
+      options.onComplete?.();
       return;
     }
 
@@ -272,6 +277,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       startTime: getNow(),
       duration,
       needsMoreFrames: true,
+      onComplete: options.onComplete,
     };
     this.#controlledState = {
       position: this.position,
@@ -365,8 +371,10 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       return true;
     }
 
+    const onComplete = animation.onComplete;
     this.#cancelJumpAnimation();
-    return requestRedraw;
+    onComplete?.();
+    return requestRedraw || this.#jumpAnimation != null;
   }
 
   protected _clampItemIndex(index: number): number {

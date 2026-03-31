@@ -345,6 +345,28 @@ describe("RenderFeedback", () => {
     expect(chatList.position).toBe(2);
   });
 
+  test("jumpTo onComplete runs immediately for non-animated success", () => {
+    const list = new ListState<number>();
+    list.push(40, 50, 60);
+    const renderer = new TimelineRenderer(createGraphics(100), {
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    let completed = 0;
+    renderer.jumpTo(1, {
+      animated: false,
+      onComplete: () => {
+        completed += 1;
+      },
+    });
+
+    expect(completed).toBe(1);
+    renderer.render();
+    expect(list.position).toBe(1);
+    expect(list.offset).toBe(0);
+  });
+
   test("TimelineRenderer default jumpTo animates smoothly and settles", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -425,6 +447,40 @@ describe("RenderFeedback", () => {
     }
   });
 
+  test("jumpTo onComplete runs after animated success settles", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const list = new ListState<number>();
+      list.push(40, 40, 40, 40, 40);
+      const renderer = new TimelineRenderer(createGraphics(100), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      let completed = 0;
+      renderer.jumpTo(3, {
+        duration: 200,
+        onComplete: () => {
+          completed += 1;
+        },
+      });
+
+      for (const [time, expectedCompleted] of [
+        [0, 0],
+        [100, 0],
+        [200, 1],
+      ] as const) {
+        now.current = time;
+        renderer.render();
+        expect(completed).toBe(expectedCompleted);
+      }
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("new jumpTo overrides an in-flight animation", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -460,6 +516,49 @@ describe("RenderFeedback", () => {
 
       expect(list.position).toBe(expectedList.position);
       expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("cancelled jumpTo onComplete does not fire after override", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const list = new ListState<number>();
+      list.push(40, 40, 40, 40, 40, 40, 40, 40);
+      const renderer = new TimelineRenderer(createGraphics(100), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      let firstCompleted = 0;
+      let secondCompleted = 0;
+      renderer.jumpTo(6, {
+        duration: 200,
+        onComplete: () => {
+          firstCompleted += 1;
+        },
+      });
+
+      now.current = 100;
+      renderer.render();
+
+      renderer.jumpTo(2, {
+        duration: 200,
+        onComplete: () => {
+          secondCompleted += 1;
+        },
+      });
+
+      for (const time of [100, 200, 300]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      expect(firstCompleted).toBe(0);
+      expect(secondCompleted).toBe(1);
     } finally {
       restoreNow();
     }
@@ -501,6 +600,39 @@ describe("RenderFeedback", () => {
       renderer.render();
       expect(list.position).toBe(expectedList.position);
       expect(list.offset).toBe(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("cancelled jumpTo onComplete does not fire after external scroll", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const list = new ListState<number>();
+      list.push(40, 40, 40, 40, 40, 40, 40, 40);
+      const renderer = new ChatRenderer(createGraphics(100), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      let completed = 0;
+      renderer.jumpTo(2, {
+        duration: 200,
+        onComplete: () => {
+          completed += 1;
+        },
+      });
+
+      now.current = 100;
+      expect(renderer.render()).toBe(true);
+
+      list.position = 6;
+      list.offset = 5;
+      now.current = 200;
+      expect(renderer.render()).toBe(false);
+      expect(completed).toBe(0);
     } finally {
       restoreNow();
     }
