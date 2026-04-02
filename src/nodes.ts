@@ -13,7 +13,7 @@ import type {
   Node,
   TextAlign,
 } from "./types";
-import { createRect, pointInRect } from "./layout";
+import { createRect, findChildAtPoint, getSingleChildLayout, pointInRect } from "./layout";
 import { layoutFirstLine, layoutText } from "./text";
 import { shallow, shallowMerge } from "./utils";
 import { registerNodeParent, unregisterNodeParent } from "./registry";
@@ -802,61 +802,75 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
         }
       : undefined;
     const { width, height } = ctx.measureNode(this.inner, childConstraints);
+    const containerBox = createRect(0, 0, width + paddingLeft + paddingRight, height + this.#top + this.#bottom);
+    const childRect = createRect(paddingLeft, this.#top, width, height);
+    ctx.setLayoutResult(
+      this,
+      {
+        containerBox,
+        contentBox: childRect,
+        children: [
+          {
+            node: this.inner,
+            rect: childRect,
+            contentBox: childRect,
+            constraints: childConstraints,
+          },
+        ],
+        constraints: ctx.constraints,
+      },
+      ctx.constraints,
+    );
     return {
-      width: width + paddingLeft + paddingRight,
-      height: height + this.#top + this.#bottom,
+      width: containerBox.width,
+      height: containerBox.height,
     };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    const paddingLeft = this.#left;
-    const paddingRight = this.#right;
-    // 创建子节点的约束
-    const childConstraints = ctx.constraints
-      ? {
-          ...ctx.constraints,
-          minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - paddingLeft - paddingRight : undefined,
-          maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - paddingLeft - paddingRight : undefined,
-        }
-      : undefined;
-    // 在绘制时设置约束
-    if (childConstraints != null) {
-      ctx.constraints = childConstraints;
-      if (childConstraints.maxWidth != null) {
-        ctx.remainingWidth = childConstraints.maxWidth;
-      }
+    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    if (!layoutResult) {
+      ctx.measureNode(this, ctx.constraints);
+      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     }
-    return this.inner.draw(ctx, x + paddingLeft, y + this.#top);
+    if (!layoutResult) {
+      return this.inner.draw(ctx, x + this.#left, y + this.#top);
+    }
+
+    const childResult = getSingleChildLayout(layoutResult);
+    if (!childResult) {
+      return false;
+    }
+
+    return childResult.node.draw(
+      withConstraints(ctx, childResult.constraints),
+      x + childResult.rect.x,
+      y + childResult.rect.y,
+    );
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
-    const paddingLeft = this.#left;
-    const paddingRight = this.#right;
-    // 创建子节点的约束
-    const childConstraints = ctx.constraints
-      ? {
-          ...ctx.constraints,
-          minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - paddingLeft - paddingRight : undefined,
-          maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - paddingLeft - paddingRight : undefined,
-        }
-      : undefined;
-    if (childConstraints != null) {
-      ctx.constraints = childConstraints;
-      if (childConstraints.maxWidth != null) {
-        ctx.remainingWidth = childConstraints.maxWidth;
-      }
+    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    if (!layoutResult) {
+      ctx.measureNode(this, ctx.constraints);
+      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     }
-    const { width, height } = shallow(ctx).measureNode(this.inner, childConstraints);
-    if (0 <= test.x - this.#left && test.x - this.#left < width && 0 <= test.y - this.#top && test.y - this.#top < height) {
-      return this.inner.hittest(
-        shallow(ctx),
-        shallowMerge(test, {
-          x: test.x - this.#left,
-          y: test.y - this.#top,
-        }),
-      );
+    if (!layoutResult) {
+      return false;
     }
-    return false;
+
+    const hit = findChildAtPoint(layoutResult.children, test.x, test.y, "rect");
+    if (!hit) {
+      return false;
+    }
+
+    return hit.child.node.hittest(
+      withConstraints(ctx, hit.child.constraints),
+      shallowMerge(test, {
+        x: hit.localX,
+        y: hit.localY,
+      }),
+    );
   }
 }
 
@@ -924,7 +938,10 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       return this.inner.draw(ctx, x, y);
     }
 
-    const childResult = layoutResult.children[0];
+    const childResult = getSingleChildLayout(layoutResult);
+    if (!childResult) {
+      return false;
+    }
     const childCtx = withConstraints(ctx, childResult.constraints);
     return childResult.node.draw(childCtx, x + childResult.rect.x, y + childResult.rect.y);
   }
@@ -939,16 +956,16 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       return false;
     }
 
-    const childResult = layoutResult.children[0];
-    if (!pointInRect(test.x, test.y, childResult.rect)) {
+    const hit = findChildAtPoint(layoutResult.children, test.x, test.y, "rect");
+    if (!hit) {
       return false;
     }
 
-    return childResult.node.hittest(
-      withConstraints(ctx, childResult.constraints),
+    return hit.child.node.hittest(
+      withConstraints(ctx, hit.child.constraints),
       shallowMerge(test, {
-        x: test.x - childResult.rect.x,
-        y: test.y - childResult.rect.y,
+        x: hit.localX,
+        y: hit.localY,
       }),
     );
   }
@@ -1207,16 +1224,13 @@ export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
       return false;
     }
 
-    for (const childResult of layoutResult.children) {
-      if (!pointInRect(test.x, test.y, childResult.contentBox)) {
-        continue;
-      }
-
-      return childResult.node.hittest(
-        withConstraints(ctx, childResult.constraints),
+    const hit = findChildAtPoint(layoutResult.children, test.x, test.y, "contentBox");
+    if (hit) {
+      return hit.child.node.hittest(
+        withConstraints(ctx, hit.child.constraints),
         shallowMerge(test, {
-          x: test.x - childResult.contentBox.x,
-          y: test.y - childResult.contentBox.y,
+          x: hit.localX,
+          y: hit.localY,
         }),
       );
     }

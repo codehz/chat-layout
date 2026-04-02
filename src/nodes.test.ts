@@ -184,4 +184,24 @@ describe("Place", () => {
     expect(modernLayout?.containerBox).toEqual(legacyLayout?.containerBox);
     expect(modernLayout?.children[0]?.rect).toEqual(legacyLayout?.children[0]?.rect);
   });
+
+  test("PaddingBox uses its cached layout result for draw and hittest", () => {
+    const { node: probe, draws, hits } = createProbeNode();
+    const renderer = new ConstraintTestRenderer(createGraphics(), {});
+    const padded = new PaddingBox<C>(probe, {
+      top: 5,
+      bottom: 5,
+      left: 10,
+      right: 10,
+    });
+    const constraints = { maxWidth: 60 };
+
+    renderer.measureNode(padded, constraints);
+    renderer.measureNode(padded, { maxWidth: 40 });
+    renderer.drawNode(padded, constraints);
+    expect(draws[0]).toEqual({ x: 10, y: 5 });
+
+    expect(renderer.hittestNode(padded, { x: 15, y: 7, type: "click" }, constraints)).toBe(true);
+    expect(hits[0]).toEqual({ x: 5, y: 2 });
+  });
 });

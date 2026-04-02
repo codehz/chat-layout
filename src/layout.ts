@@ -1,4 +1,4 @@
-import type { Box, ChildLayoutResult, LayoutConstraints, LayoutRect } from "./types";
+import type { Box, ChildLayoutResult, FlexLayoutResult, LayoutConstraints, LayoutRect } from "./types";
 
 /**
  * 创建 LayoutRect 的辅助函数
@@ -84,4 +84,42 @@ export function pointInRect(x: number, y: number, rect: LayoutRect): boolean {
  */
 export function offsetRect(rect: LayoutRect, dx: number, dy: number): LayoutRect {
   return createRect(rect.x + dx, rect.y + dy, rect.width, rect.height);
+}
+
+/**
+ * 读取单子节点布局结果中的唯一 child。
+ */
+export function getSingleChildLayout<C extends CanvasRenderingContext2D>(
+  layout: FlexLayoutResult<C>,
+): ChildLayoutResult<C> | undefined {
+  return layout.children[0];
+}
+
+/**
+ * 在布局结果中按指定盒模型查找命中的 child，并返回局部坐标。
+ */
+export function findChildAtPoint<C extends CanvasRenderingContext2D>(
+  children: ChildLayoutResult<C>[],
+  x: number,
+  y: number,
+  box: "rect" | "contentBox" = "contentBox",
+):
+  | {
+      child: ChildLayoutResult<C>;
+      localX: number;
+      localY: number;
+    }
+  | undefined {
+  for (const child of children) {
+    const target = box === "rect" ? child.rect : child.contentBox;
+    if (!pointInRect(x, y, target)) {
+      continue;
+    }
+    return {
+      child,
+      localX: x - target.x,
+      localY: y - target.y,
+    };
+  }
+  return undefined;
 }
