@@ -2,11 +2,19 @@ import type { Box, Context, DynValue, HitTest, LayoutConstraints, Node, RenderFe
 import { shallow, shallowMerge } from "./utils";
 import { getNodeParent } from "./registry";
 
+/** 每个节点最多保留的约束变体数量，防止缓存无限累积 */
+const MAX_CONSTRAINT_VARIANTS = 8;
+
+function constraintKey(constraints: LayoutConstraints | undefined): string {
+  if (constraints == null) return "";
+  return `${constraints.minWidth ?? ""},${constraints.maxWidth ?? ""},${constraints.minHeight ?? ""},${constraints.maxHeight ?? ""}`;
+}
+
 export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}> {
   graphics: C;
   #ctx: Context<C>;
   #lastWidth: number;
-  #cache = new WeakMap<Node<C>, Box>();
+  #cache = new WeakMap<Node<C>, Map<string, Box>>();
 
   protected get context(): Context<C> {
     return shallow(this.#ctx);
@@ -61,12 +69,14 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
 
   measureNode(node: Node<C>, constraints?: LayoutConstraints): Box {
     if (this.#lastWidth !== this.graphics.canvas.clientWidth) {
-      this.#cache = new WeakMap<Node<C>, Box>();
+      this.#cache = new WeakMap<Node<C>, Map<string, Box>>();
       this.#lastWidth = this.graphics.canvas.clientWidth;
     } else {
-      const result = this.#cache.get(node);
-      if (result != null) {
-        return result;
+      const nodeCache = this.#cache.get(node);
+      if (nodeCache != null) {
+        const key = constraintKey(constraints);
+        const cached = nodeCache.get(key);
+        if (cached != null) return cached;
       }
     }
     // 创建带有约束的上下文
@@ -79,7 +89,17 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       }
     }
     const result = node.measure(ctx);
-    this.#cache.set(node, result);
+    const key = constraintKey(constraints);
+    let nodeCache = this.#cache.get(node);
+    if (nodeCache == null) {
+      nodeCache = new Map();
+      this.#cache.set(node, nodeCache);
+    } else if (nodeCache.size >= MAX_CONSTRAINT_VARIANTS) {
+      // 超出上限时移除最早插入的条目，避免无限累积
+      const firstKey = nodeCache.keys().next().value!;
+      nodeCache.delete(firstKey);
+    }
+    nodeCache.set(key, result);
     return result;
   }
 }

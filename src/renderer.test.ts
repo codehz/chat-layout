@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { ChatRenderer, ListState, TimelineRenderer, memoRenderItem } from "./renderer";
-import type { Box, Context, HitTest, Node, RenderFeedback } from "./types";
+import { BaseRenderer, ChatRenderer, ListState, TimelineRenderer, memoRenderItem } from "./renderer";
+import type { Box, Context, HitTest, LayoutConstraints, Node, RenderFeedback } from "./types";
+import { registerNodeParent, unregisterNodeParent } from "./registry";
 
 type C = CanvasRenderingContext2D;
 
@@ -931,5 +932,177 @@ describe("RenderFeedback", () => {
     } finally {
       restoreNow();
     }
+  });
+});
+
+describe("constraint-aware cache", () => {
+  function createMutableGraphics(width: number): C {
+    const canvas = { clientWidth: width, clientHeight: 100 };
+    return { canvas, textRendering: "auto", clearRect() {}, save() {}, restore() {} } as unknown as C;
+  }
+
+  function createConstraintAwareNode(measureFn: (constraints: LayoutConstraints | undefined) => Box): Node<C> {
+    return {
+      flex: false,
+      measure(ctx: Context<C>): Box {
+        return measureFn(ctx.constraints);
+      },
+      draw(_ctx: Context<C>, _x: number, _y: number): boolean {
+        return false;
+      },
+      hittest(_ctx: Context<C>, _test: HitTest): boolean {
+        return false;
+      },
+    };
+  }
+
+  test("different constraints produce independent cache entries", () => {
+    let calls = 0;
+    const node = createConstraintAwareNode((constraints) => {
+      calls++;
+      return { width: constraints?.maxWidth ?? 320, height: 40 };
+    });
+
+    const renderer = new BaseRenderer(createMutableGraphics(320), {});
+
+    const box200 = renderer.measureNode(node, { maxWidth: 200 });
+    const box100 = renderer.measureNode(node, { maxWidth: 100 });
+    expect(box200.width).toBe(200);
+    expect(box100.width).toBe(100);
+    expect(calls).toBe(2);
+
+    // 第二次调用应命中缓存，不触发 measure
+    const box200b = renderer.measureNode(node, { maxWidth: 200 });
+    const box100b = renderer.measureNode(node, { maxWidth: 100 });
+    expect(box200b.width).toBe(200);
+    expect(box100b.width).toBe(100);
+    expect(calls).toBe(2);
+  });
+
+  test("unconstrained and constrained measurements are cached separately", () => {
+    let calls = 0;
+    const node = createConstraintAwareNode((constraints) => {
+      calls++;
+      return { width: constraints?.maxWidth ?? 320, height: 40 };
+    });
+
+    const renderer = new BaseRenderer(createMutableGraphics(320), {});
+
+    const boxUnconstrained = renderer.measureNode(node);
+    const boxConstrained = renderer.measureNode(node, { maxWidth: 200 });
+    expect(boxUnconstrained.width).toBe(320);
+    expect(boxConstrained.width).toBe(200);
+    expect(calls).toBe(2);
+
+    // 再次调用应命中缓存
+    renderer.measureNode(node);
+    renderer.measureNode(node, { maxWidth: 200 });
+    expect(calls).toBe(2);
+  });
+
+  test("invalidateNode clears all constraint variants for the node", () => {
+    let calls = 0;
+    const node = createConstraintAwareNode((constraints) => {
+      calls++;
+      return { width: constraints?.maxWidth ?? 320, height: 40 };
+    });
+
+    const renderer = new BaseRenderer(createMutableGraphics(320), {});
+    renderer.measureNode(node, { maxWidth: 200 });
+    renderer.measureNode(node, { maxWidth: 100 });
+    expect(calls).toBe(2);
+
+    renderer.invalidateNode(node);
+
+    // 失效后两个约束都需要重新测量
+    renderer.measureNode(node, { maxWidth: 200 });
+    renderer.measureNode(node, { maxWidth: 100 });
+    expect(calls).toBe(4);
+  });
+
+  test("invalidateNode also invalidates ancestor caches for all constraint variants", () => {
+    let childCalls = 0;
+    let parentCalls = 0;
+
+    const child = createConstraintAwareNode((constraints) => {
+      childCalls++;
+      return { width: constraints?.maxWidth ?? 100, height: 20 };
+    });
+
+    const parent = createConstraintAwareNode((_constraints) => {
+      parentCalls++;
+      return { width: 200, height: 40 };
+    });
+
+    registerNodeParent(child, parent);
+    try {
+      const renderer = new BaseRenderer(createMutableGraphics(320), {});
+      renderer.measureNode(parent, { maxWidth: 300 });
+      renderer.measureNode(parent, { maxWidth: 200 });
+      renderer.measureNode(child, { maxWidth: 100 });
+      expect(parentCalls).toBe(2);
+      expect(childCalls).toBe(1);
+
+      // 失效子节点应同时失效父节点的全部缓存
+      renderer.invalidateNode(child);
+
+      renderer.measureNode(parent, { maxWidth: 300 });
+      renderer.measureNode(parent, { maxWidth: 200 });
+      expect(parentCalls).toBe(4);
+    } finally {
+      unregisterNodeParent(child);
+    }
+  });
+
+  test("canvas width change clears all constraint variants", () => {
+    let calls = 0;
+    const node = createConstraintAwareNode((constraints) => {
+      calls++;
+      return { width: constraints?.maxWidth ?? 320, height: 40 };
+    });
+
+    const graphics = createMutableGraphics(320);
+    const renderer = new BaseRenderer(graphics, {});
+
+    renderer.measureNode(node, { maxWidth: 200 });
+    renderer.measureNode(node, { maxWidth: 100 });
+    expect(calls).toBe(2);
+
+    // 模拟视口宽度变化
+    (graphics.canvas as unknown as { clientWidth: number }).clientWidth = 480;
+
+    // 宽度变化后所有约束变体都应重新测量
+    renderer.measureNode(node, { maxWidth: 200 });
+    renderer.measureNode(node, { maxWidth: 100 });
+    expect(calls).toBe(4);
+  });
+
+  test("cache inner map does not grow beyond MAX_CONSTRAINT_VARIANTS", () => {
+    let calls = 0;
+    const node = createConstraintAwareNode((constraints) => {
+      calls++;
+      return { width: constraints?.maxWidth ?? 320, height: 40 };
+    });
+
+    const renderer = new BaseRenderer(createMutableGraphics(320), {});
+
+    // 用远超 MAX_CONSTRAINT_VARIANTS (8) 个不同约束测量同一节点
+    const N = 100;
+    for (let w = 1; w <= N; w++) {
+      const box = renderer.measureNode(node, { maxWidth: w });
+      expect(box.width).toBe(w);
+    }
+    expect(calls).toBe(N);
+
+    // 缓存只保留最后 8 个条目（MAX_CONSTRAINT_VARIANTS），最近测量的不应再触发 measure
+    const callsBefore = calls;
+    for (let w = N - 7; w <= N; w++) {
+      renderer.measureNode(node, { maxWidth: w });
+    }
+    expect(calls).toBe(callsBefore); // 最后 8 个应全部命中缓存
+
+    // 早期被驱逐的条目需要重新测量
+    renderer.measureNode(node, { maxWidth: 1 });
+    expect(calls).toBe(callsBefore + 1);
   });
 });
