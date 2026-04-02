@@ -213,7 +213,7 @@ export abstract class Group<C extends CanvasRenderingContext2D> implements Node<
 export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
   constructor(
     children: Node<C>[],
-    readonly options: { gap?: number; alignment?: "left" | "center" | "right" } = {},
+    readonly options: { gap?: number; alignment?: "left" | "center" | "right"; expand?: boolean } = {},
   ) {
     super(children);
   }
@@ -230,6 +230,7 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
           : toTextAlign(this.options.alignment ?? ctx.alignment) === "center"
             ? "center"
             : "end",
+        expandMain: this.options.expand ?? true,
       },
       ctx,
     );
@@ -325,7 +326,7 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
 export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
   constructor(
     readonly children: Node<C>[],
-    readonly options: { reverse?: boolean; gap?: number } = {},
+    readonly options: { reverse?: boolean; gap?: number; expand?: boolean } = {},
   ) {
     super(children);
   }
@@ -338,6 +339,7 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
         direction: "row",
         gap: this.options.gap,
         reverse: this.options.reverse ?? ctx.reverse,
+        expandMain: this.options.expand ?? true,
       },
       ctx,
     );
@@ -844,6 +846,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
   const justifyContent = options.justifyContent ?? "start";
   const alignItems = options.alignItems ?? "start";
   const reverse = options.reverse ?? false;
+  const expandMain = options.expandMain ?? true;
   const orderedChildren = reverse ? [...children].reverse() : children;
   const maxMain = getMaxMain(axis, ctx.constraints);
   const minMain = getMinMain(axis, ctx.constraints);
@@ -952,7 +955,9 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
     contentCross = Math.max(contentCross, measurement.frameCross);
   }
 
-  const containerMain = finiteMain ? Math.max(maxMain!, contentMain) : clampToConstraints(contentMain, minMain, maxMain);
+  const containerMain = finiteMain && expandMain
+    ? Math.max(maxMain!, contentMain)
+    : clampToConstraints(contentMain, minMain, maxMain);
   const containerCross = finiteCross ? Math.max(maxCross!, contentCross) : clampToConstraints(contentCross, minCross, maxCross);
   const freeSpace = Math.max(0, containerMain - contentMain);
   const spacing = getJustifySpacing(justifyContent, freeSpace, orderedChildren.length, gap);

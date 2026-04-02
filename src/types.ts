@@ -52,6 +52,7 @@ export interface FlexContainerOptions {
   justifyContent?: MainAxisAlignment;
   alignItems?: CrossAxisAlignment;
   reverse?: boolean;
+  expandMain?: boolean;
 }
 
 export interface Context<C extends CanvasRenderingContext2D> {

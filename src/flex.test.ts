@@ -130,6 +130,24 @@ describe("Flex", () => {
     }
   });
 
+  test("expandMain=false shrink-wraps the container along the main axis", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const constraints = { maxWidth: 100 };
+    const node = new Flex<C>([new Fixed(10, 10), new Fixed(15, 10)], {
+      direction: "row",
+      gap: 5,
+      expandMain: false,
+    });
+
+    const box = renderer.measureNode(node, constraints);
+    const layout = renderer.getLayoutResult(node, constraints);
+
+    expect(box).toEqual({ width: 30, height: 10 });
+    expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 30, height: 10 });
+    expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    expect(layout?.children[1]?.rect).toEqual({ x: 15, y: 0, width: 15, height: 10 });
+  });
+
   test("alignItems, alignSelf, and stretch use the cross axis consistently", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 100, maxHeight: 40 };

@@ -145,7 +145,7 @@ function createChatLikeBubble(message: string): Place<C> {
       ),
       new Fixed(15, 15),
     ],
-    { gap: 4 },
+    { gap: 4, expand: false },
   );
 
   const content = new PaddingBox(
@@ -266,6 +266,47 @@ describe("Place", () => {
     const layout = renderer.getLayoutResult(node);
 
     expect(layout?.children[0]?.constraints).toBeUndefined();
+  });
+
+  test("VStack right alignment pins a narrower sender line to the bubble's right edge", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 100), {});
+    const senderLine = new HStack<C>(
+      [
+        new PaddingBox(
+          new Text("A", {
+            lineHeight: 15,
+            font: "12px sans-serif",
+            style: "#000",
+          }),
+        ),
+        new Fixed(15, 15),
+      ],
+      { gap: 4, expand: false },
+    );
+    const content = new PaddingBox(
+      new MultilineText("longer bubble content", {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        alignment: "left",
+        style: "#000",
+      }),
+      {
+        top: 6,
+        bottom: 6,
+        left: 10,
+        right: 10,
+      },
+    );
+    const column = new VStack<C>([senderLine, content], { alignment: "right" });
+
+    renderer.measureNode(column, { maxWidth: 240 });
+    const layout = renderer.getLayoutResult(column, { maxWidth: 240 });
+
+    expect(layout?.children[0]?.rect.x).toBeGreaterThan(0);
+    expect(layout?.children[1]?.rect.x).toBeGreaterThan(0);
+    expect(layout!.children[0]!.rect.x + layout!.children[0]!.rect.width).toBe(
+      layout!.children[1]!.rect.x + layout!.children[1]!.rect.width,
+    );
   });
 
   test("PaddingBox uses its cached layout result for draw and hittest", () => {

@@ -157,7 +157,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
         item,
       ),
     ],
-    { gap: 4 },
+    { gap: 4, expand: false },
   );
 
   const content = new RoundedBox(
@@ -180,7 +180,9 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
   const row = new HStack<C>(
     [
       new Circle(32, { fill: "red" }),
-      new VStack<C>([senderLine, content]),
+      new VStack<C>([senderLine, content], {
+        alignment: item.sender === "A" ? "right" : "left",
+      }),
       new Fixed(32, 0),
     ],
     {
