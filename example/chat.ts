@@ -17,6 +17,24 @@ import {
   type RenderFeedback,
 } from "..";
 
+const sampleWords = [
+  "hello",
+  "world",
+  "chat",
+  "layout",
+  "message",
+  "render",
+  "bubble",
+  "timeline",
+  "virtualized",
+  "canvas",
+  "stream",
+  "session",
+  "update",
+  "typing",
+  "history",
+];
+
 type C = CanvasRenderingContext2D;
 
 class RoundedBox extends PaddingBox<C> {
@@ -227,17 +245,14 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     alignItems: "start",
   });
 
-  const content = new RoundedBox(
-    bubbleColumn,
-    {
-      top: 6,
-      bottom: 6,
-      left: 10,
-      right: 10,
-      radii: 8,
-      fill: () => (currentHover === item ? "#aaa" : "#ccc"),
-    },
-  );
+  const content = new RoundedBox(bubbleColumn, {
+    top: 6,
+    bottom: 6,
+    left: 10,
+    right: 10,
+    radii: 8,
+    fill: () => (currentHover === item ? "#aaa" : "#ccc"),
+  });
 
   const body = new Flex<C>([senderLine, content], {
     direction: "column",
@@ -277,7 +292,8 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
 const list = new ListState<ChatItem>([
   {
     sender: "A",
-    content: "hello world chat layout message render bubble timeline virtualized canvas",
+    content:
+      "hello world chat layout message render bubble timeline virtualized canvas",
   },
   {
     sender: "B",
@@ -346,24 +362,6 @@ canvas.addEventListener("pointermove", (e) => {
     currentHover = undefined;
   }
 });
-
-const sampleWords = [
-  "hello",
-  "world",
-  "chat",
-  "layout",
-  "message",
-  "render",
-  "bubble",
-  "timeline",
-  "virtualized",
-  "canvas",
-  "stream",
-  "session",
-  "update",
-  "typing",
-  "history",
-];
 
 function randomText(words: number): string {
   const out: string[] = [];
