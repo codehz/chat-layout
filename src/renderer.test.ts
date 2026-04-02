@@ -194,14 +194,22 @@ function clampIndex(index: number, length: number): number {
 }
 
 function readTimelineAnchor(list: ListState<number>, heights: number[]): number {
-  const position = clampIndex(Number.isFinite(list.position) ? Math.trunc(list.position) : 0, heights.length);
+  const currentPosition = list.position;
+  const position = clampIndex(
+    typeof currentPosition === "number" && Number.isFinite(currentPosition) ? Math.trunc(currentPosition) : 0,
+    heights.length,
+  );
   const height = heights[position];
   return height > 0 ? position - list.offset / height : position;
 }
 
 function readChatAnchor(list: ListState<number>, heights: number[]): number {
   const fallback = heights.length - 1;
-  const position = clampIndex(Number.isFinite(list.position) ? Math.trunc(list.position) : fallback, heights.length);
+  const currentPosition = list.position;
+  const position = clampIndex(
+    typeof currentPosition === "number" && Number.isFinite(currentPosition) ? Math.trunc(currentPosition) : fallback,
+    heights.length,
+  );
   const height = heights[position];
   return height > 0 ? position + 1 - list.offset / height : position + 1;
 }
@@ -285,10 +293,16 @@ describe("RenderFeedback", () => {
       renderItem: () => node,
     });
 
+    expect(list.position).toBeUndefined();
+
     expect(renderer.hittest({ x: 12, y: 10, type: "click" })).toBe(true);
     expect(hits).toEqual([{ x: 12, y: 10 }]);
+    expect(list.position).toBeUndefined();
+    expect(list.offset).toBe(0);
 
     renderer.render();
+    expect(list.position).toBe(0);
+    expect(list.offset).toBe(0);
     expect(renderer.hittest({ x: 12, y: 10, type: "click" })).toBe(true);
     expect(hits.at(-1)).toEqual({ x: 12, y: 10 });
     expect(renderer.hittest({ x: 12, y: 40, type: "click" })).toBe(false);
@@ -304,10 +318,16 @@ describe("RenderFeedback", () => {
       renderItem: () => node,
     });
 
+    expect(list.position).toBeUndefined();
+
     expect(renderer.hittest({ x: 16, y: 10, type: "click" })).toBe(true);
     expect(hits).toEqual([{ x: 16, y: 10 }]);
+    expect(list.position).toBeUndefined();
+    expect(list.offset).toBe(0);
 
     renderer.render();
+    expect(list.position).toBe(0);
+    expect(list.offset).toBe(0);
     expect(renderer.hittest({ x: 16, y: 10, type: "click" })).toBe(true);
     expect(hits.at(-1)).toEqual({ x: 16, y: 10 });
     expect(renderer.hittest({ x: 16, y: 40, type: "click" })).toBe(false);

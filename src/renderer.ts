@@ -11,6 +11,16 @@ import type {
 } from "./types";
 import { shallow, shallowMerge } from "./utils";
 import { forEachNodeAncestor, getNodeRevision } from "./registry";
+import {
+  normalizeChatState,
+  normalizeTimelineState,
+  resolveChatVisibleWindow,
+  resolveTimelineVisibleWindow,
+  type NormalizedListState,
+  type VisibleListState,
+  type VisibleWindow,
+  type VisibleWindowResult,
+} from "./virtualized";
 
 /** 每个节点最多保留的约束变体数量，防止缓存无限累积 */
 const MAX_CONSTRAINT_VARIANTS = 8;
@@ -257,7 +267,7 @@ export function memoRenderItemBy<C extends CanvasRenderingContext2D, T, K>(
 
 export class ListState<T extends {}> {
   offset = 0;
-  position = Number.NaN;
+  position: number | undefined;
   items: T[] = [];
 
   unshift(...items: T[]): void {
@@ -265,7 +275,9 @@ export class ListState<T extends {}> {
   }
 
   unshiftAll(items: T[]): void {
-    this.position += items.length;
+    if (this.position != null) {
+      this.position += items.length;
+    }
     this.items = items.concat(this.items);
   }
 
@@ -280,30 +292,18 @@ export class ListState<T extends {}> {
   reset(): void {
     this.items = [];
     this.offset = 0;
-    this.position = Number.NaN;
+    this.position = undefined;
   }
 
   resetScroll(): void {
     this.offset = 0;
-    this.position = Number.NaN;
+    this.position = undefined;
   }
 
   applyScroll(delta: number): void {
     this.offset += delta;
   }
 }
-
-type DrawItem<C extends CanvasRenderingContext2D> = {
-  idx: number;
-  node: Node<C>;
-  offset: number;
-  height: number;
-};
-
-type VisibleWindow<C extends CanvasRenderingContext2D> = {
-  drawList: DrawItem<C>[];
-  shift: number;
-};
 
 export interface JumpToOptions {
   animated?: boolean;
@@ -313,7 +313,7 @@ export interface JumpToOptions {
 }
 
 type ControlledState = {
-  position: number;
+  position?: number;
   offset: number;
 };
 
@@ -330,7 +330,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function sameState(state: ControlledState, position: number, offset: number): boolean {
+function sameState(state: ControlledState, position: number | undefined, offset: number): boolean {
   return Object.is(state.position, position) && Object.is(state.offset, offset);
 }
 
@@ -356,11 +356,11 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
 
-  get position(): number {
+  get position(): number | undefined {
     return this.options.list.position;
   }
 
-  set position(value: number) {
+  set position(value: number | undefined) {
     this.options.list.position = value;
   }
 
@@ -383,6 +383,18 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   abstract render(feedback?: RenderFeedback): boolean;
   abstract hittest(test: HitTest): boolean;
 
+  protected _readListState(): VisibleListState {
+    return {
+      position: this.position,
+      offset: this.offset,
+    };
+  }
+
+  protected _commitListState(state: NormalizedListState): void {
+    this.position = state.position;
+    this.offset = state.offset;
+  }
+
   jumpTo(index: number, options: JumpToOptions = {}): void {
     if (this.items.length === 0) {
       this.#cancelJumpAnimation();
@@ -390,7 +402,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     }
 
     const targetIndex = this._clampItemIndex(index);
-    this._prepareAnchorState();
+    const currentState = this._normalizeListState(this._readListState());
     const targetBlock = options.block ?? this._getDefaultJumpBlock();
     const targetAnchor = this._getTargetAnchor(targetIndex, targetBlock);
 
@@ -402,7 +414,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       return;
     }
 
-    const startAnchor = this._readAnchor();
+    const startAnchor = this._readAnchor(currentState);
     if (!Number.isFinite(startAnchor)) {
       this.#cancelJumpAnimation();
       this._applyAnchor(targetAnchor);
@@ -433,10 +445,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       needsMoreFrames: true,
       onComplete: options.onComplete,
     };
-    this.#controlledState = {
-      position: this.position,
-      offset: this.offset,
-    };
+    this.#controlledState = this._readListState();
   }
 
   protected _resetRenderFeedback(feedback?: RenderFeedback): void {
@@ -469,11 +478,11 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     feedback.max = Number.isNaN(feedback.max) ? itemMax : Math.max(itemMax, feedback.max);
   }
 
-  protected _renderDrawList(list: DrawItem<C>[], shift: number, feedback?: RenderFeedback): boolean {
+  protected _renderDrawList(list: VisibleWindow<Node<C>>["drawList"], shift: number, feedback?: RenderFeedback): boolean {
     let result = false;
     const viewportHeight = this.graphics.canvas.clientHeight;
 
-    for (const { idx, node, offset, height } of list) {
+    for (const { idx, value: node, offset, height } of list) {
       const y = offset + shift;
       if (feedback != null) {
         this._accumulateRenderFeedback(feedback, idx, y, height);
@@ -489,13 +498,13 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     return result;
   }
 
-  protected _renderVisibleWindow(window: VisibleWindow<C>, feedback?: RenderFeedback): boolean {
+  protected _renderVisibleWindow(window: VisibleWindow<Node<C>>, feedback?: RenderFeedback): boolean {
     this._resetRenderFeedback(feedback);
     return this._renderDrawList(window.drawList, window.shift, feedback);
   }
 
-  protected _hittestVisibleWindow(window: VisibleWindow<C>, test: HitTest): boolean {
-    for (const { node, offset, height } of window.drawList) {
+  protected _hittestVisibleWindow(window: VisibleWindow<Node<C>>, test: HitTest): boolean {
+    for (const { value: node, offset, height } of window.drawList) {
       const y = offset + window.shift;
       if (test.y < y || test.y >= y + height) {
         continue;
@@ -539,10 +548,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     }
 
     if (animation.needsMoreFrames) {
-      this.#controlledState = {
-        position: this.position,
-        offset: this.offset,
-      };
+      this.#controlledState = this._readListState();
       return true;
     }
 
@@ -599,8 +605,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     }
   }
 
-  protected abstract _prepareAnchorState(): void;
-  protected abstract _readAnchor(): number;
+  protected abstract _normalizeListState(state: VisibleListState): NormalizedListState;
+  protected abstract _readAnchor(state: NormalizedListState): number;
   protected abstract _applyAnchor(anchor: number): void;
   protected abstract _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]>;
   protected abstract _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number;
@@ -612,113 +618,35 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 }
 
 export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
-  #resolveVisibleWindow(): VisibleWindow<C> {
-    this._prepareAnchorState();
-    if (this.items.length === 0) {
-      return { drawList: [], shift: 0 };
-    }
-
-    const viewportHeight = this.graphics.canvas.clientHeight;
-    let drawLength = 0;
-
-    if (this.offset > 0) {
-      if (this.position === 0) {
-        this.offset = 0;
-      } else {
-        for (let i = this.position - 1; i >= 0; i -= 1) {
-          const item = this.items[i];
-          const node = this.options.renderItem(item);
-          const { height } = this.measureRootNode(node);
-          this.position = i;
-          this.offset -= height;
-          if (this.offset <= 0) {
-            break;
-          }
-        }
-        if (this.position === 0 && this.offset > 0) {
-          this.offset = 0;
-        }
-      }
-    }
-
-    let y = this.offset;
-    const drawList: DrawItem<C>[] = [];
-    for (let i = this.position; i < this.items.length; i += 1) {
-      const item = this.items[i];
-      const node = this.options.renderItem(item);
-      const { height } = this.measureRootNode(node);
-      if (y + height > 0) {
-        drawList.push({ idx: i, node, offset: y, height });
-        drawLength += height;
-      } else {
-        this.offset += height;
-        this.position = i + 1;
-      }
-      y += height;
-      if (y >= viewportHeight) {
-        break;
-      }
-    }
-
-    let shift = 0;
-    if (y < viewportHeight) {
-      if (this.position === 0 && drawLength < viewportHeight) {
-        shift = -this.offset;
-        this.offset = 0;
-      } else {
-        shift = viewportHeight - y;
-        y = (this.offset += shift);
-        let lastIdx = -1;
-        for (let i = this.position - 1; i >= 0; i -= 1) {
-          const item = this.items[(lastIdx = i)];
-          const node = this.options.renderItem(item);
-          const { height } = this.measureRootNode(node);
-          drawLength += height;
-          y -= height;
-          drawList.push({ idx: i, node, offset: y - shift, height });
-          if (y < 0) {
-            break;
-          }
-        }
-        if (lastIdx === 0 && drawLength < viewportHeight) {
-          shift = -drawList[drawList.length - 1].offset;
-          this.position = 0;
-          this.offset = 0;
-        }
-      }
-    }
-
-    return { drawList, shift };
+  #resolveVisibleWindow(): VisibleWindowResult<Node<C>> {
+    return resolveTimelineVisibleWindow(
+      this.items,
+      this._readListState(),
+      this.graphics.canvas.clientHeight,
+      (item, idx) => {
+        const node = this.options.renderItem(item);
+        return {
+          value: node,
+          height: this.measureRootNode(node).height,
+        };
+      },
+    );
   }
 
   protected _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]> {
     return "start";
   }
 
-  protected _prepareAnchorState(): void {
-    if (this.items.length === 0) {
-      return;
-    }
-    if (!Number.isFinite(this.position)) {
-      this.position = 0;
-      if (!Number.isFinite(this.offset)) {
-        this.offset = 0;
-      }
-      return;
-    }
-    this.position = this._clampItemIndex(this.position);
-    if (!Number.isFinite(this.offset)) {
-      this.offset = 0;
-    }
+  protected _normalizeListState(state: VisibleListState): NormalizedListState {
+    return normalizeTimelineState(this.items.length, state);
   }
 
-  protected _readAnchor(): number {
-    this._prepareAnchorState();
+  protected _readAnchor(state: NormalizedListState): number {
     if (this.items.length === 0) {
       return 0;
     }
-    const height = this._getItemHeight(this.position);
-    return height > 0 ? this.position - this.offset / height : this.position;
+    const height = this._getItemHeight(state.position);
+    return height > 0 ? state.position - state.offset / height : state.position;
   }
 
   protected _applyAnchor(anchor: number): void {
@@ -728,9 +656,11 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
     const clampedAnchor = clamp(anchor, 0, this.items.length);
     const position = clamp(Math.floor(clampedAnchor), 0, this.items.length - 1);
     const height = this._getItemHeight(position);
-    this.position = position;
     const offset = height > 0 ? -(clampedAnchor - position) * height : 0;
-    this.offset = Object.is(offset, -0) ? 0 : offset;
+    this._commitListState({
+      position,
+      offset: Object.is(offset, -0) ? 0 : offset,
+    });
   }
 
   protected _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number {
@@ -751,119 +681,47 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
     const keepAnimating = this._prepareRender();
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
-    const window = this.#resolveVisibleWindow();
-    const requestRedraw = this._renderVisibleWindow(window, feedback);
+    const solution = this.#resolveVisibleWindow();
+    const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
+    this._commitListState(solution.normalizedState);
     return this._finishRender(keepAnimating || requestRedraw);
   }
 
   hittest(test: HitTest): boolean {
-    return this._hittestVisibleWindow(this.#resolveVisibleWindow(), test);
+    return this._hittestVisibleWindow(this.#resolveVisibleWindow().window, test);
   }
 }
 
 export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
-  #resolveVisibleWindow(): VisibleWindow<C> {
-    this._prepareAnchorState();
-    if (this.items.length === 0) {
-      return { drawList: [], shift: 0 };
-    }
-
-    const viewportHeight = this.graphics.canvas.clientHeight;
-    let drawLength = 0;
-
-    if (this.offset < 0) {
-      if (this.position === this.items.length - 1) {
-        this.offset = 0;
-      } else {
-        for (let i = this.position + 1; i < this.items.length; i += 1) {
-          const item = this.items[i];
-          const node = this.options.renderItem(item);
-          const { height } = this.measureRootNode(node);
-          this.position = i;
-          this.offset += height;
-          if (this.offset > 0) {
-            break;
-          }
-        }
-      }
-    }
-
-    let y = viewportHeight + this.offset;
-    const drawList: DrawItem<C>[] = [];
-    for (let i = this.position; i >= 0; i -= 1) {
-      const item = this.items[i];
-      const node = this.options.renderItem(item);
-      const { height } = this.measureRootNode(node);
-      y -= height;
-      if (y <= viewportHeight) {
-        drawList.push({ idx: i, node, offset: y, height });
-        drawLength += height;
-      } else {
-        this.offset -= height;
-        this.position = i - 1;
-      }
-      if (y < 0) {
-        break;
-      }
-    }
-
-    let shift = 0;
-    if (y > 0) {
-      shift = -y;
-      if (drawLength < viewportHeight) {
-        y = drawLength;
-        for (let i = this.position + 1; i < this.items.length; i += 1) {
-          const item = this.items[i];
-          const node = this.options.renderItem(item);
-          const { height } = this.measureRootNode(node);
-          drawList.push({ idx: i, node, offset: y - shift, height });
-          y = (drawLength += height);
-          this.position = i;
-          if (y >= viewportHeight) {
-            break;
-          }
-        }
-        if (drawLength < viewportHeight) {
-          this.offset = 0;
-        } else {
-          this.offset = drawLength - viewportHeight;
-        }
-      } else {
-        this.offset = drawLength - viewportHeight;
-      }
-    }
-
-    return { drawList, shift };
+  #resolveVisibleWindow(): VisibleWindowResult<Node<C>> {
+    return resolveChatVisibleWindow(
+      this.items,
+      this._readListState(),
+      this.graphics.canvas.clientHeight,
+      (item, idx) => {
+        const node = this.options.renderItem(item);
+        return {
+          value: node,
+          height: this.measureRootNode(node).height,
+        };
+      },
+    );
   }
 
   protected _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]> {
     return "end";
   }
 
-  protected _prepareAnchorState(): void {
-    if (this.items.length === 0) {
-      return;
-    }
-    if (!Number.isFinite(this.position)) {
-      this.position = this.items.length - 1;
-      if (!Number.isFinite(this.offset)) {
-        this.offset = 0;
-      }
-      return;
-    }
-    this.position = this._clampItemIndex(this.position);
-    if (!Number.isFinite(this.offset)) {
-      this.offset = 0;
-    }
+  protected _normalizeListState(state: VisibleListState): NormalizedListState {
+    return normalizeChatState(this.items.length, state);
   }
 
-  protected _readAnchor(): number {
-    this._prepareAnchorState();
+  protected _readAnchor(state: NormalizedListState): number {
     if (this.items.length === 0) {
       return 0;
     }
-    const height = this._getItemHeight(this.position);
-    return height > 0 ? this.position + 1 - this.offset / height : this.position + 1;
+    const height = this._getItemHeight(state.position);
+    return height > 0 ? state.position + 1 - state.offset / height : state.position + 1;
   }
 
   protected _applyAnchor(anchor: number): void {
@@ -873,9 +731,11 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
     const clampedAnchor = clamp(anchor, 0, this.items.length);
     const position = clamp(Math.ceil(clampedAnchor) - 1, 0, this.items.length - 1);
     const height = this._getItemHeight(position);
-    this.position = position;
     const offset = height > 0 ? (position + 1 - clampedAnchor) * height : 0;
-    this.offset = Object.is(offset, -0) ? 0 : offset;
+    this._commitListState({
+      position,
+      offset: Object.is(offset, -0) ? 0 : offset,
+    });
   }
 
   protected _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number {
@@ -896,12 +756,13 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
     const keepAnimating = this._prepareRender();
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
-    const window = this.#resolveVisibleWindow();
-    const requestRedraw = this._renderVisibleWindow(window, feedback);
+    const solution = this.#resolveVisibleWindow();
+    const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
+    this._commitListState(solution.normalizedState);
     return this._finishRender(keepAnimating || requestRedraw);
   }
 
   hittest(test: HitTest): boolean {
-    return this._hittestVisibleWindow(this.#resolveVisibleWindow(), test);
+    return this._hittestVisibleWindow(this.#resolveVisibleWindow().window, test);
   }
 }
