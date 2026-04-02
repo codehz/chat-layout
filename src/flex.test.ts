@@ -148,13 +148,13 @@ describe("Flex", () => {
     }
   });
 
-  test("expandMain=false shrink-wraps the container along the main axis", () => {
+  test("mainAxisSize=fit-content shrink-wraps the container along the main axis", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 100 };
     const node = new Flex<C>([new Fixed(10, 10), new Fixed(15, 10)], {
       direction: "row",
       gap: 5,
-      expandMain: false,
+      mainAxisSize: "fit-content",
     });
 
     const box = renderer.measureNode(node, constraints);

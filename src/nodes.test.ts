@@ -125,7 +125,7 @@ function createChatLikeBubble(message: string): Place<C> {
       ),
       new Fixed(15, 15),
     ],
-    { direction: "row", gap: 4, expandMain: false },
+    { direction: "row", gap: 4, mainAxisSize: "fit-content" },
   );
 
   const content = new PaddingBox(
@@ -262,7 +262,7 @@ describe("Place", () => {
         ),
         new Fixed(15, 15),
       ],
-      { direction: "row", gap: 4, expandMain: false },
+      { direction: "row", gap: 4, mainAxisSize: "fit-content" },
     );
     const content = new PaddingBox(
       new MultilineText("longer bubble content", {

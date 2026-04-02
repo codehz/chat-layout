@@ -166,7 +166,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     {
       direction: "row",
       gap: 4,
-      expandMain: false,
+      mainAxisSize: "fit-content",
       reverse: item.sender === "A",
     },
   );

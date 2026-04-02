@@ -518,7 +518,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
   const justifyContent = options.justifyContent ?? "start";
   const alignItems = options.alignItems ?? "start";
   const reverse = options.reverse ?? false;
-  const expandMain = options.expandMain ?? true;
+  const mainAxisSize = options.mainAxisSize ?? "fill";
   const orderedChildren = reverse ? [...children].reverse() : children;
   const maxMain = getMaxMain(axis, ctx.constraints);
   const minMain = getMinMain(axis, ctx.constraints);
@@ -627,7 +627,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
     contentCross = Math.max(contentCross, measurement.frameCross);
   }
 
-  const containerMain = finiteMain && expandMain
+  const containerMain = finiteMain && mainAxisSize === "fill"
     ? Math.max(maxMain!, contentMain)
     : clampToConstraints(contentMain, minMain, maxMain);
   const containerCross = finiteCross ? Math.max(maxCross!, contentCross) : clampToConstraints(contentCross, minCross, maxCross);

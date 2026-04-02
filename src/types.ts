@@ -27,6 +27,7 @@ export type MainAxisAlignment =
   | "space-evenly";
 
 export type CrossAxisAlignment = "start" | "center" | "end" | "stretch";
+export type MainAxisSize = "fill" | "fit-content";
 
 export type TextAlign = "start" | "center" | "end";
 
@@ -50,7 +51,7 @@ export interface FlexContainerOptions {
   justifyContent?: MainAxisAlignment;
   alignItems?: CrossAxisAlignment;
   reverse?: boolean;
-  expandMain?: boolean;
+  mainAxisSize?: MainAxisSize;
 }
 
 export interface Context<C extends CanvasRenderingContext2D> {
