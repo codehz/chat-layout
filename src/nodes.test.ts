@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { AlignBox, Fixed, PaddingBox, Place, Text } from "./nodes";
+import { AlignBox, Fixed, HStack, MultilineText, PaddingBox, Place, Text, VStack } from "./nodes";
 import { BaseRenderer } from "./renderer";
 import type { Context, HitTest, LayoutConstraints, Node } from "./types";
 
@@ -133,6 +133,56 @@ function createBubble(): PaddingBox<C> {
   );
 }
 
+function createChatLikeBubble(message: string): Place<C> {
+  const senderLine = new HStack<C>(
+    [
+      new PaddingBox(
+        new Text("A", {
+          lineHeight: 15,
+          font: "12px sans-serif",
+          style: "#000",
+        }),
+      ),
+      new Fixed(15, 15),
+    ],
+    { gap: 4 },
+  );
+
+  const content = new PaddingBox(
+    new MultilineText(message, {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      alignment: "left",
+      style: "#000",
+    }),
+    {
+      top: 6,
+      bottom: 6,
+      left: 10,
+      right: 10,
+    },
+  );
+
+  const row = new HStack<C>(
+    [
+      new Fixed(32, 32),
+      new VStack<C>([senderLine, content]),
+      new Fixed(32, 0),
+    ],
+    { gap: 4 },
+  );
+
+  return new Place<C>(
+    new PaddingBox(row, {
+      top: 4,
+      bottom: 4,
+      left: 4,
+      right: 4,
+    }),
+    { align: "start" },
+  );
+}
+
 describe("Place", () => {
   test("produces expected child rects for start, center, and end alignment", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
@@ -161,7 +211,7 @@ describe("Place", () => {
 
     renderer.measureNode(place, constraints);
     renderer.drawNode(place, constraints);
-  expect(draws).toHaveLength(1);
+    expect(draws).toHaveLength(1);
     expect(draws[0]).toEqual({ x: 40, y: 0 });
 
     expect(renderer.hittestNode(place, { x: 50, y: 5, type: "click" }, constraints)).toBe(true);
@@ -183,6 +233,39 @@ describe("Place", () => {
     expect(modernBox).toEqual(legacyBox);
     expect(modernLayout?.containerBox).toEqual(legacyLayout?.containerBox);
     expect(modernLayout?.children[0]?.rect).toEqual(legacyLayout?.children[0]?.rect);
+  });
+
+  test("bridges top-level remainingWidth into child maxWidth constraints for chat bubbles", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 200), {});
+    const node = createChatLikeBubble("long message ".repeat(30));
+
+    const unconstrainedBox = renderer.measureNode(node);
+    const unconstrainedLayout = renderer.getLayoutResult(node);
+    const constrainedBox = renderer.measureNode(node, { maxWidth: 320 });
+    const constrainedLayout = renderer.getLayoutResult(node, { maxWidth: 320 });
+
+    expect(unconstrainedBox.width).toBe(320);
+    expect(unconstrainedLayout?.children[0]?.rect.width).toBeLessThanOrEqual(unconstrainedBox.width);
+    expect(unconstrainedBox).toEqual(constrainedBox);
+    expect(unconstrainedLayout?.children[0]?.rect).toEqual(constrainedLayout?.children[0]?.rect);
+  });
+
+  test("does not synthesize child maxWidth constraints when expand=false", () => {
+    const renderer = new BaseRenderer(createGraphics(160, 100), {});
+    const node = new Place<C>(
+      new MultilineText("wide text ".repeat(10), {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        alignment: "left",
+        style: "#000",
+      }),
+      { align: "start", expand: false },
+    );
+
+    renderer.measureNode(node);
+    const layout = renderer.getLayoutResult(node);
+
+    expect(layout?.children[0]?.constraints).toBeUndefined();
   });
 
   test("PaddingBox uses its cached layout result for draw and hittest", () => {

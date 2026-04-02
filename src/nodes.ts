@@ -637,14 +637,17 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 
   measure(ctx: Context<C>): Box {
+    const availableWidth = resolveAvailableWidth(ctx);
+    const expand = this.options.expand ?? true;
     const childConstraints = ctx.constraints
       ? {
           ...ctx.constraints,
         }
-      : undefined;
+      : expand && Number.isFinite(availableWidth)
+        ? { maxWidth: availableWidth }
+        : undefined;
     const childBox = ctx.measureNode(this.inner, childConstraints);
-    const availableWidth = resolveAvailableWidth(ctx);
-    let width = this.options.expand ?? true ? availableWidth : childBox.width;
+    let width = expand ? availableWidth : childBox.width;
     if (ctx.constraints?.minWidth != null) {
       width = Math.max(width, ctx.constraints.minWidth);
     }

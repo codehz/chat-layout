@@ -44,7 +44,8 @@ class RoundedBox extends PaddingBox<C> {
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    const { width, height } = ctx.measureNode(this);
+    // Reuse the current layout constraints so the background matches wrapped text.
+    const { width, height } = ctx.measureNode(this, ctx.constraints);
     ctx.with((g) => {
       const fill = this.fill == null ? undefined : ctx.resolveDynValue(this.fill);
       const stroke = this.stroke == null ? undefined : ctx.resolveDynValue(this.stroke);
