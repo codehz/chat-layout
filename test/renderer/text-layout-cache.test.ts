@@ -1,13 +1,30 @@
 import { describe, expect, test } from "bun:test";
 
-import { MultilineText } from "../../src/nodes";
+import { MultilineText, Text } from "../../src/nodes";
 import { ChatRenderer, DebugRenderer, ListState, memoRenderItem } from "../../src/renderer";
 import { createTextGraphics, ensureMockOffscreenCanvas, withOffscreenMeasureCounter } from "../helpers/graphics";
-import { ConstraintTestRenderer, createTextNode } from "../helpers/renderer-fixtures";
+import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
 
 ensureMockOffscreenCanvas();
+
+function createSingleLineNode(text: string, font: string): Text<C> {
+  return new Text(text, {
+    lineHeight: 20,
+    font,
+    style: "#000",
+  });
+}
+
+function createMultilineNode(text: string, font: string): MultilineText<C> {
+  return new MultilineText(text, {
+    align: "start",
+    lineHeight: 20,
+    font,
+    style: "#000",
+  });
+}
 
 describe("text layout cache", () => {
   test("repeated draws of the same Text node reuse cached layout work", () => {
@@ -15,7 +32,10 @@ describe("text layout cache", () => {
     const renderer = new DebugRenderer(createTextGraphics(80, 100, () => {
       graphicsMeasures += 1;
     }), {});
-    const node = createTextNode("alpha beta gamma delta epsilon zeta eta theta");
+    const node = createSingleLineNode(
+      "alpha beta gamma delta epsilon zeta eta theta text-cache-repeat-single",
+      "16px cache-test-single-repeat",
+    );
 
     withOffscreenMeasureCounter((offscreen) => {
       renderer.draw(node);
@@ -34,7 +54,7 @@ describe("text layout cache", () => {
 
   test("repeated renders of the same visible MultilineText node reuse cached layout work", () => {
     let graphicsMeasures = 0;
-    const list = new ListState([{ text: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron" }]);
+    const list = new ListState([{ text: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-chat-repeat" }]);
     const renderer = new ChatRenderer(createTextGraphics(80, 100, () => {
       graphicsMeasures += 1;
     }), {
@@ -42,7 +62,7 @@ describe("text layout cache", () => {
       renderItem: memoRenderItem<C, { text: string }>((item) => new MultilineText(item.text, {
         align: "start",
         lineHeight: 20,
-        font: "16px sans-serif",
+        font: "16px cache-test-chat-repeat",
         style: "#000",
       })),
     });
@@ -62,24 +82,24 @@ describe("text layout cache", () => {
     });
   });
 
-  test("different maxWidth values create distinct text layout cache entries", () => {
+  test("different maxWidth values rerun layout but reuse prepared text", () => {
     let graphicsMeasures = 0;
     const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
       graphicsMeasures += 1;
     }), {});
-    const node = new MultilineText<C>("alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron", {
-      align: "start",
-      lineHeight: 20,
-      font: "16px sans-serif",
-      style: "#000",
-    });
+    const node = createMultilineNode(
+      "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-width-reuse",
+      "16px cache-test-width-reuse",
+    );
 
     withOffscreenMeasureCounter((offscreen) => {
       renderer.drawNode(node, { maxWidth: 200 });
-      const afterWideGraphicsMeasures = graphicsMeasures;
+      const wideGraphicsMeasures = graphicsMeasures;
+      const wideOffscreenMeasures = offscreen.count;
 
       renderer.drawNode(node, { maxWidth: 60 });
-      expect(graphicsMeasures).toBeGreaterThan(afterWideGraphicsMeasures);
+      expect(graphicsMeasures).toBe(wideGraphicsMeasures);
+      expect(offscreen.count).toBe(wideOffscreenMeasures);
 
       const cachedGraphicsMeasures = graphicsMeasures;
       const cachedOffscreenMeasures = offscreen.count;
@@ -92,47 +112,62 @@ describe("text layout cache", () => {
     });
   });
 
-  test("invalidateNode clears cached text layout artifacts", () => {
+  test("different nodes with the same text and font share prepared text work", () => {
     let graphicsMeasures = 0;
     const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
       graphicsMeasures += 1;
     }), {});
-    const node = new MultilineText<C>("alpha beta gamma delta epsilon zeta eta theta", {
-      align: "start",
-      lineHeight: 20,
-      font: "16px sans-serif",
-      style: "#000",
+    const text = "alpha beta gamma delta epsilon zeta eta theta text-cache-cross-node";
+    const font = "16px cache-test-cross-node";
+    const first = createMultilineNode(text, font);
+    const second = createMultilineNode(text, font);
+
+    withOffscreenMeasureCounter((offscreen) => {
+      renderer.drawNode(first, { maxWidth: 60 });
+      const firstGraphicsMeasures = graphicsMeasures;
+      const firstOffscreenMeasures = offscreen.count;
+
+      renderer.drawNode(second, { maxWidth: 60 });
+
+      expect(graphicsMeasures).toBe(firstGraphicsMeasures);
+      expect(offscreen.count).toBe(firstOffscreenMeasures);
     });
+  });
+
+  test("invalidateNode keeps prepared text warm for subsequent measure and draw", () => {
+    let graphicsMeasures = 0;
+    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
+      graphicsMeasures += 1;
+    }), {});
+    const node = createMultilineNode(
+      "alpha beta gamma delta epsilon zeta eta theta text-cache-invalidate",
+      "16px cache-test-invalidate",
+    );
 
     withOffscreenMeasureCounter((offscreen) => {
       renderer.drawNode(node, { maxWidth: 60 });
       const warmGraphicsMeasures = graphicsMeasures;
       const warmOffscreenMeasures = offscreen.count;
 
+      renderer.invalidateNode(node);
+      renderer.measureNode(node, { maxWidth: 60 });
       renderer.drawNode(node, { maxWidth: 60 });
+
       expect(graphicsMeasures).toBe(warmGraphicsMeasures);
       expect(offscreen.count).toBe(warmOffscreenMeasures);
-
-      renderer.invalidateNode(node);
-      renderer.drawNode(node, { maxWidth: 60 });
-
-      expect(graphicsMeasures).toBeGreaterThan(warmGraphicsMeasures);
-      expect(offscreen.count).toBeGreaterThanOrEqual(warmOffscreenMeasures);
     });
   });
 
-  test("viewport width changes clear cached text layout artifacts", () => {
+  test("viewport width changes keep prepared text cache warm", () => {
     let graphicsMeasures = 0;
     const graphics = createTextGraphics(160, 100, () => {
       graphicsMeasures += 1;
     });
     const renderer = new DebugRenderer(graphics, {});
-    const node = new MultilineText<C>("alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron", {
-      align: "start",
-      lineHeight: 20,
-      font: "16px sans-serif",
-      style: "#000",
-    });
+    const node = createMultilineNode(
+      "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-viewport",
+      "16px cache-test-viewport",
+    );
 
     withOffscreenMeasureCounter((offscreen) => {
       renderer.draw(node);
@@ -146,8 +181,8 @@ describe("text layout cache", () => {
       (graphics.canvas as unknown as { clientWidth: number }).clientWidth = 100;
       renderer.draw(node);
 
-      expect(graphicsMeasures).toBeGreaterThan(warmGraphicsMeasures);
-      expect(offscreen.count).toBeGreaterThanOrEqual(warmOffscreenMeasures);
+      expect(graphicsMeasures).toBe(warmGraphicsMeasures);
+      expect(offscreen.count).toBe(warmOffscreenMeasures);
     });
   });
 });

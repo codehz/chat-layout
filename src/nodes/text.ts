@@ -1,11 +1,21 @@
-import { layoutFirstLine, layoutFirstLineIntrinsic, layoutText, layoutTextIntrinsic, type TextLayout } from "../text";
+import {
+  layoutFirstLine,
+  layoutFirstLineIntrinsic,
+  layoutText,
+  layoutTextIntrinsic,
+  measureText,
+  measureTextIntrinsic,
+  type TextLayout,
+  type TextMeasurement,
+} from "../text";
 import type { Box, Context, MultilineTextOptions, Node, PhysicalTextAlign, TextOptions } from "../types";
 
 type SingleLineLayout = TextLayout;
-type MultiLineLayout = {
+type MultiLineDrawLayout = {
   width: number;
   lines: TextLayout[];
 };
+type MultiLineMeasureLayout = TextMeasurement;
 
 type TextLayoutCacheAccess<C extends CanvasRenderingContext2D> = {
   getTextLayout<T>(node: Node<C>, key: string): T | undefined;
@@ -62,8 +72,12 @@ function getSingleLineLayoutKey(maxWidth: number | undefined): string {
   return maxWidth == null ? "single:intrinsic" : `single:${maxWidth}`;
 }
 
-function getMultiLineLayoutKey(maxWidth: number | undefined): string {
-  return maxWidth == null ? "multi:intrinsic" : `multi:${maxWidth}`;
+function getMultiLineMeasureLayoutKey(maxWidth: number | undefined): string {
+  return maxWidth == null ? "multi:measure:intrinsic" : `multi:measure:${maxWidth}`;
+}
+
+function getMultiLineDrawLayoutKey(maxWidth: number | undefined): string {
+  return maxWidth == null ? "multi:draw:intrinsic" : `multi:draw:${maxWidth}`;
 }
 
 function getSingleLineLayout<C extends CanvasRenderingContext2D>(
@@ -78,14 +92,26 @@ function getSingleLineLayout<C extends CanvasRenderingContext2D>(
   );
 }
 
-function getMultiLineLayout<C extends CanvasRenderingContext2D>(
+function getMultiLineMeasureLayout<C extends CanvasRenderingContext2D>(
   node: Node<C>,
   ctx: Context<C>,
   text: string,
   whitespace: MultilineTextOptions<C>["whitespace"],
-): MultiLineLayout {
+): MultiLineMeasureLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  return readCachedTextLayout(node, ctx, getMultiLineLayoutKey(maxWidth), () =>
+  return readCachedTextLayout(node, ctx, getMultiLineMeasureLayoutKey(maxWidth), () =>
+    maxWidth == null ? measureTextIntrinsic(ctx, text, whitespace) : measureText(ctx, text, maxWidth, whitespace)
+  );
+}
+
+function getMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  text: string,
+  whitespace: MultilineTextOptions<C>["whitespace"],
+): MultiLineDrawLayout {
+  const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+  return readCachedTextLayout(node, ctx, getMultiLineDrawLayoutKey(maxWidth), () =>
     maxWidth == null ? layoutTextIntrinsic(ctx, text, whitespace) : layoutText(ctx, text, maxWidth, whitespace)
   );
 }
@@ -99,8 +125,8 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   measure(ctx: Context<C>): Box {
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width, lines } = getMultiLineLayout(this, ctx, this.text, this.options.whitespace);
-      return { width, height: lines.length * this.options.lineHeight };
+      const { width, lineCount } = getMultiLineMeasureLayout(this, ctx, this.text, this.options.whitespace);
+      return { width, height: lineCount * this.options.lineHeight };
     });
   }
 
@@ -108,7 +134,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.style);
-      const { width, lines } = getMultiLineLayout(this, ctx, this.text, this.options.whitespace);
+      const { width, lines } = getMultiLineDrawLayout(this, ctx, this.text, this.options.whitespace);
       switch (resolvePhysicalTextAlign(this.options)) {
         case "left":
           for (const { text, shift } of lines) {
