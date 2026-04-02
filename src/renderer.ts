@@ -270,6 +270,10 @@ export class ListState<T extends {}> {
   position: number | undefined;
   items: T[] = [];
 
+  constructor(items: T[] = []) {
+    this.items = [...items];
+  }
+
   unshift(...items: T[]): void {
     this.unshiftAll(items);
   }
@@ -289,8 +293,13 @@ export class ListState<T extends {}> {
     this.items.push(...items);
   }
 
-  reset(): void {
-    this.items = [];
+  setAnchor(position: number, offset = 0): void {
+    this.position = Number.isFinite(position) ? Math.trunc(position) : undefined;
+    this.offset = Number.isFinite(offset) ? offset : 0;
+  }
+
+  reset(items: T[] = []): void {
+    this.items = [...items];
     this.offset = 0;
     this.position = undefined;
   }

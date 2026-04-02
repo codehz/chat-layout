@@ -97,7 +97,7 @@ const node = new RoundedBox(
         new MultilineText("测试居中".repeat(20), {
           lineHeight: 20,
           font: "400 16px monospace",
-          alignment: "center",
+          align: "center",
           style: "black",
         }),
         { align: "center" },
@@ -127,7 +127,7 @@ const node = new RoundedBox(
                 new MultilineText("测试2".repeat(5), {
                   lineHeight: 16,
                   font: "400 12px monospace",
-                  alignment: "center",
+                  align: "center",
                   style: "black",
                 }),
                 {
@@ -162,7 +162,7 @@ const node = new RoundedBox(
           new MultilineText("文本右对齐".repeat(10), {
             lineHeight: 20,
             font: "400 16px monospace",
-            alignment: "right",
+            physicalAlign: "right",
             style: "black",
           }),
           {

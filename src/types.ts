@@ -30,7 +30,27 @@ export type CrossAxisAlignment = "start" | "center" | "end" | "stretch";
 export type MainAxisSize = "fill" | "fit-content";
 
 export type TextAlign = "start" | "center" | "end";
+export type PhysicalTextAlign = "left" | "center" | "right";
 export type TextWhitespaceMode = "preserve" | "trim-and-collapse";
+
+export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
+  lineHeight: number;
+  font: string;
+  style: DynValue<C, string>;
+  /** Default: preserve input whitespace, including blank lines and edge spaces. */
+  whitespace?: TextWhitespaceMode;
+}
+
+export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {
+  /** Logical alignment that matches `Place.align`. */
+  align?: TextAlign;
+  /** Explicit physical alignment when left/right semantics are required. */
+  physicalAlign?: PhysicalTextAlign;
+  /** @deprecated Use `align` or `physicalAlign` instead. */
+  alignment?: PhysicalTextAlign;
+}
+
+export interface TextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {}
 
 export interface LayoutConstraints {
   minWidth?: number;

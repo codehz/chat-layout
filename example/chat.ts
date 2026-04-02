@@ -176,7 +176,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
       lineHeight: 20,
       font: "16px system-ui",
       style: "black",
-      alignment: "left",
+      align: "start",
     }),
     { alignSelf: "start" },
   );
@@ -196,7 +196,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
               lineHeight: 16,
               font: "13px system-ui",
               style: () => (currentHover === item ? "#222" : "#444"),
-              alignment: "left",
+              align: "start",
             }),
           ],
           {
@@ -274,7 +274,32 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
   });
 });
 
-const list = new ListState<ChatItem>();
+const list = new ListState<ChatItem>([
+  {
+    sender: "A",
+    content: "hello world chat layout message render bubble timeline virtualized canvas",
+  },
+  {
+    sender: "B",
+    content: "aaaa",
+    reply: {
+      sender: "A",
+      content: "hello world chat layout message render",
+    },
+  },
+  { sender: "B", content: "aaaabbb" },
+  { sender: "B", content: "测试中文" },
+  { sender: "B", content: "测试aa中文aaa" },
+  {
+    sender: "A",
+    content: randomText(8),
+    reply: {
+      sender: "B",
+      content: "测试aa中文aaa",
+    },
+  },
+  { sender: "B", content: randomText(5) },
+]);
 const renderer = new ChatRenderer(ctx, {
   renderItem,
   list,
@@ -347,33 +372,6 @@ function randomText(words: number): string {
   }
   return out.join(" ");
 }
-
-list.pushAll([
-  {
-    sender: "A",
-    content: "hello world chat layout message render bubble timeline virtualized canvas",
-  },
-  {
-    sender: "B",
-    content: "aaaa",
-    reply: {
-      sender: "A",
-      content: "hello world chat layout message render",
-    },
-  },
-  { sender: "B", content: "aaaabbb" },
-  { sender: "B", content: "测试中文" },
-  { sender: "B", content: "测试aa中文aaa" },
-  {
-    sender: "A",
-    content: randomText(8),
-    reply: {
-      sender: "B",
-      content: "测试aa中文aaa",
-    },
-  },
-  { sender: "B", content: randomText(5) },
-]);
 
 button("unshift", () => {
   list.unshift({

@@ -283,6 +283,23 @@ function expectedChatAnchor(
 }
 
 describe("RenderFeedback", () => {
+  test("ListState exposes explicit seed, reset, and anchor helpers", () => {
+    const list = new ListState<number>([1, 2, 3]);
+
+    expect(list.items).toEqual([1, 2, 3]);
+    expect(list.position).toBeUndefined();
+    expect(list.offset).toBe(0);
+
+    list.setAnchor(4.9, 12);
+    expect(list.position).toBe(4);
+    expect(list.offset).toBe(12);
+
+    list.reset([9, 10]);
+    expect(list.items).toEqual([9, 10]);
+    expect(list.position).toBeUndefined();
+    expect(list.offset).toBe(0);
+  });
+
   test("TimelineRenderer hittest is stable before the first render", () => {
     const hits: ProbeHit[] = [];
     const list = new ListState<number>();

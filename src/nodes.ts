@@ -10,8 +10,11 @@ import type {
   FlexItemOptions,
   HitTest,
   LayoutConstraints,
+  MultilineTextOptions,
   Node,
+  PhysicalTextAlign,
   TextWhitespaceMode,
+  TextOptions,
   TextAlign,
 } from "./types";
 import { computeContentBox, createRect, findChildAtPoint, getSingleChildLayout } from "./layout";
@@ -37,6 +40,25 @@ function resolveHorizontalOffset(align: TextAlign, availableWidth: number, child
     case "start":
       return 0;
   }
+}
+
+function resolvePhysicalTextAlign(
+  options: Pick<MultilineTextOptions<any>, "align" | "physicalAlign" | "alignment">,
+): PhysicalTextAlign {
+  if (options.physicalAlign != null) {
+    return options.physicalAlign;
+  }
+  if (options.align != null) {
+    switch (options.align) {
+      case "start":
+        return "left";
+      case "center":
+        return "center";
+      case "end":
+        return "right";
+    }
+  }
+  return options.alignment ?? "left";
 }
 
 function getMainSize(axis: Axis, box: Box): number {
@@ -768,13 +790,7 @@ export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
 export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(
     readonly text: string,
-    readonly options: {
-      lineHeight: number;
-      font: string;
-      alignment: "left" | "center" | "right";
-      style: DynValue<C, string>;
-      whitespace?: TextWhitespaceMode;
-    },
+    readonly options: MultilineTextOptions<C>,
   ) {}
 
   measure(ctx: Context<C>): Box {
@@ -796,7 +812,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
       const { lines } = maxWidth == null
         ? layoutTextIntrinsic(ctx, this.text, this.options.whitespace)
         : layoutText(ctx, this.text, maxWidth, this.options.whitespace);
-      switch (this.options.alignment) {
+      switch (resolvePhysicalTextAlign(this.options)) {
         case "left":
           for (const { text, shift } of lines) {
             g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
@@ -834,12 +850,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
 export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(
     readonly text: string,
-    readonly options: {
-      lineHeight: number;
-      font: string;
-      style: DynValue<C, string>;
-      whitespace?: TextWhitespaceMode;
-    },
+    readonly options: TextOptions<C>,
   ) {}
 
   measure(ctx: Context<C>): Box {

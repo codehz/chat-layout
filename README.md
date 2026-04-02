@@ -7,7 +7,7 @@ The current recommended APIs are:
 - `Flex` for row/column layout
 - `FlexItem` for explicit `grow`
 - `Place` for single-child horizontal placement
-- `Text` / `MultilineText` `alignment` for text content alignment
+- `MultilineText` `align` / `physicalAlign` for text content alignment
 - `ChatRenderer` plus `ListState` for virtualized chat rendering
 - `memoRenderItem` for object items, or `memoRenderItemBy` when your stable key is primitive / explicit
 
@@ -20,7 +20,9 @@ The current recommended APIs are:
 - Use `alignItems` / `alignSelf: "stretch"` when a specific child should fill the container's computed cross axis.
 - Use `new Place(child, { align: "start" | "center" | "end" })` when a single child should fill available width and then be placed left/center/right.
 - Use `justifyContent`, `alignItems`, and `alignSelf` for container/item placement.
-- Keep text alignment on `Text` / `MultilineText` via `alignment: "left" | "center" | "right"`.
+- Use `align: "start" | "center" | "end"` on `MultilineText` for logical alignment that matches `Place.align`.
+- Use `physicalAlign: "left" | "center" | "right"` on `MultilineText` only when you explicitly want physical left/right semantics.
+- `Text` / `MultilineText` preserve blank lines and edge whitespace by default; opt into cleanup with `whitespace: "trim-and-collapse"`.
 
 **Example**
 This is the recommended chat bubble shape used by [example/chat.ts](./example/chat.ts):
@@ -51,7 +53,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
       lineHeight: 20,
       font: "16px system-ui",
       style: "black",
-      alignment: "left",
+      align: "start",
     }),
     { alignSelf: "start" },
   );
@@ -72,7 +74,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
                 lineHeight: 16,
                 font: "13px system-ui",
                 style: "#444",
-                alignment: "left",
+                align: "start",
               }),
             ],
             {
@@ -167,6 +169,9 @@ In other words: a finite `maxWidth` / `maxHeight` limits measurement, but does n
 
 - `memoRenderItem()` now only accepts object items. If your list item is a primitive or you want to memoize by an explicit id, use `memoRenderItemBy(keyOf, renderItem)`.
 - `FlexItemOptions` intentionally exposes only the implemented item-level controls: `grow` and `alignSelf`. The previously documented `shrink` / `basis` fields were removed because they were never implemented.
+- `ListState.position` now uses `undefined` as the explicit “use renderer default anchor” state. Use `list.setAnchor(position, offset)` to opt into a concrete anchor.
+- `ListState` can be seeded with `new ListState(items)` and reset with `list.reset(nextItems)`.
+- `MultilineText` prefers logical `align`; the legacy `alignment` field is kept only as a migration alias.
 
 ### Migration notes
 
@@ -179,6 +184,16 @@ In other words: a finite `maxWidth` / `maxHeight` limits measurement, but does n
 - After:
   - `new FlexItem(node, { grow: 1 })`
   - unsupported sizing semantics should be modeled explicitly in node measurement/layout instead of `shrink` / `basis`
+- Before:
+  - `new MultilineText(text, { alignment: "left" })`
+- After:
+  - `new MultilineText(text, { align: "start" })`
+  - or `new MultilineText(text, { physicalAlign: "left" })` when physical left/right semantics are required
+- Before:
+  - `list.position = Number.NaN`
+- After:
+  - `list.resetScroll()`
+  - or `list.setAnchor(index, offset)` for an explicit anchor
 
 **Development**
 Install dependencies:

@@ -395,6 +395,34 @@ describe("Place", () => {
     expect(fillTexts.map(({ text }) => text)).toEqual(["padded text", "alpha", "beta"]);
   });
 
+  test("MultilineText supports logical align and explicit physicalAlign", () => {
+    const logical = createTextRecordingGraphics();
+    const logicalRenderer = new ConstraintTestRenderer(logical.graphics, {});
+    const logicalNode = new MultilineText<C>("aa\na", {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      align: "end",
+      style: "#000",
+    });
+
+    logicalRenderer.drawNode(logicalNode);
+
+    expect(logical.fillTexts.map(({ x }) => x)).toEqual([16, 16]);
+
+    const physical = createTextRecordingGraphics();
+    const physicalRenderer = new ConstraintTestRenderer(physical.graphics, {});
+    const physicalNode = new MultilineText<C>("aa\na", {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      physicalAlign: "right",
+      style: "#000",
+    });
+
+    physicalRenderer.drawNode(physicalNode);
+
+    expect(physical.fillTexts.map(({ x }) => x)).toEqual([16, 16]);
+  });
+
   test("produces expected child rects for start, center, and end alignment", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 100 };
