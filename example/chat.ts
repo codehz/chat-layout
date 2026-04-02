@@ -1,13 +1,13 @@
 import {
   ChatRenderer,
+  Flex,
+  FlexItem,
   Fixed,
-  HStack,
   ListState,
   MultilineText,
   PaddingBox,
   Place,
   Text,
-  VStack,
   Wrapper,
   memoRenderItem,
   type Context,
@@ -51,8 +51,10 @@ class RoundedBox extends PaddingBox<C> {
     // Reuse the current layout constraints so the background matches wrapped text.
     const { width, height } = ctx.measureNode(this, ctx.constraints);
     ctx.with((g) => {
-      const fill = this.fill == null ? undefined : ctx.resolveDynValue(this.fill);
-      const stroke = this.stroke == null ? undefined : ctx.resolveDynValue(this.stroke);
+      const fill =
+        this.fill == null ? undefined : ctx.resolveDynValue(this.fill);
+      const stroke =
+        this.stroke == null ? undefined : ctx.resolveDynValue(this.stroke);
       g.beginPath();
       g.roundRect(x, y, width, height, this.radii);
       if (fill != null) {
@@ -133,8 +135,14 @@ class HoverDetector extends Wrapper<C> {
 }
 
 const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
-  const senderLine = new HStack<C>(
+  const senderLine = new Flex<C>(
     [
+      new HoverDetector(
+        new Circle(15, {
+          fill: "blue",
+        }),
+        item,
+      ),
       new RoundedBox(
         new Text(item.sender, {
           lineHeight: 15,
@@ -150,14 +158,13 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
           fill: () => (currentHover === item ? "red" : "transparent"),
         },
       ),
-      new HoverDetector(
-        new Circle(15, {
-          fill: "blue",
-        }),
-        item,
-      ),
     ],
-    { gap: 4, expand: false },
+    {
+      direction: "row",
+      gap: 4,
+      expandMain: false,
+      reverse: item.sender === "A",
+    },
   );
 
   const content = new RoundedBox(
@@ -177,15 +184,19 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     },
   );
 
-  const row = new HStack<C>(
+  const body = new Flex<C>([senderLine, content], {
+    direction: "column",
+    alignItems: item.sender === "A" ? "end" : "start",
+  });
+
+  const row = new Flex<C>(
     [
       new Circle(32, { fill: "red" }),
-      new VStack<C>([senderLine, content], {
-        alignment: item.sender === "A" ? "right" : "left",
-      }),
+      new FlexItem(body, { grow: 1 }),
       new Fixed(32, 0),
     ],
     {
+      direction: "row",
       gap: 4,
       reverse: item.sender === "A",
     },

@@ -1,11 +1,10 @@
 import {
-  AlignBox,
   DebugRenderer,
-  HStack,
+  Flex,
   MultilineText,
   PaddingBox,
+  Place,
   Text,
-  VStack,
   Wrapper,
   type Context,
   type DynValue,
@@ -92,20 +91,20 @@ class ClickDetect extends Wrapper<C> {
 }
 
 const node = new RoundedBox(
-  new VStack<C>(
+  new Flex<C>(
     [
-      new AlignBox(
+      new Place(
         new MultilineText("测试居中".repeat(20), {
           lineHeight: 20,
           font: "400 16px monospace",
           alignment: "center",
           style: "black",
         }),
-        { alignment: "center" },
+        { align: "center" },
       ),
-      new AlignBox(
+      new Place(
         new RoundedBox(
-          new HStack<C>(
+          new Flex<C>(
             [
               new ClickDetect(
                 new RoundedBox(
@@ -142,6 +141,7 @@ const node = new RoundedBox(
               ),
             ],
             {
+              direction: "row",
               reverse: true,
               gap: 10,
             },
@@ -155,9 +155,9 @@ const node = new RoundedBox(
             radii: 16,
           },
         ),
-        { alignment: "center" },
+        { align: "center" },
       ),
-      new AlignBox(
+      new Place(
         new RoundedBox(
           new MultilineText("文本右对齐".repeat(10), {
             lineHeight: 20,
@@ -174,10 +174,13 @@ const node = new RoundedBox(
             radii: 16,
           },
         ),
-        { alignment: "center" },
+        { align: "center" },
       ),
     ],
-    { gap: 10 },
+    {
+      direction: "column",
+      gap: 10,
+    },
   ),
   {
     left: 10,
