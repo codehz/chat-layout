@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { Fixed, Flex, FlexItem } from "./nodes";
-import { BaseRenderer } from "./renderer";
-import type { Context, HitTest, LayoutConstraints, Node } from "./types";
+import { Fixed, Flex, FlexItem } from "../../src/nodes";
+import { BaseRenderer } from "../../src/renderer";
+import type { Context, HitTest, LayoutConstraints, Node } from "../../src/types";
 
 type C = CanvasRenderingContext2D;
 

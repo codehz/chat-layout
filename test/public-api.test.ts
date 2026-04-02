@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import * as api from "./index";
+import * as api from "../src/index";
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {

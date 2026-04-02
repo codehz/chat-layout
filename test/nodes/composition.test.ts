@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, Text } from "./nodes";
-import { BaseRenderer } from "./renderer";
-import type { Box, Context, HitTest, LayoutConstraints, Node } from "./types";
+import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, Text } from "../../src/nodes";
+import { BaseRenderer } from "../../src/renderer";
+import type { Box, Context, HitTest, LayoutConstraints, Node } from "../../src/types";
+import { createTextGraphics as createGraphics, ensureMockOffscreenCanvas } from "../helpers/graphics";
 
 type C = CanvasRenderingContext2D;
 
@@ -11,65 +12,7 @@ type ProbeCall = {
   y: number;
 };
 
-class MockOffscreenCanvasRenderingContext2D {
-  font = "16px sans-serif";
-
-  measureText(text: string): TextMetrics {
-    return {
-      width: text.length * 8,
-      actualBoundingBoxAscent: 8,
-      actualBoundingBoxDescent: 2,
-      fontBoundingBoxAscent: 8,
-      fontBoundingBoxDescent: 2,
-    } as TextMetrics;
-  }
-}
-
-class MockOffscreenCanvas {
-  constructor(
-    readonly width: number,
-    readonly height: number,
-  ) {}
-
-  getContext(type: string): MockOffscreenCanvasRenderingContext2D | null {
-    if (type !== "2d") {
-      return null;
-    }
-    return new MockOffscreenCanvasRenderingContext2D();
-  }
-}
-
-if (typeof globalThis.OffscreenCanvas === "undefined") {
-  Object.defineProperty(globalThis, "OffscreenCanvas", {
-    configurable: true,
-    writable: true,
-    value: MockOffscreenCanvas,
-  });
-}
-
-function createGraphics(viewportWidth = 320, viewportHeight = 100): C {
-  return {
-    canvas: {
-      clientWidth: viewportWidth,
-      clientHeight: viewportHeight,
-    },
-    fillStyle: "#000",
-    font: "16px sans-serif",
-    textAlign: "left",
-    textRendering: "auto",
-    clearRect() {},
-    fillText() {},
-    measureText(text: string) {
-      return {
-        width: text.length * 8,
-        fontBoundingBoxAscent: 8,
-        fontBoundingBoxDescent: 2,
-      } as TextMetrics;
-    },
-    save() {},
-    restore() {},
-  } as unknown as C;
-}
+ensureMockOffscreenCanvas();
 
 function createTextRecordingGraphics(viewportWidth = 320, viewportHeight = 100): {
   graphics: C;
