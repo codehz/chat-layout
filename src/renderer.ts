@@ -656,6 +656,7 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
   }
 
   hittest(test: HitTest): boolean {
+    this._prepareAnchorState();
     const viewportHeight = this.graphics.canvas.clientHeight;
     let y = this.offset;
 
@@ -813,6 +814,7 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
   }
 
   hittest(test: HitTest): boolean {
+    this._prepareAnchorState();
     const viewportHeight = this.graphics.canvas.clientHeight;
 
     let drawLength = 0;

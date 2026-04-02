@@ -105,6 +105,13 @@ function clampToConstraints(value: number, min?: number, max?: number): number {
   return result;
 }
 
+function shrinkConstraint(value: number | undefined, padding: number): number | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  return Math.max(0, value - padding);
+}
+
 function getCrossAlignment(alignSelf: CrossAxisAlignment | "auto" | undefined, alignItems: CrossAxisAlignment): CrossAxisAlignment {
   if (alignSelf == null || alignSelf === "auto") {
     return alignItems;
@@ -255,17 +262,28 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   measure(ctx: Context<C>): Box {
     const paddingLeft = this.#left;
     const paddingRight = this.#right;
+    const paddingTop = this.#top;
+    const paddingBottom = this.#bottom;
+    const horizontalPadding = paddingLeft + paddingRight;
+    const verticalPadding = paddingTop + paddingBottom;
     // 创建子节点的约束
     const childConstraints = ctx.constraints
       ? {
           ...ctx.constraints,
-          minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - paddingLeft - paddingRight : undefined,
-          maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - paddingLeft - paddingRight : undefined,
+          minWidth: shrinkConstraint(ctx.constraints.minWidth, horizontalPadding),
+          maxWidth: shrinkConstraint(ctx.constraints.maxWidth, horizontalPadding),
+          minHeight: shrinkConstraint(ctx.constraints.minHeight, verticalPadding),
+          maxHeight: shrinkConstraint(ctx.constraints.maxHeight, verticalPadding),
         }
       : undefined;
     const { width, height } = ctx.measureNode(this.inner, childConstraints);
-    const containerBox = createRect(0, 0, width + paddingLeft + paddingRight, height + this.#top + this.#bottom);
-    const childRect = createRect(paddingLeft, this.#top, width, height);
+    const containerBox = createRect(
+      0,
+      0,
+      clampToConstraints(width + horizontalPadding, ctx.constraints?.minWidth, ctx.constraints?.maxWidth),
+      clampToConstraints(height + verticalPadding, ctx.constraints?.minHeight, ctx.constraints?.maxHeight),
+    );
+    const childRect = createRect(paddingLeft, paddingTop, width, height);
     ctx.setLayoutResult(
       this,
       {

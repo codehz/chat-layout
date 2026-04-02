@@ -6,6 +6,9 @@ export function registerNodeParent<C extends CanvasRenderingContext2D>(
   node: Node<C>,
   parent: Node<C>,
 ): void {
+  if (registry.has(node)) {
+    throw new Error("A node can only be attached to one parent. Shared nodes are not supported.");
+  }
   registry.set(node, parent);
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, Text } from "./nodes";
 import { BaseRenderer } from "./renderer";
-import type { Context, HitTest, LayoutConstraints, Node } from "./types";
+import type { Box, Context, HitTest, LayoutConstraints, Node } from "./types";
 
 type C = CanvasRenderingContext2D;
 
@@ -108,6 +108,28 @@ function createProbeNode(): {
       hittest(_ctx, test) {
         hits.push({ x: test.x, y: test.y });
         return true;
+      },
+    },
+  };
+}
+
+function createConstraintProbeNode(size: Box): {
+  node: Node<C>;
+  constraints: Array<LayoutConstraints | undefined>;
+} {
+  const constraints: Array<LayoutConstraints | undefined> = [];
+  return {
+    constraints,
+    node: {
+      measure(ctx) {
+        constraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        return size;
+      },
+      draw() {
+        return false;
+      },
+      hittest() {
+        return false;
       },
     },
   };
@@ -462,5 +484,73 @@ describe("Place", () => {
 
     expect(renderer.hittestNode(padded, { x: 15, y: 7, type: "click" }, constraints)).toBe(true);
     expect(hits[0]).toEqual({ x: 5, y: 2 });
+  });
+
+  test("PaddingBox propagates vertical constraints and clamps its measured size to the parent", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const { node, constraints: seenConstraints } = createConstraintProbeNode({ width: 20, height: 50 });
+    const padded = new PaddingBox<C>(node, {
+      top: 10,
+      bottom: 10,
+      left: 5,
+      right: 5,
+    });
+
+    const constraints = { maxWidth: 40, maxHeight: 60 };
+    const box = renderer.measureNode(padded, constraints);
+    const layout = renderer.getLayoutResult(padded, constraints);
+
+    expect(box).toEqual({ width: 30, height: 60 });
+    expect(seenConstraints).toEqual([
+      {
+        minWidth: undefined,
+        maxWidth: 30,
+        minHeight: undefined,
+        maxHeight: 40,
+      },
+    ]);
+    expect(layout?.children[0]?.constraints).toEqual({
+      minWidth: undefined,
+      maxWidth: 30,
+      minHeight: undefined,
+      maxHeight: 40,
+    });
+  });
+
+  test("PaddingBox clamps subtracted constraints to zero when padding exceeds available space", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const { node, constraints: seenConstraints } = createConstraintProbeNode({ width: 5, height: 5 });
+    const padded = new PaddingBox<C>(node, {
+      top: 6,
+      bottom: 6,
+      left: 8,
+      right: 8,
+    });
+
+    renderer.measureNode(padded, {
+      minWidth: 10,
+      maxWidth: 12,
+      minHeight: 8,
+      maxHeight: 10,
+    });
+
+    expect(seenConstraints).toEqual([
+      {
+        minWidth: 0,
+        maxWidth: 0,
+        minHeight: 0,
+        maxHeight: 0,
+      },
+    ]);
+  });
+
+  test("shared nodes throw instead of silently overwriting ownership", () => {
+    const shared = new Fixed<C>(10, 10);
+
+    new Place<C>(shared, { align: "start" });
+
+    expect(() => new PaddingBox<C>(shared, { top: 1 })).toThrow(
+      "A node can only be attached to one parent. Shared nodes are not supported.",
+    );
   });
 });

@@ -126,6 +126,26 @@ function createNode(height: number): Node<C> {
   };
 }
 
+type ProbeHit = {
+  x: number;
+  y: number;
+};
+
+function createHitNode(height: number, hits: ProbeHit[]): Node<C> {
+  return {
+    measure(_ctx: Context<C>): Box {
+      return { width: 320, height };
+    },
+    draw(_ctx: Context<C>, _x: number, _y: number): boolean {
+      return false;
+    },
+    hittest(_ctx: Context<C>, test: HitTest): boolean {
+      hits.push({ x: test.x, y: test.y });
+      return true;
+    },
+  };
+}
+
 function createFeedback(): RenderFeedback {
   return {
     minIdx: Number.NaN,
@@ -251,6 +271,44 @@ function expectedChatAnchor(
 }
 
 describe("RenderFeedback", () => {
+  test("TimelineRenderer hittest is stable before the first render", () => {
+    const hits: ProbeHit[] = [];
+    const list = new ListState<number>();
+    list.push(20);
+    const node = createHitNode(20, hits);
+    const renderer = new TimelineRenderer(createGraphics(100), {
+      list,
+      renderItem: () => node,
+    });
+
+    expect(renderer.hittest({ x: 12, y: 10, type: "click" })).toBe(true);
+    expect(hits).toEqual([{ x: 12, y: 10 }]);
+
+    renderer.render();
+    expect(renderer.hittest({ x: 12, y: 10, type: "click" })).toBe(true);
+    expect(hits.at(-1)).toEqual({ x: 12, y: 10 });
+    expect(renderer.hittest({ x: 12, y: 40, type: "click" })).toBe(false);
+  });
+
+  test("ChatRenderer hittest is stable before the first render", () => {
+    const hits: ProbeHit[] = [];
+    const list = new ListState<number>();
+    list.push(20);
+    const node = createHitNode(20, hits);
+    const renderer = new ChatRenderer(createGraphics(100), {
+      list,
+      renderItem: () => node,
+    });
+
+    expect(renderer.hittest({ x: 16, y: 10, type: "click" })).toBe(true);
+    expect(hits).toEqual([{ x: 16, y: 10 }]);
+
+    renderer.render();
+    expect(renderer.hittest({ x: 16, y: 10, type: "click" })).toBe(true);
+    expect(hits.at(-1)).toEqual({ x: 16, y: 10 });
+    expect(renderer.hittest({ x: 16, y: 40, type: "click" })).toBe(false);
+  });
+
   test("TimelineRenderer reports a monotonic visible range for an oversized item", () => {
     const list = new ListState<number>();
     list.push(200);
