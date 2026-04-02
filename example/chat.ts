@@ -186,6 +186,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
 
   const body = new Flex<C>([senderLine, content], {
     direction: "column",
+    gap: 4,
     alignItems: item.sender === "A" ? "end" : "start",
   });
 
