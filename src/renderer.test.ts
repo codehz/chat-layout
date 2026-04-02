@@ -309,6 +309,60 @@ describe("RenderFeedback", () => {
     expect(renderer.hittest({ x: 16, y: 40, type: "click" })).toBe(false);
   });
 
+  test("TimelineRenderer render and hittest inspect the same visible window", () => {
+    const list = new ListState<number>();
+    list.push(0, 1, 2, 3, 4, 5);
+
+    const renderSeen: number[] = [];
+    const renderRenderer = new TimelineRenderer(createGraphics(60), {
+      list,
+      renderItem: (item) => {
+        renderSeen.push(item);
+        return createNode(20);
+      },
+    });
+    renderRenderer.render();
+
+    const hittestSeen: number[] = [];
+    const hittestRenderer = new TimelineRenderer(createGraphics(60), {
+      list,
+      renderItem: (item) => {
+        hittestSeen.push(item);
+        return createNode(20);
+      },
+    });
+    hittestRenderer.hittest({ x: 0, y: 25, type: "click" });
+
+    expect(hittestSeen).toEqual(renderSeen);
+  });
+
+  test("ChatRenderer hittest scales with the visible window instead of the full history", () => {
+    const items = Array.from({ length: 1000 }, (_, idx) => idx);
+    const measureCount = { count: 0 };
+    const list = new ListState<number>();
+    list.pushAll(items);
+
+    const renderer = new ChatRenderer(createGraphics(120), {
+      list,
+      renderItem: () => ({
+        measure(_ctx: Context<C>): Box {
+          measureCount.count += 1;
+          return { width: 320, height: 12 };
+        },
+        draw(_ctx: Context<C>, _x: number, _y: number): boolean {
+          return false;
+        },
+        hittest(_ctx: Context<C>, _test: HitTest): boolean {
+          return false;
+        },
+      }),
+    });
+
+    renderer.hittest({ x: 0, y: 60, type: "hover" });
+
+    expect(measureCount.count).toBeLessThan(20);
+  });
+
   test("TimelineRenderer reports a monotonic visible range for an oversized item", () => {
     const list = new ListState<number>();
     list.push(200);
