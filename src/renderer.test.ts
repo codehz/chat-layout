@@ -1,11 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import { Fixed, Flex, FlexItem, MultilineText, Place, Text } from "./nodes";
-import { BaseRenderer, ChatRenderer, DebugRenderer, ListState, TimelineRenderer, memoRenderItem } from "./renderer";
+import { BaseRenderer, ChatRenderer, DebugRenderer, ListState, TimelineRenderer, memoRenderItem, memoRenderItemBy } from "./renderer";
 import type { Box, Context, HitTest, LayoutConstraints, Node, RenderFeedback } from "./types";
 import { registerNodeParent, unregisterNodeParent } from "./registry";
 
 type C = CanvasRenderingContext2D;
+
+// @ts-expect-error memoRenderItem now requires object items; use memoRenderItemBy for primitive keys.
+const _primitiveMemoContract = memoRenderItem<C, number>((item) => createNode(item));
+void _primitiveMemoContract;
 
 class MockOffscreenCanvasRenderingContext2D {
   font = "16px sans-serif";
@@ -1347,6 +1351,41 @@ describe("constraint-aware cache", () => {
     // 早期被驱逐的条目需要重新测量
     renderer.measureNode(node, { maxWidth: 1 });
     expect(calls).toBe(callsBefore + 1);
+  });
+});
+
+describe("memoized render items", () => {
+  test("memoRenderItemBy supports primitive keys with explicit reset", () => {
+    let renders = 0;
+    const renderItem = memoRenderItemBy<C, number, number>(
+      (item) => item,
+      (item) => {
+        renders += 1;
+        return createNode(item);
+      },
+    );
+
+    const first = renderItem(1);
+    const second = renderItem(1);
+    const third = renderItem(2);
+
+    expect(first).toBe(second);
+    expect(third).not.toBe(first);
+    expect(renders).toBe(2);
+
+    expect(renderItem.resetKey(1)).toBe(true);
+    const fourth = renderItem(1);
+    expect(fourth).not.toBe(first);
+    expect(renders).toBe(3);
+  });
+
+  test("memoRenderItem throws a clear runtime error for primitive items", () => {
+    const renderItem = memoRenderItem<C, { value: number }>((item) => createNode(item.value));
+    const unsafe = renderItem as unknown as (item: number) => Node<C>;
+
+    expect(() => unsafe(1)).toThrow(
+      "memoRenderItem() only supports object items. Use memoRenderItemBy() for primitive keys.",
+    );
   });
 });
 

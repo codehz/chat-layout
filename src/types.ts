@@ -40,8 +40,6 @@ export interface LayoutConstraints {
 
 export interface FlexItemOptions {
   grow?: number;
-  shrink?: number;
-  basis?: number | "auto";
   alignSelf?: CrossAxisAlignment | "auto";
 }
 

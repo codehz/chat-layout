@@ -9,6 +9,7 @@ The current recommended APIs are:
 - `Place` for single-child horizontal placement
 - `Text` / `MultilineText` `alignment` for text content alignment
 - `ChatRenderer` plus `ListState` for virtualized chat rendering
+- `memoRenderItem` for object items, or `memoRenderItemBy` when your stable key is primitive / explicit
 
 **Layout Model**
 `Flex` and `Place` split layout concerns more clearly than the older API:
@@ -161,6 +162,23 @@ That combination gives you:
 - nested reply previews that use item-level cross-axis `stretch` to fill the bubble width
 
 In other words: a finite `maxWidth` / `maxHeight` limits measurement, but does not force the `Flex` container to fill the cross axis. If you want a child to fill the computed bubble width, mark that child with `alignSelf: "stretch"` (or inherit `alignItems: "stretch"` from the parent).
+
+## API notes
+
+- `memoRenderItem()` now only accepts object items. If your list item is a primitive or you want to memoize by an explicit id, use `memoRenderItemBy(keyOf, renderItem)`.
+- `FlexItemOptions` intentionally exposes only the implemented item-level controls: `grow` and `alignSelf`. The previously documented `shrink` / `basis` fields were removed because they were never implemented.
+
+### Migration notes
+
+- Before:
+  - `memoRenderItem((item: number) => ...)`
+- After:
+  - `memoRenderItemBy((item: number) => item, (item) => ...)`
+- Before:
+  - `new FlexItem(node, { grow: 1, shrink: 1, basis: 100 })`
+- After:
+  - `new FlexItem(node, { grow: 1 })`
+  - unsupported sizing semantics should be modeled explicitly in node measurement/layout instead of `shrink` / `basis`
 
 **Development**
 Install dependencies:
