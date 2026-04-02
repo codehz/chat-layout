@@ -17,6 +17,43 @@ export interface RenderFeedback {
 
 export type Alignment = "left" | "center" | "right";
 
+// v2 Flex Layout types
+export type Axis = "row" | "column";
+
+export type MainAxisAlignment =
+  | "start"
+  | "center"
+  | "end"
+  | "space-between"
+  | "space-around"
+  | "space-evenly";
+
+export type CrossAxisAlignment = "start" | "center" | "end" | "stretch";
+
+export type TextAlign = "start" | "center" | "end";
+
+export interface LayoutConstraints {
+  minWidth?: number;
+  maxWidth?: number;
+  minHeight?: number;
+  maxHeight?: number;
+}
+
+export interface FlexItemOptions {
+  grow?: number;
+  shrink?: number;
+  basis?: number | "auto";
+  alignSelf?: CrossAxisAlignment | "auto";
+}
+
+export interface FlexContainerOptions {
+  direction?: Axis;
+  gap?: number;
+  justifyContent?: MainAxisAlignment;
+  alignItems?: CrossAxisAlignment;
+  reverse?: boolean;
+}
+
 export interface Context<C extends CanvasRenderingContext2D> {
   graphics: C;
 
