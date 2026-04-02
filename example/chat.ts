@@ -1,11 +1,11 @@
 import {
-  AlignBox,
   ChatRenderer,
   Fixed,
   HStack,
   ListState,
   MultilineText,
   PaddingBox,
+  Place,
   Text,
   VStack,
   Wrapper,
@@ -195,8 +195,8 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     right: 4,
   });
 
-  return new AlignBox(padded, {
-    alignment: item.sender === "A" ? "right" : "left",
+  return new Place(padded, {
+    align: item.sender === "A" ? "end" : "start",
   });
 });
 

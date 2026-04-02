@@ -7,6 +7,7 @@ import type {
   HitTest,
   LayoutConstraints,
   Node,
+  TextAlign,
 } from "./types";
 import { createRect, pointInRect } from "./layout";
 import { layoutFirstLine, layoutText } from "./text";
@@ -23,6 +24,32 @@ function withConstraints<C extends CanvasRenderingContext2D>(
     next.remainingWidth = constraints.maxWidth;
   }
   return next;
+}
+
+function resolveAvailableWidth<C extends CanvasRenderingContext2D>(ctx: Context<C>): number {
+  return ctx.constraints?.maxWidth ?? ctx.remainingWidth;
+}
+
+function resolveHorizontalOffset(align: TextAlign, availableWidth: number, childWidth: number): number {
+  switch (align) {
+    case "center":
+      return (availableWidth - childWidth) / 2;
+    case "end":
+      return availableWidth - childWidth;
+    case "start":
+      return 0;
+  }
+}
+
+function toTextAlign(alignment: Alignment): TextAlign {
+  switch (alignment) {
+    case "center":
+      return "center";
+    case "right":
+      return "end";
+    case "left":
+      return "start";
+  }
 }
 
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
@@ -691,63 +718,127 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 }
 
-export class AlignBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
+export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   constructor(
     inner: Node<C>,
     readonly options: {
-      alignment: Alignment;
-    },
+      align?: TextAlign;
+      expand?: boolean;
+    } = {},
   ) {
     super(inner);
   }
 
   measure(ctx: Context<C>): Box {
-    ctx.alignment = this.options.alignment;
-    const { width, height } = ctx.measureNode(this.inner, ctx.constraints);
+    const childConstraints = ctx.constraints
+      ? {
+          ...ctx.constraints,
+        }
+      : undefined;
+    const childBox = ctx.measureNode(this.inner, childConstraints);
+    const availableWidth = resolveAvailableWidth(ctx);
+    let width = this.options.expand ?? true ? availableWidth : childBox.width;
+    if (ctx.constraints?.minWidth != null) {
+      width = Math.max(width, ctx.constraints.minWidth);
+    }
+    if (ctx.constraints?.maxWidth != null) {
+      width = Math.min(width, ctx.constraints.maxWidth);
+    }
+
+    const align = this.options.align ?? "start";
+    const childRect = createRect(resolveHorizontalOffset(align, width, childBox.width), 0, childBox.width, childBox.height);
+
+    ctx.setLayoutResult(
+      this,
+      {
+        containerBox: createRect(0, 0, width, childBox.height),
+        contentBox: childRect,
+        children: [
+          {
+            node: this.inner,
+            rect: childRect,
+            contentBox: createRect(0, 0, childBox.width, childBox.height),
+            constraints: childConstraints,
+          },
+        ],
+        constraints: ctx.constraints,
+      },
+      ctx.constraints,
+    );
+
     return {
-      width: ctx.constraints?.maxWidth ?? ctx.remainingWidth,
-      height,
+      width,
+      height: childBox.height,
     };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    ctx.alignment = this.options.alignment;
-    const { width } = ctx.measureNode(this.inner, ctx.constraints);
-    let shift = 0;
-    const availableWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
-    switch (this.options.alignment) {
-      case "center":
-        shift = (availableWidth - width) / 2;
-        break;
-      case "right":
-        shift = availableWidth - width;
-        break;
+    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    if (!layoutResult) {
+      ctx.measureNode(this, ctx.constraints);
+      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     }
-    return this.inner.draw(ctx, x + shift, y);
+    if (!layoutResult) {
+      return this.inner.draw(ctx, x, y);
+    }
+
+    const childResult = layoutResult.children[0];
+    const childCtx = withConstraints(ctx, childResult.constraints);
+    return childResult.node.draw(childCtx, x + childResult.rect.x, y + childResult.rect.y);
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
-    ctx.alignment = this.options.alignment;
-    const { width } = shallow(ctx).measureNode(this.inner, ctx.constraints);
-    const availableWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
-    let shift = 0;
-    switch (this.options.alignment) {
-      case "center":
-        shift = (availableWidth - width) / 2;
-        break;
-      case "right":
-        shift = availableWidth - width;
-        break;
+    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    if (!layoutResult) {
+      ctx.measureNode(this, ctx.constraints);
+      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     }
-    if (0 <= test.x - shift && test.x - shift < width) {
-      return this.inner.hittest(
-        shallow(ctx),
-        shallowMerge(test, {
-          x: test.x - shift,
-        }),
-      );
+    if (!layoutResult) {
+      return false;
     }
-    return false;
+
+    const childResult = layoutResult.children[0];
+    if (!pointInRect(test.x, test.y, childResult.rect)) {
+      return false;
+    }
+
+    return childResult.node.hittest(
+      withConstraints(ctx, childResult.constraints),
+      shallowMerge(test, {
+        x: test.x - childResult.rect.x,
+        y: test.y - childResult.rect.y,
+      }),
+    );
+  }
+}
+
+/** @deprecated 使用 Place 替代 */
+export class AlignBox<C extends CanvasRenderingContext2D> extends Place<C> {
+  constructor(
+    inner: Node<C>,
+    readonly legacyOptions: {
+      alignment: Alignment;
+    },
+  ) {
+    super(inner, {
+      align: toTextAlign(legacyOptions.alignment),
+      expand: true,
+    });
+  }
+
+  measure(ctx: Context<C>): Box {
+    ctx.alignment = this.legacyOptions.alignment;
+    return super.measure(ctx);
+  }
+
+  draw(ctx: Context<C>, x: number, y: number): boolean {
+    ctx.alignment = this.legacyOptions.alignment;
+    return super.draw(ctx, x, y);
+  }
+
+  hittest(ctx: Context<C>, test: HitTest): boolean {
+    ctx.alignment = this.legacyOptions.alignment;
+    return super.hittest(ctx, test);
   }
 }
 
