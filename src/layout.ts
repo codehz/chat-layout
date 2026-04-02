@@ -36,7 +36,7 @@ export function mergeRects(rects: LayoutRect[]): LayoutRect {
 export function computeContentBox<C extends CanvasRenderingContext2D>(
   children: ChildLayoutResult<C>[],
 ): LayoutRect {
-  return mergeRects(children.map((child) => child.rect));
+  return mergeRects(children.map((child) => child.contentBox));
 }
 
 /**

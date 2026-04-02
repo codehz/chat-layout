@@ -12,7 +12,7 @@ import type {
   Node,
   TextAlign,
 } from "./types";
-import { createRect, findChildAtPoint, getSingleChildLayout } from "./layout";
+import { computeContentBox, createRect, findChildAtPoint, getSingleChildLayout } from "./layout";
 import { layoutFirstLine, layoutFirstLineIntrinsic, layoutText, layoutTextIntrinsic } from "./text";
 import { shallow, shallowMerge } from "./utils";
 import { registerNodeParent, unregisterNodeParent } from "./registry";
@@ -692,14 +692,15 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
   const containerBox = axis === "row"
     ? createRect(0, 0, finalContainerMain, containerCross)
     : createRect(0, 0, containerCross, finalContainerMain);
+  const finalContentBox = childResults.length > 0
+    ? computeContentBox(childResults)
+    : createRect(0, 0, 0, 0);
 
   ctx.setLayoutResult(
     owner,
     {
       containerBox,
-      contentBox: axis === "row"
-        ? createRect(0, 0, contentMain, contentCross)
-        : createRect(0, 0, contentCross, contentMain),
+      contentBox: finalContentBox,
       children: childResults,
       constraints: ctx.constraints,
     },
