@@ -38,17 +38,27 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
       if (this.options.gap != null && index !== 0) {
         height += this.options.gap;
       }
-      const result = shallow(ctx).measureNode(child);
+      // 传递约束给子节点
+      const childConstraints = ctx.constraints
+        ? {
+            ...ctx.constraints,
+          }
+        : undefined;
+      const result = shallow(ctx).measureNode(child, childConstraints);
       height += result.height;
       width = Math.max(width, result.width);
     }
-    ctx.remainingWidth -= width;
+    // 不再修改 remainingWidth，改为设置约束
+    if (ctx.constraints == null) {
+      ctx.constraints = { maxWidth: width };
+      ctx.remainingWidth = width;
+    }
     return { width, height };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
     let result = false;
-    const fullWidth = ctx.measureNode(this).width;
+    const { width: fullWidth } = ctx.measureNode(this, ctx.constraints);
     const alignment = this.options.alignment ?? ctx.alignment;
     if (this.options.alignment != null) {
       ctx.alignment = this.options.alignment;
@@ -58,7 +68,12 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
       if (this.options.gap != null && index !== 0) {
         y += this.options.gap;
       }
-      const { width, height } = shallow(ctx).measureNode(child);
+      const childConstraints = ctx.constraints
+        ? {
+            ...ctx.constraints,
+          }
+        : undefined;
+      const { width, height } = shallow(ctx).measureNode(child, childConstraints);
       const curCtx = shallow(ctx);
       let requestRedraw: boolean;
       if (alignment === "right") {
@@ -76,7 +91,7 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
     let y = 0;
-    const fullWidth = ctx.measureNode(this).width;
+    const { width: fullWidth } = ctx.measureNode(this, ctx.constraints);
     const alignment = this.options.alignment ?? ctx.alignment;
     if (this.options.alignment != null) {
       ctx.alignment = this.options.alignment;
@@ -87,7 +102,12 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
         y += this.options.gap;
       }
 
-      const { width, height } = shallow(ctx).measureNode(child);
+      const childConstraints = ctx.constraints
+        ? {
+            ...ctx.constraints,
+          }
+        : undefined;
+      const { width, height } = shallow(ctx).measureNode(child, childConstraints);
       const curCtx = shallow(ctx);
       if (test.y >= y && test.y < y + height) {
         let x: number;
@@ -136,17 +156,42 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
         firstFlex = child;
         continue;
       }
+      // 传递约束给子节点
+      const childConstraints = ctx.constraints
+        ? {
+            ...ctx.constraints,
+            minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - width : undefined,
+            maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - width : undefined,
+          }
+        : undefined;
       const curCtx = shallow(ctx);
-      curCtx.remainingWidth = ctx.remainingWidth - width;
-      const result = curCtx.measureNode(child);
+      if (childConstraints != null) {
+        curCtx.constraints = childConstraints;
+        if (childConstraints.maxWidth != null) {
+          curCtx.remainingWidth = childConstraints.maxWidth;
+        }
+      }
+      const result = curCtx.measureNode(child, childConstraints);
       width += result.width;
       height = Math.max(height, result.height);
     }
 
     if (firstFlex != null) {
+      const childConstraints = ctx.constraints
+        ? {
+            ...ctx.constraints,
+            minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - width : undefined,
+            maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - width : undefined,
+          }
+        : undefined;
       const curCtx = shallow(ctx);
-      curCtx.remainingWidth = ctx.remainingWidth - width;
-      const result = curCtx.measureNode(firstFlex);
+      if (childConstraints != null) {
+        curCtx.constraints = childConstraints;
+        if (childConstraints.maxWidth != null) {
+          curCtx.remainingWidth = childConstraints.maxWidth;
+        }
+      }
+      const result = curCtx.measureNode(firstFlex, childConstraints);
       width += result.width;
       height = Math.max(height, result.height);
     }
@@ -162,30 +207,56 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
     }
 
     if (reverse) {
-      x += ctx.measureNode(this).width;
+      x += ctx.measureNode(this, ctx.constraints).width;
       for (const [index, child] of this.children.entries()) {
         const gap = this.options.gap != null && index !== 0 ? this.options.gap : undefined;
         if (gap) {
           x -= gap;
-          ctx.remainingWidth -= gap;
         }
-        const { width } = shallow(ctx).measureNode(child);
+        // 传递约束给子节点
+        const childConstraints = ctx.constraints
+          ? {
+              ...ctx.constraints,
+              minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - (ctx.measureNode(this, ctx.constraints).width - x) : undefined,
+              maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - (ctx.measureNode(this, ctx.constraints).width - x) : undefined,
+            }
+          : undefined;
+        const curCtx = shallow(ctx);
+        if (childConstraints != null) {
+          curCtx.constraints = childConstraints;
+          if (childConstraints.maxWidth != null) {
+            curCtx.remainingWidth = childConstraints.maxWidth;
+          }
+        }
+        const { width } = curCtx.measureNode(child, childConstraints);
         x -= width;
-        const requestRedraw = child.draw(shallow(ctx), x, y);
+        const requestRedraw = child.draw(curCtx, x, y);
         result ||= requestRedraw;
-        ctx.remainingWidth -= width;
       }
     } else {
       for (const [index, child] of this.children.entries()) {
         const gap = this.options.gap != null && index !== 0 ? this.options.gap : undefined;
         if (gap) {
           x += gap;
-          ctx.remainingWidth -= gap;
         }
-        const requestRedraw = child.draw(shallow(ctx), x, y);
+        // 传递约束给子节点
+        const childConstraints = ctx.constraints
+          ? {
+              ...ctx.constraints,
+              minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - x : undefined,
+              maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - x : undefined,
+            }
+          : undefined;
+        const curCtx = shallow(ctx);
+        if (childConstraints != null) {
+          curCtx.constraints = childConstraints;
+          if (childConstraints.maxWidth != null) {
+            curCtx.remainingWidth = childConstraints.maxWidth;
+          }
+        }
+        const requestRedraw = child.draw(curCtx, x, y);
         result ||= requestRedraw;
-        const { width } = shallow(ctx).measureNode(child);
-        ctx.remainingWidth -= width;
+        const { width } = curCtx.measureNode(child, childConstraints);
         x += width;
       }
     }
@@ -200,7 +271,7 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
     }
 
     if (reverse) {
-      let x = ctx.measureNode(this).width;
+      let x = ctx.measureNode(this, ctx.constraints).width;
       for (const [index, child] of this.children.entries()) {
         const gap = this.options.gap != null && index !== 0 ? this.options.gap : undefined;
         if (gap) {
@@ -319,22 +390,62 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 
   measure(ctx: Context<C>): Box {
-    ctx.remainingWidth -= this.#left + this.#right;
-    const { width, height } = ctx.measureNode(this.inner);
+    const paddingLeft = this.#left;
+    const paddingRight = this.#right;
+    // 创建子节点的约束
+    const childConstraints = ctx.constraints
+      ? {
+          ...ctx.constraints,
+          minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - paddingLeft - paddingRight : undefined,
+          maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - paddingLeft - paddingRight : undefined,
+        }
+      : undefined;
+    const { width, height } = ctx.measureNode(this.inner, childConstraints);
     return {
-      width: width + this.#left + this.#right,
+      width: width + paddingLeft + paddingRight,
       height: height + this.#top + this.#bottom,
     };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    ctx.remainingWidth -= this.#left + this.#right;
-    return this.inner.draw(ctx, x + this.#left, y + this.#top);
+    const paddingLeft = this.#left;
+    const paddingRight = this.#right;
+    // 创建子节点的约束
+    const childConstraints = ctx.constraints
+      ? {
+          ...ctx.constraints,
+          minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - paddingLeft - paddingRight : undefined,
+          maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - paddingLeft - paddingRight : undefined,
+        }
+      : undefined;
+    // 在绘制时设置约束
+    if (childConstraints != null) {
+      ctx.constraints = childConstraints;
+      if (childConstraints.maxWidth != null) {
+        ctx.remainingWidth = childConstraints.maxWidth;
+      }
+    }
+    return this.inner.draw(ctx, x + paddingLeft, y + this.#top);
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
-    ctx.remainingWidth -= this.#left + this.#right;
-    const { width, height } = shallow(ctx).measureNode(this.inner);
+    const paddingLeft = this.#left;
+    const paddingRight = this.#right;
+    // 创建子节点的约束
+    const childConstraints = ctx.constraints
+      ? {
+          ...ctx.constraints,
+          minWidth: ctx.constraints.minWidth != null ? ctx.constraints.minWidth - paddingLeft - paddingRight : undefined,
+          maxWidth: ctx.constraints.maxWidth != null ? ctx.constraints.maxWidth - paddingLeft - paddingRight : undefined,
+        }
+      : undefined;
+    if (childConstraints != null) {
+      ctx.constraints = childConstraints;
+      if (childConstraints.maxWidth != null) {
+        ctx.remainingWidth = childConstraints.maxWidth;
+      }
+    }
+    const { width, height } = shallow(ctx).measureNode(this.inner, childConstraints);
     if (0 <= test.x - this.#left && test.x - this.#left < width && 0 <= test.y - this.#top && test.y - this.#top < height) {
       return this.inner.hittest(
         shallow(ctx),
@@ -349,8 +460,6 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
 }
 
 export class AlignBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
-  #shift = 0;
-
   constructor(
     inner: Node<C>,
     readonly options: {
@@ -362,36 +471,47 @@ export class AlignBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
 
   measure(ctx: Context<C>): Box {
     ctx.alignment = this.options.alignment;
-    const { width, height } = ctx.measureNode(this.inner);
-    switch (this.options.alignment) {
-      case "center":
-        this.#shift = (ctx.remainingWidth - width) / 2;
-        break;
-      case "right":
-        this.#shift = ctx.remainingWidth - width;
-        break;
-      default:
-        this.#shift = 0;
-    }
+    const { width, height } = ctx.measureNode(this.inner, ctx.constraints);
     return {
-      width: ctx.remainingWidth,
+      width: ctx.constraints?.maxWidth ?? ctx.remainingWidth,
       height,
     };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
     ctx.alignment = this.options.alignment;
-    return this.inner.draw(ctx, x + this.#shift, y);
+    const { width } = ctx.measureNode(this.inner, ctx.constraints);
+    let shift = 0;
+    const availableWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
+    switch (this.options.alignment) {
+      case "center":
+        shift = (availableWidth - width) / 2;
+        break;
+      case "right":
+        shift = availableWidth - width;
+        break;
+    }
+    return this.inner.draw(ctx, x + shift, y);
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
     ctx.alignment = this.options.alignment;
-    const { width } = shallow(ctx).measureNode(this.inner);
-    if (0 <= test.x - this.#shift && test.x - this.#shift < width) {
+    const { width } = shallow(ctx).measureNode(this.inner, ctx.constraints);
+    const availableWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
+    let shift = 0;
+    switch (this.options.alignment) {
+      case "center":
+        shift = (availableWidth - width) / 2;
+        break;
+      case "right":
+        shift = availableWidth - width;
+        break;
+    }
+    if (0 <= test.x - shift && test.x - shift < width) {
       return this.inner.hittest(
         shallow(ctx),
         shallowMerge(test, {
-          x: test.x - this.#shift,
+          x: test.x - shift,
         }),
       );
     }
@@ -400,9 +520,6 @@ export class AlignBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
 }
 
 export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C> {
-  #width = 0;
-  #lines: TextLayout[] = [];
-
   constructor(
     readonly text: string,
     readonly options: {
@@ -420,10 +537,10 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   measure(ctx: Context<C>): Box {
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width, lines } = layoutText(ctx, this.text, ctx.remainingWidth);
-      this.#width = width;
-      this.#lines = lines;
-      return { width: this.#width, height: this.#lines.length * this.options.lineHeight };
+      // 优先使用约束中的 maxWidth，否则回退到 remainingWidth
+      const maxWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
+      const { width, lines } = layoutText(ctx, this.text, maxWidth);
+      return { width, height: lines.length * this.options.lineHeight };
     });
   }
 
@@ -431,25 +548,29 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.style);
+      const maxWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
+      const { lines } = layoutText(ctx, this.text, maxWidth);
       switch (this.options.alignment) {
         case "left":
-          for (const { text, shift } of this.#lines) {
+          for (const { text, shift } of lines) {
             g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
             y += this.options.lineHeight;
           }
           break;
         case "right":
-          x += this.#width;
+          const rightWidth = Math.max(...lines.map(l => l.width));
+          x += rightWidth;
           g.textAlign = "right";
-          for (const { text, shift } of this.#lines) {
+          for (const { text, shift } of lines) {
             g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
             y += this.options.lineHeight;
           }
           break;
         case "center":
-          x += this.#width / 2;
+          const centerWidth = Math.max(...lines.map(l => l.width));
+          x += centerWidth / 2;
           g.textAlign = "center";
-          for (const { text, shift } of this.#lines) {
+          for (const { text, shift } of lines) {
             g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
             y += this.options.lineHeight;
           }
@@ -465,10 +586,6 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
 }
 
 export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
-  #width = 0;
-  #text = "";
-  #shift = 0;
-
   constructor(
     readonly text: string,
     readonly options: {
@@ -485,11 +602,10 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
   measure(ctx: Context<C>): Box {
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width, text, shift } = layoutFirstLine(ctx, this.text, ctx.remainingWidth);
-      this.#width = width;
-      this.#text = text;
-      this.#shift = shift;
-      return { width: this.#width, height: this.options.lineHeight };
+      // 优先使用约束中的 maxWidth，否则回退到 remainingWidth
+      const maxWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
+      const { width, text, shift } = layoutFirstLine(ctx, this.text, maxWidth);
+      return { width, height: this.options.lineHeight };
     });
   }
 
@@ -497,7 +613,9 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.style);
-      g.fillText(this.#text, x, y + (this.options.lineHeight + this.#shift) / 2);
+      const maxWidth = ctx.constraints?.maxWidth ?? ctx.remainingWidth;
+      const { text, shift } = layoutFirstLine(ctx, this.text, maxWidth);
+      g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
       return false;
     });
   }

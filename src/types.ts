@@ -57,11 +57,15 @@ export interface FlexContainerOptions {
 export interface Context<C extends CanvasRenderingContext2D> {
   graphics: C;
 
+  /** @deprecated 使用 constraints 替代 */
   remainingWidth: number;
   alignment: Alignment;
   reverse: boolean;
 
-  measureNode(node: Node<C>): Box;
+  /** v2: 显式布局约束 */
+  constraints?: LayoutConstraints;
+
+  measureNode(node: Node<C>, constraints?: LayoutConstraints): Box;
   invalidateNode(node: Node<C>): void;
   resolveDynValue<T>(value: DynValue<C, T>): T;
   with<T>(this: Context<C>, cb: (g: C) => T): T;

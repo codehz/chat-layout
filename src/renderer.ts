@@ -1,4 +1,4 @@
-import type { Box, Context, DynValue, HitTest, Node, RenderFeedback, RendererOptions } from "./types";
+import type { Box, Context, DynValue, HitTest, LayoutConstraints, Node, RenderFeedback, RendererOptions } from "./types";
 import { shallow, shallowMerge } from "./utils";
 import { getNodeParent } from "./registry";
 
@@ -29,8 +29,8 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       },
       alignment: "left",
       reverse: false,
-      measureNode(node: Node<C>) {
-        return self.measureNode(node, this);
+      measureNode(node: Node<C>, constraints?: LayoutConstraints) {
+        return self.measureNode(node, constraints);
       },
       invalidateNode: this.invalidateNode.bind(this),
       resolveDynValue<T>(value: DynValue<C, T>): T {
@@ -59,7 +59,7 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     }
   }
 
-  measureNode(node: Node<C>, ctx?: Context<C>): Box {
+  measureNode(node: Node<C>, constraints?: LayoutConstraints): Box {
     if (this.#lastWidth !== this.graphics.canvas.clientWidth) {
       this.#cache = new WeakMap<Node<C>, Box>();
       this.#lastWidth = this.graphics.canvas.clientWidth;
@@ -69,7 +69,16 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
         return result;
       }
     }
-    const result = node.measure(ctx ?? this.context);
+    // 创建带有约束的上下文
+    const ctx = this.context;
+    if (constraints != null) {
+      ctx.constraints = constraints;
+      // 兼容处理：从约束推导 remainingWidth
+      if (constraints.maxWidth != null) {
+        ctx.remainingWidth = constraints.maxWidth;
+      }
+    }
+    const result = node.measure(ctx);
     this.#cache.set(node, result);
     return result;
   }
