@@ -43,7 +43,7 @@ function resolveHorizontalOffset(align: TextAlign, availableWidth: number, child
 }
 
 function resolvePhysicalTextAlign(
-  options: Pick<MultilineTextOptions<any>, "align" | "physicalAlign" | "alignment">,
+  options: Pick<MultilineTextOptions<any>, "align" | "physicalAlign">,
 ): PhysicalTextAlign {
   if (options.physicalAlign != null) {
     return options.physicalAlign;
@@ -58,7 +58,7 @@ function resolvePhysicalTextAlign(
         return "right";
     }
   }
-  return options.alignment ?? "left";
+  return "left";
 }
 
 function getMainSize(axis: Axis, box: Box): number {

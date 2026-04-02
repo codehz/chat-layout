@@ -171,7 +171,7 @@ In other words: a finite `maxWidth` / `maxHeight` limits measurement, but does n
 - `FlexItemOptions` intentionally exposes only the implemented item-level controls: `grow` and `alignSelf`. The previously documented `shrink` / `basis` fields were removed because they were never implemented.
 - `ListState.position` now uses `undefined` as the explicit “use renderer default anchor” state. Use `list.setAnchor(position, offset)` to opt into a concrete anchor.
 - `ListState` can be seeded with `new ListState(items)` and reset with `list.reset(nextItems)`.
-- `MultilineText` prefers logical `align`; the legacy `alignment` field is kept only as a migration alias.
+- `MultilineText` now uses only `align` / `physicalAlign`; the old `alignment` field has been removed.
 
 ### Migration notes
 

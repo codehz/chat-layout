@@ -198,7 +198,7 @@ function createChatLikeBubbleTree(
     new MultilineText(message, {
       lineHeight: 20,
       font: "16px sans-serif",
-      alignment: "left",
+        align: "start",
       style: "#000",
     }),
     { alignSelf: "start" },
@@ -218,7 +218,7 @@ function createChatLikeBubbleTree(
           new MultilineText(reply.content, {
             lineHeight: 16,
             font: "13px sans-serif",
-            alignment: "left",
+            align: "start",
             style: "#555",
           }),
         ],
@@ -358,7 +358,7 @@ describe("Place", () => {
     const node = new MultilineText<C>("  alpha  \n\n beta ", {
       lineHeight: 20,
       font: "16px sans-serif",
-      alignment: "left",
+      align: "start",
       style: "#000",
     });
 
@@ -381,7 +381,7 @@ describe("Place", () => {
     const multilineNode = new MultilineText<C>("  alpha  \n\n beta ", {
       lineHeight: 20,
       font: "16px sans-serif",
-      alignment: "left",
+      align: "start",
       style: "#000",
       whitespace: "trim-and-collapse",
     });
@@ -532,7 +532,7 @@ describe("Place", () => {
       new MultilineText("wide text ".repeat(10), {
         lineHeight: 20,
         font: "16px sans-serif",
-        alignment: "left",
+        align: "start",
         style: "#000",
       }),
       { align: "start", expand: false },
@@ -563,7 +563,7 @@ describe("Place", () => {
       new MultilineText("longer bubble content", {
         lineHeight: 20,
         font: "16px sans-serif",
-        alignment: "left",
+        align: "start",
         style: "#000",
       }),
       {

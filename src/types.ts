@@ -46,8 +46,6 @@ export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extend
   align?: TextAlign;
   /** Explicit physical alignment when left/right semantics are required. */
   physicalAlign?: PhysicalTextAlign;
-  /** @deprecated Use `align` or `physicalAlign` instead. */
-  alignment?: PhysicalTextAlign;
 }
 
 export interface TextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {}

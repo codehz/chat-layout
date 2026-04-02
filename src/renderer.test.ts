@@ -1670,7 +1670,7 @@ describe("stateless layout results", () => {
     const renderer = new BaseRenderer(createTextGraphics(), {});
     const singleLine = createTextNode("alpha beta gamma delta epsilon zeta eta theta");
     const multiLine = new MultilineText<C>("alpha beta gamma delta epsilon zeta eta theta\niota kappa lambda mu nu xi omicron", {
-      alignment: "left",
+      align: "start",
       lineHeight: 20,
       font: "16px sans-serif",
       style: "#000",
