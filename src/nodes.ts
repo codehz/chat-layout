@@ -167,7 +167,9 @@ type FlexMeasurement<C extends CanvasRenderingContext2D> = {
   child: Node<C>;
   item: FlexItemOptions;
   measured: Box;
-  constraints?: LayoutConstraints;
+  initialConstraints?: LayoutConstraints;
+  finalConstraints?: LayoutConstraints;
+  allocatedMain?: number;
   grow: number;
   effectiveAlign: CrossAxisAlignment;
   stretch: boolean;
@@ -541,31 +543,28 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
     }
 
     const effectiveAlign = getCrossAlignment(item.alignSelf, alignItems);
-    const stretch = effectiveAlign === "stretch" && finiteCross;
+    const stretch = effectiveAlign === "stretch";
     const childConstraints = createAxisConstraints(
       axis,
       ctx.constraints,
       {
         max: finiteMain && availableMain != null ? Math.max(0, availableMain - consumedMain) : maxMain,
       },
-      stretch
-        ? {
-            min: maxCross,
-            max: maxCross,
-          }
-        : {
-            min: undefined,
-            max: maxCross,
-          },
+      {
+        min: undefined,
+        max: maxCross,
+      },
     );
     const measured = ctx.measureNode(child, childConstraints);
     const frameMain = getMainSize(axis, measured);
-    const frameCross = stretch && maxCross != null ? maxCross : getCrossSize(axis, measured);
+    const frameCross = getCrossSize(axis, measured);
     measurements.set(child, {
       child,
       item,
       measured,
-      constraints: childConstraints,
+      initialConstraints: childConstraints,
+      finalConstraints: childConstraints,
+      allocatedMain: undefined,
       grow,
       effectiveAlign,
       stretch,
@@ -584,7 +583,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
     const item = readFlexItemOptions(child);
     const grow = item.grow ?? 0;
     const effectiveAlign = getCrossAlignment(item.alignSelf, alignItems);
-    const stretch = effectiveAlign === "stretch" && finiteCross;
+    const stretch = effectiveAlign === "stretch";
     const allocatedMain = finiteMain && remainingMain != null && totalGrow > 0 ? (remainingMain * grow) / totalGrow : undefined;
     const childConstraints = createAxisConstraints(
       axis,
@@ -592,25 +591,22 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
       {
         max: allocatedMain,
       },
-      stretch
-        ? {
-            min: maxCross,
-            max: maxCross,
-          }
-        : {
-            min: undefined,
-            max: maxCross,
-          },
+      {
+        min: undefined,
+        max: maxCross,
+      },
     );
     const measured = ctx.measureNode(child, childConstraints);
     const measuredMain = getMainSize(axis, measured);
     const frameMain = allocatedMain ?? measuredMain;
-    const frameCross = stretch && maxCross != null ? maxCross : getCrossSize(axis, measured);
+    const frameCross = getCrossSize(axis, measured);
     measurements.set(child, {
       child,
       item,
       measured,
-      constraints: childConstraints,
+      initialConstraints: childConstraints,
+      finalConstraints: childConstraints,
+      allocatedMain,
       grow,
       effectiveAlign,
       stretch,
@@ -630,8 +626,46 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
   const containerMain = finiteMain && mainAxisSize === "fill"
     ? Math.max(maxMain!, contentMain)
     : clampToConstraints(contentMain, minMain, maxMain);
-  const containerCross = finiteCross ? Math.max(maxCross!, contentCross) : clampToConstraints(contentCross, minCross, maxCross);
-  const freeSpace = Math.max(0, containerMain - contentMain);
+  const containerCross = clampToConstraints(contentCross, minCross, maxCross);
+  if (finiteCross) {
+    for (const child of orderedChildren) {
+      const measurement = measurements.get(child)!;
+      if (!measurement.stretch) {
+        continue;
+      }
+
+      const finalConstraints = createAxisConstraints(
+        axis,
+        measurement.initialConstraints,
+        {
+          min: getMinMain(axis, measurement.initialConstraints),
+          max: getMaxMain(axis, measurement.initialConstraints),
+        },
+        {
+          min: containerCross,
+          max: containerCross,
+        },
+      );
+      const remeasured = ctx.measureNode(child, finalConstraints);
+      measurement.measured = remeasured;
+      measurement.finalConstraints = finalConstraints;
+      measurement.frameCross = containerCross;
+      measurement.frameMain = measurement.allocatedMain ?? getMainSize(axis, remeasured);
+    }
+
+    contentMain = gapTotal;
+    contentCross = 0;
+    for (const child of orderedChildren) {
+      const measurement = measurements.get(child)!;
+      contentMain += measurement.frameMain;
+      contentCross = Math.max(contentCross, getCrossSize(axis, measurement.measured));
+    }
+  }
+
+  const finalContainerMain = finiteMain && mainAxisSize === "fill"
+    ? Math.max(maxMain!, contentMain)
+    : clampToConstraints(contentMain, minMain, maxMain);
+  const freeSpace = Math.max(0, finalContainerMain - contentMain);
   const spacing = getJustifySpacing(justifyContent, freeSpace, orderedChildren.length, gap);
   const childResults: ChildLayoutResult<C>[] = [];
   let cursor = spacing.leading;
@@ -650,14 +684,14 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
       node: child,
       rect,
       contentBox,
-      constraints: measurement.constraints,
+      constraints: measurement.finalConstraints,
     });
     cursor += measurement.frameMain + spacing.between;
   }
 
   const containerBox = axis === "row"
-    ? createRect(0, 0, containerMain, containerCross)
-    : createRect(0, 0, containerCross, containerMain);
+    ? createRect(0, 0, finalContainerMain, containerCross)
+    : createRect(0, 0, containerCross, finalContainerMain);
 
   ctx.setLayoutResult(
     owner,
