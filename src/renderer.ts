@@ -15,6 +15,13 @@ import { forEachNodeAncestor } from "./registry";
 /** 每个节点最多保留的约束变体数量，防止缓存无限累积 */
 const MAX_CONSTRAINT_VARIANTS = 8;
 
+type LayoutCacheAccess<C extends CanvasRenderingContext2D> = {
+  getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined;
+  setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void;
+};
+
+type RendererContext<C extends CanvasRenderingContext2D> = Context<C> & LayoutCacheAccess<C>;
+
 function constraintKey(constraints: LayoutConstraints | undefined): string {
   if (constraints == null) return "";
   return `${constraints.minWidth ?? ""},${constraints.maxWidth ?? ""},${constraints.minHeight ?? ""},${constraints.maxHeight ?? ""}`;
@@ -22,7 +29,7 @@ function constraintKey(constraints: LayoutConstraints | undefined): string {
 
 export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}> {
   graphics: C;
-  #ctx: Context<C>;
+  #ctx: RendererContext<C>;
   #lastWidth: number;
   #cache = new WeakMap<Node<C>, Map<string, Box>>();
   #layoutCache = new WeakMap<Node<C>, Map<string, FlexLayoutResult<C>>>();
@@ -85,10 +92,12 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   }
 
   protected drawRootNode(node: Node<C>, x = 0, y = 0): boolean {
+    this.measureRootNode(node);
     return node.draw(this.getRootContext(), x, y);
   }
 
   protected hittestRootNode(node: Node<C>, test: HitTest): boolean {
+    this.measureRootNode(node);
     return node.hittest(this.getRootContext(), test);
   }
 

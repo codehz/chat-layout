@@ -5,6 +5,7 @@ import type {
   Context,
   CrossAxisAlignment,
   DynValue,
+  FlexLayoutResult,
   FlexContainerOptions,
   FlexItemOptions,
   HitTest,
@@ -184,6 +185,37 @@ type FlexMeasurement<C extends CanvasRenderingContext2D> = {
   frameCross: number;
 };
 
+type LayoutCacheAccess<C extends CanvasRenderingContext2D> = {
+  getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined;
+  setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void;
+};
+
+type LayoutContext<C extends CanvasRenderingContext2D> = Context<C> & LayoutCacheAccess<C>;
+
+type MeasuredLayout<C extends CanvasRenderingContext2D> = {
+  box: Box;
+  layout: FlexLayoutResult<C>;
+};
+
+function getLayoutContext<C extends CanvasRenderingContext2D>(ctx: Context<C>): LayoutContext<C> {
+  return ctx as LayoutContext<C>;
+}
+
+function readLayoutResult<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+): FlexLayoutResult<C> | undefined {
+  return getLayoutContext(ctx).getLayoutResult(node, ctx.constraints);
+}
+
+function writeLayoutResult<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  result: FlexLayoutResult<C>,
+): void {
+  getLayoutContext(ctx).setLayoutResult(node, result, ctx.constraints);
+}
+
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(readonly children: Node<C>[]) {
     attachNodesToParent(children, this);
@@ -281,23 +313,19 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       clampToConstraints(height + verticalPadding, ctx.constraints?.minHeight, ctx.constraints?.maxHeight),
     );
     const childRect = createRect(paddingLeft, paddingTop, width, height);
-    ctx.setLayoutResult(
-      this,
-      {
-        containerBox,
-        contentBox: childRect,
-        children: [
-          {
-            node: this.inner,
-            rect: childRect,
-            contentBox: childRect,
-            constraints: childConstraints,
-          },
-        ],
-        constraints: ctx.constraints,
-      },
-      ctx.constraints,
-    );
+    writeLayoutResult(this, ctx, {
+      containerBox,
+      contentBox: childRect,
+      children: [
+        {
+          node: this.inner,
+          rect: childRect,
+          contentBox: childRect,
+          constraints: childConstraints,
+        },
+      ],
+      constraints: ctx.constraints,
+    });
     return {
       width: containerBox.width,
       height: containerBox.height,
@@ -305,11 +333,7 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    if (!layoutResult) {
-      ctx.measureNode(this, ctx.constraints);
-      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    }
+    const layoutResult = readLayoutResult(this, ctx);
     if (!layoutResult) {
       return this.inner.draw(ctx, x + this.#left, y + this.#top);
     }
@@ -327,11 +351,7 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
-    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    if (!layoutResult) {
-      ctx.measureNode(this, ctx.constraints);
-      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    }
+    const layoutResult = readLayoutResult(this, ctx);
     if (!layoutResult) {
       return false;
     }
@@ -382,23 +402,19 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     const align = this.options.align ?? "start";
     const childRect = createRect(resolveHorizontalOffset(align, width, childBox.width), 0, childBox.width, childBox.height);
 
-    ctx.setLayoutResult(
-      this,
-      {
-        containerBox: createRect(0, 0, width, childBox.height),
-        contentBox: childRect,
-        children: [
-          {
-            node: this.inner,
-            rect: childRect,
-            contentBox: createRect(0, 0, childBox.width, childBox.height),
-            constraints: childConstraints,
-          },
-        ],
-        constraints: ctx.constraints,
-      },
-      ctx.constraints,
-    );
+    writeLayoutResult(this, ctx, {
+      containerBox: createRect(0, 0, width, childBox.height),
+      contentBox: childRect,
+      children: [
+        {
+          node: this.inner,
+          rect: childRect,
+          contentBox: createRect(0, 0, childBox.width, childBox.height),
+          constraints: childConstraints,
+        },
+      ],
+      constraints: ctx.constraints,
+    });
 
     return {
       width,
@@ -407,11 +423,7 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    if (!layoutResult) {
-      ctx.measureNode(this, ctx.constraints);
-      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    }
+    const layoutResult = readLayoutResult(this, ctx);
     if (!layoutResult) {
       return this.inner.draw(ctx, x, y);
     }
@@ -425,11 +437,7 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
-    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    if (!layoutResult) {
-      ctx.measureNode(this, ctx.constraints);
-      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
-    }
+    const layoutResult = readLayoutResult(this, ctx);
     if (!layoutResult) {
       return false;
     }
@@ -469,12 +477,7 @@ function ensureLayoutResult<C extends CanvasRenderingContext2D>(
   node: Node<C>,
   ctx: Context<C>,
 ) {
-  let layoutResult = ctx.getLayoutResult(node, ctx.constraints);
-  if (!layoutResult) {
-    ctx.measureNode(node, ctx.constraints);
-    layoutResult = ctx.getLayoutResult(node, ctx.constraints);
-  }
-  return layoutResult;
+  return readLayoutResult(node, ctx);
 }
 
 function drawLayoutChildren<C extends CanvasRenderingContext2D>(
@@ -524,12 +527,12 @@ function hittestLayoutChildren<C extends CanvasRenderingContext2D>(
   );
 }
 
-function measureFlexLayout<C extends CanvasRenderingContext2D>(
-  owner: Node<C>,
+function computeFlexLayout<C extends CanvasRenderingContext2D>(
   children: Node<C>[],
   options: FlexContainerOptions,
-  ctx: Context<C>,
-): Box {
+  constraints: LayoutConstraints | undefined,
+  measureChild: (node: Node<C>, constraints?: LayoutConstraints) => Box,
+): MeasuredLayout<C> {
   const axis = options.direction ?? "row";
   const gap = options.gap ?? 0;
   const justifyContent = options.justifyContent ?? "start";
@@ -537,10 +540,10 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
   const reverse = options.reverse ?? false;
   const mainAxisSize = options.mainAxisSize ?? "fill";
   const orderedChildren = reverse ? [...children].reverse() : children;
-  const maxMain = getMaxMain(axis, ctx.constraints);
-  const minMain = getMinMain(axis, ctx.constraints);
-  const maxCross = getMaxCross(axis, ctx.constraints);
-  const minCross = getMinCross(axis, ctx.constraints);
+  const maxMain = getMaxMain(axis, constraints);
+  const minMain = getMinMain(axis, constraints);
+  const maxCross = getMaxCross(axis, constraints);
+  const minCross = getMinCross(axis, constraints);
   const gapTotal = orderedChildren.length > 1 ? gap * (orderedChildren.length - 1) : 0;
   const finiteMain = maxMain != null;
   const finiteCross = maxCross != null;
@@ -561,7 +564,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
     const stretch = effectiveAlign === "stretch";
     const childConstraints = createAxisConstraints(
       axis,
-      ctx.constraints,
+      constraints,
       {
         max: finiteMain && availableMain != null ? Math.max(0, availableMain - consumedMain) : maxMain,
       },
@@ -570,7 +573,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
         max: maxCross,
       },
     );
-    const measured = ctx.measureNode(child, childConstraints);
+    const measured = measureChild(child, childConstraints);
     const frameMain = getMainSize(axis, measured);
     const frameCross = getCrossSize(axis, measured);
     measurements.set(child, {
@@ -602,7 +605,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
     const allocatedMain = finiteMain && remainingMain != null && totalGrow > 0 ? (remainingMain * grow) / totalGrow : undefined;
     const childConstraints = createAxisConstraints(
       axis,
-      ctx.constraints,
+      constraints,
       {
         max: allocatedMain,
       },
@@ -611,7 +614,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
         max: maxCross,
       },
     );
-    const measured = ctx.measureNode(child, childConstraints);
+    const measured = measureChild(child, childConstraints);
     const measuredMain = getMainSize(axis, measured);
     const frameMain = allocatedMain ?? measuredMain;
     const frameCross = getCrossSize(axis, measured);
@@ -661,7 +664,7 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
           max: containerCross,
         },
       );
-      const remeasured = ctx.measureNode(child, finalConstraints);
+      const remeasured = measureChild(child, finalConstraints);
       measurement.measured = remeasured;
       measurement.finalConstraints = finalConstraints;
       measurement.frameCross = containerCross;
@@ -711,20 +714,17 @@ function measureFlexLayout<C extends CanvasRenderingContext2D>(
     ? computeContentBox(childResults)
     : createRect(0, 0, 0, 0);
 
-  ctx.setLayoutResult(
-    owner,
-    {
+  return {
+    box: {
+      width: containerBox.width,
+      height: containerBox.height,
+    },
+    layout: {
       containerBox,
       contentBox: finalContentBox,
       children: childResults,
-      constraints: ctx.constraints,
+      constraints,
     },
-    ctx.constraints,
-  );
-
-  return {
-    width: containerBox.width,
-    height: containerBox.height,
   };
 }
 
@@ -737,7 +737,9 @@ export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
   }
 
   measure(ctx: Context<C>): Box {
-    return measureFlexLayout(this, this.children, this.options, ctx);
+    const result = computeFlexLayout(this.children, this.options, ctx.constraints, (node, constraints) => ctx.measureNode(node, constraints));
+    writeLayoutResult(this, ctx, result.layout);
+    return result.box;
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {

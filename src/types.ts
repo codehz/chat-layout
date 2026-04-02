@@ -61,8 +61,6 @@ export interface Context<C extends CanvasRenderingContext2D> {
   constraints?: LayoutConstraints;
 
   measureNode(node: Node<C>, constraints?: LayoutConstraints): Box;
-  getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined;
-  setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void;
   invalidateNode(node: Node<C>): void;
   resolveDynValue<T>(value: DynValue<C, T>): T;
   with<T>(this: Context<C>, cb: (g: C) => T): T;

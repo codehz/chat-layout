@@ -1372,7 +1372,34 @@ describe("root constraints", () => {
     renderer.draw(node);
     renderer.hittest(node, { x: 0, y: 0, type: "click" });
 
-    expect(seen).toEqual([180, 180]);
+    expect(seen).toEqual([180, 180, 180]);
+  });
+
+  test("DebugRenderer measures layout nodes before root draw and hittest", () => {
+    const drawXs: number[] = [];
+    const hitXs: number[] = [];
+    const leaf: Node<C> = {
+      measure() {
+        return { width: 20, height: 20 };
+      },
+      draw(_ctx, x) {
+        drawXs.push(x);
+        return false;
+      },
+      hittest(_ctx, test) {
+        hitXs.push(test.x);
+        return true;
+      },
+    };
+
+    const node = new Place<C>(leaf, { align: "end" });
+    const renderer = new DebugRenderer(createTextGraphics(100, 100), {});
+
+    renderer.draw(node);
+    expect(drawXs).toEqual([80]);
+
+    renderer.hittest(node, { x: 90, y: 10, type: "click" });
+    expect(hitXs).toEqual([10]);
   });
 
   test("virtualized renderers measure items with viewport maxWidth", () => {
