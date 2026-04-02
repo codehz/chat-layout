@@ -106,6 +106,28 @@ describe("Flex", () => {
     expect(layout?.children[1]?.rect).toEqual({ x: 0, y: 15, width: 10, height: 15 });
   });
 
+  test("column stretch fills the available width unless alignSelf overrides it", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const constraints = { maxWidth: 120 };
+    const node = new Flex<C>([
+      new Fixed(40, 10),
+      new FlexItem(new Fixed(30, 10), { alignSelf: "start" }),
+    ], {
+      direction: "column",
+      alignItems: "stretch",
+      gap: 5,
+    });
+
+    const box = renderer.measureNode(node, constraints);
+    const layout = renderer.getLayoutResult(node, constraints);
+
+    expect(box).toEqual({ width: 120, height: 25 });
+    expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 120, height: 10 });
+    expect(layout?.children[0]?.contentBox.width).toBe(40);
+    expect(layout?.children[1]?.rect).toEqual({ x: 0, y: 15, width: 30, height: 10 });
+    expect(layout?.children[1]?.contentBox.width).toBe(30);
+  });
+
   test("justifyContent distributes remaining main-axis space", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 100 };
