@@ -205,11 +205,13 @@ export abstract class Group<C extends CanvasRenderingContext2D> implements Node<
   abstract draw(ctx: Context<C>, x: number, y: number): boolean;
   abstract hittest(ctx: Context<C>, test: HitTest): boolean;
 
+  /** @deprecated 不再推荐依赖 child.flex，改用 FlexItem(child, { grow: 1 }) */
   get flex(): boolean {
     return this.children.some((item) => item.flex);
   }
 }
 
+/** @deprecated 使用 Flex(children, { direction: "column" }) 替代 */
 export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
   constructor(
     children: Node<C>[],
@@ -323,6 +325,7 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
   }
 }
 
+/** @deprecated 使用 Flex(children, { direction: "row" }) 替代 */
 export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
   constructor(
     readonly children: Node<C>[],
@@ -497,6 +500,7 @@ export class Wrapper<C extends CanvasRenderingContext2D> implements Node<C> {
     registerNodeParent(newNode, this);
   }
 
+  /** @deprecated 不再推荐依赖 child.flex，改用 FlexItem(child, { grow: 1 }) */
   get flex(): boolean {
     return this.inner.flex;
   }
@@ -736,7 +740,7 @@ export class FlexItem<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 }
 
-/** @deprecated 使用 Place 替代 */
+/** @deprecated 使用 Place(inner, { align }) 替代 */
 export class AlignBox<C extends CanvasRenderingContext2D> extends Place<C> {
   constructor(
     inner: Node<C>,
@@ -1038,6 +1042,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     },
   ) {}
 
+  /** @deprecated 不再推荐依赖 child.flex，改用 FlexItem(child, { grow: 1 }) */
   get flex(): boolean {
     return true;
   }
@@ -1103,6 +1108,7 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
     },
   ) {}
 
+  /** @deprecated 不再推荐依赖 child.flex，改用 FlexItem(child, { grow: 1 }) */
   get flex(): boolean {
     return false;
   }
@@ -1139,6 +1145,7 @@ export class Fixed<C extends CanvasRenderingContext2D> implements Node<C> {
     readonly height: number,
   ) {}
 
+  /** @deprecated 不再推荐依赖 child.flex，改用 FlexItem(child, { grow: 1 }) */
   get flex(): boolean {
     return false;
   }
