@@ -1293,12 +1293,81 @@ describe("constraint-aware cache", () => {
 
     wrapper.inner = second.node;
     second.setWidth(60);
-
-    renderer.invalidateNode(first.node);
-    expect(renderer.measureNode(wrapper).width).toBe(20);
-
-    renderer.invalidateNode(second.node);
     expect(renderer.measureNode(wrapper).width).toBe(60);
+
+    first.setWidth(100);
+    renderer.invalidateNode(first.node);
+    expect(renderer.measureNode(wrapper).width).toBe(60);
+
+    second.setWidth(80);
+    renderer.invalidateNode(second.node);
+    expect(renderer.measureNode(wrapper).width).toBe(80);
+  });
+
+  test("Flex copies constructor children so external array mutation cannot alter the tree", () => {
+    const source = [new Fixed<C>(10, 10)];
+    const flex = new Flex<C>(source, {
+      direction: "row",
+      gap: 5,
+      mainAxisSize: "fit-content",
+    });
+    const renderer = new BaseRenderer(createTextGraphics(), {});
+
+    expect(flex.children).toHaveLength(1);
+    expect(renderer.measureNode(flex).width).toBe(10);
+
+    source.push(new Fixed<C>(20, 10));
+
+    expect(flex.children).toHaveLength(1);
+    expect(renderer.measureNode(flex).width).toBe(10);
+  });
+
+  test("replaceChildren refreshes ownership and cached layout automatically", () => {
+    function createMutableNode(initialWidth: number): {
+      node: Node<C>;
+      setWidth: (width: number) => void;
+    } {
+      let width = initialWidth;
+      return {
+        setWidth(nextWidth) {
+          width = nextWidth;
+        },
+        node: {
+          measure(): Box {
+            return { width, height: 20 };
+          },
+          draw(): boolean {
+            return false;
+          },
+          hittest(): boolean {
+            return false;
+          },
+        },
+      };
+    }
+
+    const first = createMutableNode(20);
+    const second = createMutableNode(40);
+    const flex = new Flex<C>([first.node], {
+      direction: "row",
+      mainAxisSize: "fit-content",
+    });
+    const renderer = new BaseRenderer(createTextGraphics(), {});
+
+    expect(renderer.measureNode(flex).width).toBe(20);
+
+    flex.replaceChildren([second.node]);
+    second.setWidth(60);
+    expect(renderer.measureNode(flex).width).toBe(60);
+
+    expect(() => new Place<C>(first.node, { align: "start" })).not.toThrow();
+    expect(() => new Place<C>(second.node, { align: "start" })).toThrow(
+      "A node can only be attached to one parent. Shared nodes are not supported.",
+    );
+
+    second.setWidth(80);
+    renderer.invalidateNode(second.node);
+    expect(renderer.measureNode(flex).width).toBe(80);
   });
 
   test("canvas width change clears all constraint variants", () => {

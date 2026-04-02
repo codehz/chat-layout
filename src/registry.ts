@@ -1,6 +1,7 @@
 import type { Node } from "./types";
 
 const registry = new WeakMap<Node<any>, Node<any>>();
+const revisions = new WeakMap<Node<any>, number>();
 
 function getOwnershipError(): Error {
   return new Error("A node can only be attached to one parent. Shared nodes are not supported.");
@@ -8,6 +9,14 @@ function getOwnershipError(): Error {
 
 function getDetachOwnershipError(): Error {
   return new Error("Cannot detach or replace a node from a parent that does not own it.");
+}
+
+function bumpRevision(node: Node<any>): void {
+  revisions.set(node, (revisions.get(node) ?? 0) + 1);
+}
+
+export function getNodeRevision<C extends CanvasRenderingContext2D>(node: Node<C>): number {
+  return revisions.get(node) ?? 0;
 }
 
 export function attachNodeToParent<C extends CanvasRenderingContext2D>(
@@ -18,6 +27,7 @@ export function attachNodeToParent<C extends CanvasRenderingContext2D>(
     throw getOwnershipError();
   }
   registry.set(node, parent);
+  bumpRevision(parent);
 }
 
 export function attachNodesToParent<C extends CanvasRenderingContext2D>(
@@ -41,6 +51,7 @@ export function detachNodeFromParent<C extends CanvasRenderingContext2D>(
     throw getDetachOwnershipError();
   }
   registry.delete(node);
+  bumpRevision(currentParent);
 }
 
 export function replaceNodeParent<C extends CanvasRenderingContext2D>(
@@ -60,6 +71,53 @@ export function replaceNodeParent<C extends CanvasRenderingContext2D>(
   }
   registry.delete(previousNode);
   registry.set(nextNode, parent);
+  bumpRevision(parent);
+}
+
+export function replaceNodesParent<C extends CanvasRenderingContext2D>(
+  previousNodes: Iterable<Node<C>>,
+  nextNodes: Iterable<Node<C>>,
+  parent: Node<C>,
+): void {
+  const previousSnapshot = Array.from(previousNodes);
+  const nextSnapshot = Array.from(nextNodes);
+  if (
+    previousSnapshot.length === nextSnapshot.length &&
+    previousSnapshot.every((node, index) => node === nextSnapshot[index])
+  ) {
+    return;
+  }
+
+  const previousSet = new Set(previousSnapshot);
+  const nextSet = new Set<Node<C>>();
+  for (const node of nextSnapshot) {
+    if (nextSet.has(node)) {
+      throw getOwnershipError();
+    }
+    nextSet.add(node);
+    const currentParent = registry.get(node);
+    if (currentParent != null && currentParent !== parent) {
+      throw getOwnershipError();
+    }
+  }
+
+  for (const node of previousSnapshot) {
+    if (!nextSet.has(node)) {
+      const currentParent = registry.get(node);
+      if (currentParent !== parent) {
+        throw getDetachOwnershipError();
+      }
+      registry.delete(node);
+    }
+  }
+
+  for (const node of nextSnapshot) {
+    if (!previousSet.has(node)) {
+      registry.set(node, parent);
+    }
+  }
+
+  bumpRevision(parent);
 }
 
 export function forEachNodeAncestor<C extends CanvasRenderingContext2D>(

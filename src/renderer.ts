@@ -10,7 +10,7 @@ import type {
   RendererOptions,
 } from "./types";
 import { shallow, shallowMerge } from "./utils";
-import { forEachNodeAncestor } from "./registry";
+import { forEachNodeAncestor, getNodeRevision } from "./registry";
 
 /** 每个节点最多保留的约束变体数量，防止缓存无限累积 */
 const MAX_CONSTRAINT_VARIANTS = 8;
@@ -18,6 +18,16 @@ const MAX_CONSTRAINT_VARIANTS = 8;
 type LayoutCacheAccess<C extends CanvasRenderingContext2D> = {
   getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined;
   setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void;
+};
+
+type BoxCacheEntry = {
+  revision: number;
+  box: Box;
+};
+
+type LayoutCacheEntry<C extends CanvasRenderingContext2D> = {
+  revision: number;
+  layout: FlexLayoutResult<C>;
 };
 
 type RendererContext<C extends CanvasRenderingContext2D> = Context<C> & LayoutCacheAccess<C>;
@@ -31,8 +41,8 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   graphics: C;
   #ctx: RendererContext<C>;
   #lastWidth: number;
-  #cache = new WeakMap<Node<C>, Map<string, Box>>();
-  #layoutCache = new WeakMap<Node<C>, Map<string, FlexLayoutResult<C>>>();
+  #cache = new WeakMap<Node<C>, Map<string, BoxCacheEntry>>();
+  #layoutCache = new WeakMap<Node<C>, Map<string, LayoutCacheEntry<C>>>();
 
   protected get context(): Context<C> {
     return shallow(this.#ctx);
@@ -115,7 +125,15 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     if (nodeCache == null) {
       return undefined;
     }
-    return nodeCache.get(constraintKey(constraints));
+    const cached = nodeCache.get(constraintKey(constraints));
+    if (cached == null) {
+      return undefined;
+    }
+    if (cached.revision !== getNodeRevision(node)) {
+      nodeCache.delete(constraintKey(constraints));
+      return undefined;
+    }
+    return cached.layout;
   }
 
   setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void {
@@ -127,20 +145,28 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       const firstKey = nodeCache.keys().next().value!;
       nodeCache.delete(firstKey);
     }
-    nodeCache.set(constraintKey(constraints), result);
+    nodeCache.set(constraintKey(constraints), {
+      revision: getNodeRevision(node),
+      layout: result,
+    });
   }
 
   measureNode(node: Node<C>, constraints?: LayoutConstraints): Box {
     if (this.#lastWidth !== this.graphics.canvas.clientWidth) {
-      this.#cache = new WeakMap<Node<C>, Map<string, Box>>();
-      this.#layoutCache = new WeakMap<Node<C>, Map<string, FlexLayoutResult<C>>>();
+      this.#cache = new WeakMap<Node<C>, Map<string, BoxCacheEntry>>();
+      this.#layoutCache = new WeakMap<Node<C>, Map<string, LayoutCacheEntry<C>>>();
       this.#lastWidth = this.graphics.canvas.clientWidth;
     } else {
       const nodeCache = this.#cache.get(node);
       if (nodeCache != null) {
         const key = constraintKey(constraints);
         const cached = nodeCache.get(key);
-        if (cached != null) return cached;
+        if (cached != null) {
+          if (cached.revision === getNodeRevision(node)) {
+            return cached.box;
+          }
+          nodeCache.delete(key);
+        }
       }
     }
     const ctx = this.context;
@@ -158,7 +184,10 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       const firstKey = nodeCache.keys().next().value!;
       nodeCache.delete(firstKey);
     }
-    nodeCache.set(key, result);
+    nodeCache.set(key, {
+      revision: getNodeRevision(node),
+      box: result,
+    });
     return result;
   }
 }

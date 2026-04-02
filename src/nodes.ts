@@ -17,7 +17,7 @@ import type {
 import { computeContentBox, createRect, findChildAtPoint, getSingleChildLayout } from "./layout";
 import { layoutFirstLine, layoutFirstLineIntrinsic, layoutText, layoutTextIntrinsic } from "./text";
 import { shallow, shallowMerge } from "./utils";
-import { attachNodeToParent, attachNodesToParent, replaceNodeParent } from "./registry";
+import { attachNodeToParent, replaceNodeParent, replaceNodesParent } from "./registry";
 
 function withConstraints<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
@@ -218,8 +218,21 @@ function writeLayoutResult<C extends CanvasRenderingContext2D>(
 }
 
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
-  constructor(readonly children: Node<C>[]) {
-    attachNodesToParent(children, this);
+  #children: Node<C>[];
+
+  constructor(children: Node<C>[]) {
+    this.#children = [...children];
+    replaceNodesParent([], this.#children, this);
+  }
+
+  get children(): readonly Node<C>[] {
+    return this.#children;
+  }
+
+  replaceChildren(nextChildren: Node<C>[]): void {
+    const nextSnapshot = [...nextChildren];
+    replaceNodesParent(this.#children, nextSnapshot, this);
+    this.#children = nextSnapshot;
   }
 
   abstract measure(ctx: Context<C>): Box;
@@ -529,7 +542,7 @@ function hittestLayoutChildren<C extends CanvasRenderingContext2D>(
 }
 
 function computeFlexLayout<C extends CanvasRenderingContext2D>(
-  children: Node<C>[],
+  children: readonly Node<C>[],
   options: FlexContainerOptions,
   constraints: LayoutConstraints | undefined,
   measureChild: (node: Node<C>, constraints?: LayoutConstraints) => Box,
