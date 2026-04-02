@@ -113,7 +113,13 @@ function createProbeNode(): {
   };
 }
 
-function createChatLikeBubble(message: string): Place<C> {
+function createChatLikeBubbleTree(
+  message: string,
+  reply?: {
+    sender: string;
+    content: string;
+  },
+) {
   const senderLine = new Flex<C>(
     [
       new PaddingBox(
@@ -128,13 +134,59 @@ function createChatLikeBubble(message: string): Place<C> {
     { direction: "row", gap: 4, mainAxisSize: "fit-content" },
   );
 
-  const content = new PaddingBox(
+  const messageText = new FlexItem(
     new MultilineText(message, {
       lineHeight: 20,
       font: "16px sans-serif",
       alignment: "left",
       style: "#000",
     }),
+    { alignSelf: "start" },
+  );
+
+  const bubbleChildren: Node<C>[] = [];
+  let replyPreview: PaddingBox<C> | undefined;
+  if (reply != null) {
+    replyPreview = new PaddingBox(
+      new Flex<C>(
+        [
+          new Text(reply.sender, {
+            lineHeight: 14,
+            font: "11px sans-serif",
+            style: "#333",
+          }),
+          new MultilineText(reply.content, {
+            lineHeight: 16,
+            font: "13px sans-serif",
+            alignment: "left",
+            style: "#555",
+          }),
+        ],
+        {
+          direction: "column",
+          gap: 2,
+          alignItems: "start",
+        },
+      ),
+      {
+        top: 5,
+        bottom: 5,
+        left: 8,
+        right: 8,
+      },
+    );
+    bubbleChildren.push(replyPreview);
+  }
+  bubbleChildren.push(messageText);
+
+  const bubbleColumn = new Flex<C>(bubbleChildren, {
+    direction: "column",
+    gap: 6,
+    alignItems: reply == null ? "start" : "stretch",
+  });
+
+  const bubble = new PaddingBox(
+    bubbleColumn,
     {
       top: 6,
       bottom: 6,
@@ -144,7 +196,7 @@ function createChatLikeBubble(message: string): Place<C> {
   );
 
   const body = new Flex<C>(
-    [senderLine, content],
+    [senderLine, bubble],
     { direction: "column", alignItems: "start" },
   );
 
@@ -157,15 +209,51 @@ function createChatLikeBubble(message: string): Place<C> {
     { direction: "row", gap: 4 },
   );
 
-  return new Place<C>(
-    new PaddingBox(row, {
-      top: 4,
-      bottom: 4,
-      left: 4,
-      right: 4,
-    }),
-    { align: "start" },
-  );
+  const padded = new PaddingBox(row, {
+    top: 4,
+    bottom: 4,
+    left: 4,
+    right: 4,
+  });
+
+  const node = new Place<C>(padded, { align: "start" });
+
+  return {
+    node,
+    padded,
+    row,
+    body,
+    bubble,
+    bubbleColumn,
+    replyPreview,
+  };
+}
+
+function createChatLikeBubble(message: string): Place<C> {
+  return createChatLikeBubbleTree(message).node;
+}
+
+function measureChatLikeBubbleTree(
+  renderer: BaseRenderer<C>,
+  tree: ReturnType<typeof createChatLikeBubbleTree>,
+  constraints?: LayoutConstraints,
+) {
+  renderer.measureNode(tree.node, constraints);
+  const placeLayout = renderer.getLayoutResult(tree.node, constraints)!;
+  const paddedLayout = renderer.getLayoutResult(tree.padded, placeLayout.children[0]!.constraints)!;
+  const rowLayout = renderer.getLayoutResult(tree.row, paddedLayout.children[0]!.constraints)!;
+  const bodyLayout = renderer.getLayoutResult(tree.body, rowLayout.children[1]!.constraints)!;
+  const bubbleLayout = renderer.getLayoutResult(tree.bubble, bodyLayout.children[1]!.constraints)!;
+  const bubbleColumnLayout = renderer.getLayoutResult(tree.bubbleColumn, bubbleLayout.children[0]!.constraints)!;
+
+  return {
+    placeLayout,
+    paddedLayout,
+    rowLayout,
+    bodyLayout,
+    bubbleLayout,
+    bubbleColumnLayout,
+  };
 }
 
 describe("Place", () => {
@@ -216,19 +304,38 @@ describe("Place", () => {
     expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 20, height: 10 });
   });
 
-  test("chat bubbles only wrap when maxWidth is passed explicitly", () => {
+  test("chat bubbles wrap under maxWidth without forcing the bubble itself full width", () => {
     const renderer = new BaseRenderer(createGraphics(320, 200), {});
-    const node = createChatLikeBubble("long message ".repeat(30));
+    const tree = createChatLikeBubbleTree("long message ".repeat(30));
 
-    const unconstrainedBox = renderer.measureNode(node);
-    const unconstrainedLayout = renderer.getLayoutResult(node);
-    const constrainedBox = renderer.measureNode(node, { maxWidth: 320 });
-    const constrainedLayout = renderer.getLayoutResult(node, { maxWidth: 320 });
+    const unconstrainedBox = renderer.measureNode(tree.node);
+    const unconstrainedLayout = renderer.getLayoutResult(tree.node);
+    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
 
-    expect(unconstrainedBox.width).toBeGreaterThan(constrainedBox.width);
+    expect(unconstrainedBox.width).toBeGreaterThan(constrained.placeLayout.containerBox.width);
     expect(unconstrainedLayout?.children[0]?.rect.width).toBeLessThanOrEqual(unconstrainedBox.width);
-    expect(constrainedBox.width).toBe(320);
-    expect(constrainedLayout?.children[0]?.rect.width).toBeLessThanOrEqual(constrainedBox.width);
+    expect(constrained.placeLayout.containerBox.width).toBe(320);
+    expect(constrained.rowLayout.children[1]!.rect.width).toBeGreaterThan(constrained.bodyLayout.children[1]!.rect.width);
+    expect(constrained.bodyLayout.children[1]!.rect.width).toBeLessThan(320);
+  });
+
+  test("reply preview stretches across the bubble while the bubble stays shrink-wrapped", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 200), {});
+    const tree = createChatLikeBubbleTree(
+      "short message",
+      {
+        sender: "B",
+        content: "tiny reply preview",
+      },
+    );
+
+    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
+
+    expect(constrained.rowLayout.children[1]!.rect.width).toBeGreaterThan(constrained.bodyLayout.children[1]!.rect.width);
+    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBe(constrained.bubbleColumnLayout.containerBox.width);
+    expect(constrained.bubbleColumnLayout.children[1]!.rect.width).toBeLessThan(
+      constrained.bubbleColumnLayout.children[0]!.rect.width,
+    );
   });
 
   test("does not synthesize child maxWidth constraints when expand=false", () => {
@@ -249,7 +356,7 @@ describe("Place", () => {
     expect(layout?.children[0]?.constraints).toBeUndefined();
   });
 
-  test("column end alignment pins a narrower sender line to the bubble's right edge", () => {
+  test("column end alignment keeps a narrower sender line flush with the bubble's right edge", () => {
     const renderer = new BaseRenderer(createGraphics(320, 100), {});
     const senderLine = new Flex<C>(
       [
@@ -287,7 +394,7 @@ describe("Place", () => {
     const layout = renderer.getLayoutResult(column, { maxWidth: 240 });
 
     expect(layout?.children[0]?.rect.x).toBeGreaterThan(0);
-    expect(layout?.children[1]?.rect.x).toBeGreaterThan(0);
+    expect(layout?.children[1]?.rect.x).toBe(0);
     expect(layout!.children[0]!.rect.x + layout!.children[0]!.rect.width).toBe(
       layout!.children[1]!.rect.x + layout!.children[1]!.rect.width,
     );

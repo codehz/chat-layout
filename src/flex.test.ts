@@ -18,6 +18,10 @@ type ProbeDraw = {
   label: string;
 };
 
+function cloneConstraints(constraints?: LayoutConstraints): LayoutConstraints | undefined {
+  return constraints == null ? undefined : { ...constraints };
+}
+
 function createGraphics(viewportWidth = 320, viewportHeight = 120): C {
   return {
     canvas: {
@@ -106,7 +110,7 @@ describe("Flex", () => {
     expect(layout?.children[1]?.rect).toEqual({ x: 0, y: 15, width: 10, height: 15 });
   });
 
-  test("column stretch fills the available width unless alignSelf overrides it", () => {
+  test("column container shrink-wraps cross axis under maxWidth", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 120 };
     const node = new Flex<C>([
@@ -121,11 +125,27 @@ describe("Flex", () => {
     const box = renderer.measureNode(node, constraints);
     const layout = renderer.getLayoutResult(node, constraints);
 
-    expect(box).toEqual({ width: 120, height: 25 });
-    expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 120, height: 10 });
+    expect(box).toEqual({ width: 40, height: 25 });
+    expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 40, height: 25 });
+    expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 40, height: 10 });
     expect(layout?.children[0]?.contentBox.width).toBe(40);
     expect(layout?.children[1]?.rect).toEqual({ x: 0, y: 15, width: 30, height: 10 });
     expect(layout?.children[1]?.contentBox.width).toBe(30);
+  });
+
+  test("row container shrink-wraps cross axis under maxHeight", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const constraints = { maxHeight: 80 };
+    const node = new Flex<C>([new Fixed(10, 10), new Fixed(10, 20)], {
+      direction: "row",
+      gap: 5,
+    });
+
+    const box = renderer.measureNode(node, constraints);
+    const layout = renderer.getLayoutResult(node, constraints);
+
+    expect(box).toEqual({ width: 25, height: 20 });
+    expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 25, height: 20 });
   });
 
   test("justifyContent distributes remaining main-axis space", () => {
@@ -166,7 +186,7 @@ describe("Flex", () => {
     expect(layout?.children[1]?.rect).toEqual({ x: 15, y: 0, width: 15, height: 10 });
   });
 
-  test("alignItems, alignSelf, and stretch use the cross axis consistently", () => {
+  test("alignItems and alignSelf position items inside the shrink-wrapped cross axis", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 100, maxHeight: 40 };
     const node = new Flex<C>([
@@ -182,27 +202,114 @@ describe("Flex", () => {
     renderer.measureNode(node, constraints);
     const layout = renderer.getLayoutResult(node, constraints);
 
-    expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 100, height: 40 });
-    expect(layout?.children[0]?.rect.y).toBeCloseTo(15);
-    expect(layout?.children[1]?.rect.y).toBeCloseTo(20);
-    expect(layout?.children[2]?.rect.y).toBeCloseTo(15);
+    expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 100, height: 20 });
+    expect(layout?.children[0]?.rect.y).toBeCloseTo(5);
+    expect(layout?.children[1]?.rect.y).toBeCloseTo(0);
+    expect(layout?.children[2]?.rect.y).toBeCloseTo(5);
 
-    const stretched = new Flex<C>([new Fixed(10, 10)], {
+    const stretched = new Flex<C>([new Fixed(10, 40), new Fixed(10, 10)], {
       direction: "row",
       alignItems: "stretch",
+      gap: 5,
     });
-    renderer.measureNode(stretched, constraints);
-    const stretchedLayout = renderer.getLayoutResult(stretched, constraints);
+    renderer.measureNode(stretched, { maxHeight: 60 });
+    const stretchedLayout = renderer.getLayoutResult(stretched, { maxHeight: 60 });
+    expect(stretchedLayout?.containerBox).toEqual({ x: 0, y: 0, width: 25, height: 40 });
     expect(stretchedLayout?.children[0]?.rect.height).toBe(40);
-    expect(stretchedLayout?.children[0]?.contentBox.height).toBe(10);
+    expect(stretchedLayout?.children[1]?.rect.height).toBe(40);
+    expect(stretchedLayout?.children[1]?.contentBox.height).toBe(10);
+  });
 
-    const unstretched = new Flex<C>([new Fixed(10, 10)], {
-      direction: "row",
+  test("column stretch fills computed container width, not maxWidth", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const probe: Node<C> = {
+      measure(ctx) {
+        if (ctx.constraints?.minWidth === 40 && ctx.constraints?.maxWidth === 40) {
+          return { width: 40, height: 30 };
+        }
+        return { width: 20, height: 10 };
+      },
+      draw() {
+        return false;
+      },
+      hittest() {
+        return false;
+      },
+    };
+    const node = new Flex<C>([
+      new Fixed(40, 10),
+      new FlexItem(probe, { alignSelf: "stretch" }),
+    ], {
+      direction: "column",
       alignItems: "stretch",
     });
-    renderer.measureNode(unstretched, { maxWidth: 100 });
-    const unstretchedLayout = renderer.getLayoutResult(unstretched, { maxWidth: 100 });
-    expect(unstretchedLayout?.children[0]?.rect.height).toBe(10);
+
+    const box = renderer.measureNode(node, { maxWidth: 120 });
+    const layout = renderer.getLayoutResult(node, { maxWidth: 120 });
+
+    expect(box).toEqual({ width: 40, height: 40 });
+    expect(layout?.children[1]?.rect).toEqual({ x: 0, y: 10, width: 40, height: 30 });
+    expect(layout?.children[1]?.constraints).toEqual({ minWidth: 40, maxWidth: 40 });
+  });
+
+  test("stretch child is remeasured with exact final cross constraints", () => {
+    const measures: Array<LayoutConstraints | undefined> = [];
+    const draws: Array<LayoutConstraints | undefined> = [];
+    const hits: Array<LayoutConstraints | undefined> = [];
+    const renderer = new ConstraintTestRenderer(createGraphics(), {});
+    const probe: Node<C> = {
+      measure(ctx) {
+        measures.push(cloneConstraints(ctx.constraints));
+        if (ctx.constraints?.minWidth === 40 && ctx.constraints?.maxWidth === 40) {
+          return { width: 40, height: 30 };
+        }
+        return { width: 20, height: 10 };
+      },
+      draw(ctx) {
+        draws.push(cloneConstraints(ctx.constraints));
+        return false;
+      },
+      hittest(ctx) {
+        hits.push(cloneConstraints(ctx.constraints));
+        return true;
+      },
+    };
+    const node = new Flex<C>([
+      new Fixed(40, 10),
+      new FlexItem(probe, { alignSelf: "stretch" }),
+    ], {
+      direction: "column",
+      alignItems: "stretch",
+    });
+    const constraints = { maxWidth: 120 };
+
+    renderer.measureNode(node, constraints);
+    const layout = renderer.getLayoutResult(node, constraints);
+    renderer.drawNode(node, constraints);
+    renderer.hittestNode(node, { x: 5, y: 15, type: "click" }, constraints);
+
+    expect(measures).toEqual([
+      { maxWidth: 120 },
+      { minWidth: 40, maxWidth: 40 },
+    ]);
+    expect(layout?.children[1]?.constraints).toEqual({ minWidth: 40, maxWidth: 40 });
+    expect(draws).toEqual([{ minWidth: 40, maxWidth: 40 }]);
+    expect(hits).toEqual([{ minWidth: 40, maxWidth: 40 }]);
+  });
+
+  test("stretch without finite cross constraint stays intrinsic", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const node = new Flex<C>([new Fixed(20, 10)], {
+      direction: "column",
+      alignItems: "stretch",
+    });
+
+    const box = renderer.measureNode(node);
+    const layout = renderer.getLayoutResult(node);
+
+    expect(box).toEqual({ width: 20, height: 10 });
+    expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 20, height: 10 });
+    expect(layout?.children[0]?.constraints).toBeUndefined();
   });
 
   test("reverse, gap, draw, and hittest all follow the generated content boxes", () => {
