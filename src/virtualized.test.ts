@@ -5,7 +5,7 @@ import {
   normalizeTimelineState,
   resolveChatVisibleWindow,
   resolveTimelineVisibleWindow,
-} from "./virtualized";
+} from "./renderer/virtualized/solver";
 
 describe("virtualized solvers", () => {
   test("normalization uses explicit undefined position instead of NaN sentinels", () => {

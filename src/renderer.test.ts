@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { Fixed, Flex, FlexItem, MultilineText, Place, Text } from "./nodes";
 import { BaseRenderer, ChatRenderer, DebugRenderer, ListState, TimelineRenderer, memoRenderItem, memoRenderItemBy } from "./renderer";
 import type { Box, Context, HitTest, LayoutConstraints, Node, RenderFeedback } from "./types";
-import { registerNodeParent, unregisterNodeParent } from "./registry";
+import { registerNodeParent, unregisterNodeParent } from "./internal/node-registry";
 
 type C = CanvasRenderingContext2D;
 

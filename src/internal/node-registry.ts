@@ -1,4 +1,4 @@
-import type { Node } from "./types";
+import type { Node } from "../types";
 
 const registry = new WeakMap<Node<any>, Node<any>>();
 const revisions = new WeakMap<Node<any>, number>();
