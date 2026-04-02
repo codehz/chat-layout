@@ -1,9 +1,13 @@
 import type {
   Alignment,
+  Axis,
   Box,
   ChildLayoutResult,
   Context,
+  CrossAxisAlignment,
   DynValue,
+  FlexContainerOptions,
+  FlexItemOptions,
   HitTest,
   LayoutConstraints,
   Node,
@@ -51,6 +55,144 @@ function toTextAlign(alignment: Alignment): TextAlign {
       return "start";
   }
 }
+
+function getMainSize(axis: Axis, box: Box): number {
+  return axis === "row" ? box.width : box.height;
+}
+
+function getCrossSize(axis: Axis, box: Box): number {
+  return axis === "row" ? box.height : box.width;
+}
+
+function getMinMain(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+  return axis === "row" ? constraints?.minWidth : constraints?.minHeight;
+}
+
+function getMaxMain(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+  return axis === "row" ? constraints?.maxWidth : constraints?.maxHeight;
+}
+
+function getMinCross(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+  return axis === "row" ? constraints?.minHeight : constraints?.minWidth;
+}
+
+function getMaxCross(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+  return axis === "row" ? constraints?.maxHeight : constraints?.maxWidth;
+}
+
+function createAxisConstraints(
+  axis: Axis,
+  constraints: LayoutConstraints | undefined,
+  main: { min?: number; max?: number },
+  cross: { min?: number; max?: number } = {},
+): LayoutConstraints | undefined {
+  if (
+    constraints == null &&
+    main.min == null &&
+    main.max == null &&
+    cross.min == null &&
+    cross.max == null
+  ) {
+    return undefined;
+  }
+
+  const next: LayoutConstraints = {
+    ...constraints,
+  };
+  if (axis === "row") {
+    next.minWidth = main.min;
+    next.maxWidth = main.max;
+    next.minHeight = cross.min;
+    next.maxHeight = cross.max;
+  } else {
+    next.minHeight = main.min;
+    next.maxHeight = main.max;
+    next.minWidth = cross.min;
+    next.maxWidth = cross.max;
+  }
+  return next;
+}
+
+function clampToConstraints(value: number, min?: number, max?: number): number {
+  let result = value;
+  if (min != null) {
+    result = Math.max(result, min);
+  }
+  if (max != null) {
+    result = Math.min(result, max);
+  }
+  return result;
+}
+
+function getCrossAlignment(alignSelf: CrossAxisAlignment | "auto" | undefined, alignItems: CrossAxisAlignment): CrossAxisAlignment {
+  if (alignSelf == null || alignSelf === "auto") {
+    return alignItems;
+  }
+  return alignSelf;
+}
+
+function getJustifySpacing(
+  justifyContent: NonNullable<FlexContainerOptions["justifyContent"]>,
+  freeSpace: number,
+  itemCount: number,
+  gap: number,
+): { leading: number; between: number } {
+  switch (justifyContent) {
+    case "center":
+      return { leading: freeSpace / 2, between: gap };
+    case "end":
+      return { leading: freeSpace, between: gap };
+    case "space-between":
+      return {
+        leading: 0,
+        between: itemCount > 1 ? gap + freeSpace / (itemCount - 1) : gap,
+      };
+    case "space-around":
+      return {
+        leading: itemCount > 0 ? freeSpace / itemCount / 2 : 0,
+        between: itemCount > 0 ? gap + freeSpace / itemCount : gap,
+      };
+    case "space-evenly":
+      return {
+        leading: itemCount > 0 ? freeSpace / (itemCount + 1) : 0,
+        between: itemCount > 0 ? gap + freeSpace / (itemCount + 1) : gap,
+      };
+    case "start":
+    default:
+      return { leading: 0, between: gap };
+  }
+}
+
+function getCrossOffset(align: CrossAxisAlignment, frameCross: number, contentCross: number): number {
+  switch (align) {
+    case "center":
+      return (frameCross - contentCross) / 2;
+    case "end":
+      return frameCross - contentCross;
+    case "stretch":
+    case "start":
+    default:
+      return 0;
+  }
+}
+
+function createRectFromAxis(axis: Axis, main: number, cross: number, mainSize: number, crossSize: number) {
+  return axis === "row"
+    ? createRect(main, cross, mainSize, crossSize)
+    : createRect(cross, main, crossSize, mainSize);
+}
+
+type FlexMeasurement<C extends CanvasRenderingContext2D> = {
+  child: Node<C>;
+  item: FlexItemOptions;
+  measured: Box;
+  constraints?: LayoutConstraints;
+  grow: number;
+  effectiveAlign: CrossAxisAlignment;
+  stretch: boolean;
+  frameMain: number;
+  frameCross: number;
+};
 
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(readonly children: Node<C>[]) {
@@ -812,6 +954,15 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 }
 
+export class FlexItem<C extends CanvasRenderingContext2D> extends Wrapper<C> {
+  constructor(
+    inner: Node<C>,
+    readonly item: FlexItemOptions = {},
+  ) {
+    super(inner);
+  }
+}
+
 /** @deprecated 使用 Place 替代 */
 export class AlignBox<C extends CanvasRenderingContext2D> extends Place<C> {
   constructor(
@@ -839,6 +990,237 @@ export class AlignBox<C extends CanvasRenderingContext2D> extends Place<C> {
   hittest(ctx: Context<C>, test: HitTest): boolean {
     ctx.alignment = this.legacyOptions.alignment;
     return super.hittest(ctx, test);
+  }
+}
+
+function readFlexItemOptions<C extends CanvasRenderingContext2D>(child: Node<C>): FlexItemOptions {
+  if (child instanceof FlexItem) {
+    return child.item;
+  }
+  if (child.flex) {
+    return { grow: 1 };
+  }
+  return {};
+}
+
+export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
+  constructor(
+    children: Node<C>[],
+    readonly options: FlexContainerOptions = {},
+  ) {
+    super(children);
+  }
+
+  measure(ctx: Context<C>): Box {
+    const axis = this.options.direction ?? "row";
+    const gap = this.options.gap ?? 0;
+    const justifyContent = this.options.justifyContent ?? "start";
+    const alignItems = this.options.alignItems ?? "start";
+    const reverse = this.options.reverse ?? false;
+    const orderedChildren = reverse ? [...this.children].reverse() : this.children;
+    const maxMain = getMaxMain(axis, ctx.constraints);
+    const minMain = getMinMain(axis, ctx.constraints);
+    const maxCross = getMaxCross(axis, ctx.constraints);
+    const minCross = getMinCross(axis, ctx.constraints);
+    const gapTotal = orderedChildren.length > 1 ? gap * (orderedChildren.length - 1) : 0;
+    const finiteMain = maxMain != null;
+    const finiteCross = maxCross != null;
+    const availableMain = finiteMain ? Math.max(0, maxMain - gapTotal) : undefined;
+    let consumedMain = 0;
+    let totalGrow = 0;
+    const measurements = new Map<Node<C>, FlexMeasurement<C>>();
+
+    for (const child of orderedChildren) {
+      const item = readFlexItemOptions(child);
+      const grow = item.grow ?? 0;
+      totalGrow += grow;
+      if (grow > 0 && finiteMain) {
+        continue;
+      }
+
+      const effectiveAlign = getCrossAlignment(item.alignSelf, alignItems);
+      const stretch = effectiveAlign === "stretch" && finiteCross;
+      const childConstraints = createAxisConstraints(
+        axis,
+        ctx.constraints,
+        {
+          max: finiteMain && availableMain != null ? Math.max(0, availableMain - consumedMain) : maxMain,
+        },
+        stretch
+          ? {
+              min: maxCross,
+              max: maxCross,
+            }
+          : {
+              min: undefined,
+              max: maxCross,
+            },
+      );
+      const measured = ctx.measureNode(child, childConstraints);
+      const frameMain = getMainSize(axis, measured);
+      const frameCross = stretch && maxCross != null ? maxCross : getCrossSize(axis, measured);
+      measurements.set(child, {
+        child,
+        item,
+        measured,
+        constraints: childConstraints,
+        grow,
+        effectiveAlign,
+        stretch,
+        frameMain,
+        frameCross,
+      });
+      consumedMain += frameMain;
+    }
+
+    const remainingMain = finiteMain && availableMain != null ? Math.max(0, availableMain - consumedMain) : undefined;
+
+    for (const child of orderedChildren) {
+      if (measurements.has(child)) {
+        continue;
+      }
+      const item = readFlexItemOptions(child);
+      const grow = item.grow ?? 0;
+      const effectiveAlign = getCrossAlignment(item.alignSelf, alignItems);
+      const stretch = effectiveAlign === "stretch" && finiteCross;
+      const allocatedMain = finiteMain && remainingMain != null && totalGrow > 0 ? (remainingMain * grow) / totalGrow : undefined;
+      const childConstraints = createAxisConstraints(
+        axis,
+        ctx.constraints,
+        {
+          max: allocatedMain,
+        },
+        stretch
+          ? {
+              min: maxCross,
+              max: maxCross,
+            }
+          : {
+              min: undefined,
+              max: maxCross,
+            },
+      );
+      const measured = ctx.measureNode(child, childConstraints);
+      const measuredMain = getMainSize(axis, measured);
+      const frameMain = allocatedMain ?? measuredMain;
+      const frameCross = stretch && maxCross != null ? maxCross : getCrossSize(axis, measured);
+      measurements.set(child, {
+        child,
+        item,
+        measured,
+        constraints: childConstraints,
+        grow,
+        effectiveAlign,
+        stretch,
+        frameMain,
+        frameCross,
+      });
+    }
+
+    let contentMain = gapTotal;
+    let contentCross = 0;
+    for (const child of orderedChildren) {
+      const measurement = measurements.get(child)!;
+      contentMain += measurement.frameMain;
+      contentCross = Math.max(contentCross, measurement.frameCross);
+    }
+
+    const containerMain = finiteMain
+      ? maxMain!
+      : clampToConstraints(contentMain, minMain, maxMain);
+    const containerCross = finiteCross
+      ? maxCross!
+      : clampToConstraints(contentCross, minCross, maxCross);
+    const freeSpace = Math.max(0, containerMain - contentMain);
+    const spacing = getJustifySpacing(justifyContent, freeSpace, orderedChildren.length, gap);
+    const childResults: ChildLayoutResult<C>[] = [];
+    let cursor = spacing.leading;
+
+    for (const child of orderedChildren) {
+      const measurement = measurements.get(child)!;
+      const frameCross = measurement.stretch && finiteCross ? containerCross : measurement.frameCross;
+      const contentMainSize = getMainSize(axis, measurement.measured);
+      const contentCrossSize = getCrossSize(axis, measurement.measured);
+      const mainOffset = 0;
+      const rectCross = measurement.stretch ? 0 : getCrossOffset(measurement.effectiveAlign, containerCross, frameCross);
+      const contentCrossOffset = rectCross + getCrossOffset(measurement.effectiveAlign, frameCross, contentCrossSize);
+      const rect = createRectFromAxis(axis, cursor, rectCross, measurement.frameMain, frameCross);
+      const contentBox = createRectFromAxis(axis, cursor + mainOffset, contentCrossOffset, contentMainSize, contentCrossSize);
+
+      childResults.push({
+        node: child,
+        rect,
+        contentBox,
+        constraints: measurement.constraints,
+      });
+      cursor += measurement.frameMain + spacing.between;
+    }
+
+    const containerBox = axis === "row"
+      ? createRect(0, 0, containerMain, containerCross)
+      : createRect(0, 0, containerCross, containerMain);
+
+    ctx.setLayoutResult(
+      this,
+      {
+        containerBox,
+        contentBox: axis === "row"
+          ? createRect(0, 0, contentMain, contentCross)
+          : createRect(0, 0, contentCross, contentMain),
+        children: childResults,
+        constraints: ctx.constraints,
+      },
+      ctx.constraints,
+    );
+
+    return {
+      width: containerBox.width,
+      height: containerBox.height,
+    };
+  }
+
+  draw(ctx: Context<C>, x: number, y: number): boolean {
+    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    if (!layoutResult) {
+      ctx.measureNode(this, ctx.constraints);
+      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    }
+    if (!layoutResult) {
+      return false;
+    }
+
+    let result = false;
+    for (const childResult of layoutResult.children) {
+      const childCtx = withConstraints(ctx, childResult.constraints);
+      result ||= childResult.node.draw(childCtx, x + childResult.contentBox.x, y + childResult.contentBox.y);
+    }
+    return result;
+  }
+
+  hittest(ctx: Context<C>, test: HitTest): boolean {
+    let layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    if (!layoutResult) {
+      ctx.measureNode(this, ctx.constraints);
+      layoutResult = ctx.getLayoutResult(this, ctx.constraints);
+    }
+    if (!layoutResult) {
+      return false;
+    }
+
+    for (const childResult of layoutResult.children) {
+      if (!pointInRect(test.x, test.y, childResult.contentBox)) {
+        continue;
+      }
+
+      return childResult.node.hittest(
+        withConstraints(ctx, childResult.constraints),
+        shallowMerge(test, {
+          x: test.x - childResult.contentBox.x,
+          y: test.y - childResult.contentBox.y,
+        }),
+      );
+    }
+    return false;
   }
 }
 
