@@ -1256,6 +1256,47 @@ describe("constraint-aware cache", () => {
     }
   });
 
+  test("invalidateNode follows the current ownership chain after replacing a wrapper child", () => {
+    function createMutableNode(initialWidth: number): {
+      node: Node<C>;
+      setWidth: (width: number) => void;
+    } {
+      let width = initialWidth;
+      return {
+        setWidth(nextWidth) {
+          width = nextWidth;
+        },
+        node: {
+          measure(): Box {
+            return { width, height: 20 };
+          },
+          draw(): boolean {
+            return false;
+          },
+          hittest(): boolean {
+            return false;
+          },
+        },
+      };
+    }
+
+    const first = createMutableNode(20);
+    const second = createMutableNode(40);
+    const wrapper = new Place<C>(first.node, { align: "start", expand: false });
+    const renderer = new BaseRenderer(createTextGraphics(), {});
+
+    expect(renderer.measureNode(wrapper).width).toBe(20);
+
+    wrapper.inner = second.node;
+    second.setWidth(60);
+
+    renderer.invalidateNode(first.node);
+    expect(renderer.measureNode(wrapper).width).toBe(20);
+
+    renderer.invalidateNode(second.node);
+    expect(renderer.measureNode(wrapper).width).toBe(60);
+  });
+
   test("canvas width change clears all constraint variants", () => {
     let calls = 0;
     const node = createConstraintAwareNode((constraints) => {

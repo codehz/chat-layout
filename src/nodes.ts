@@ -15,7 +15,7 @@ import type {
 import { computeContentBox, createRect, findChildAtPoint, getSingleChildLayout } from "./layout";
 import { layoutFirstLine, layoutFirstLineIntrinsic, layoutText, layoutTextIntrinsic } from "./text";
 import { shallow, shallowMerge } from "./utils";
-import { registerNodeParent, unregisterNodeParent } from "./registry";
+import { attachNodeToParent, attachNodesToParent, replaceNodeParent } from "./registry";
 
 function withConstraints<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
@@ -186,9 +186,7 @@ type FlexMeasurement<C extends CanvasRenderingContext2D> = {
 
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(readonly children: Node<C>[]) {
-    for (const child of children) {
-      registerNodeParent(child, this);
-    }
+    attachNodesToParent(children, this);
   }
 
   abstract measure(ctx: Context<C>): Box;
@@ -201,7 +199,7 @@ export class Wrapper<C extends CanvasRenderingContext2D> implements Node<C> {
 
   constructor(inner: Node<C>) {
     this.#inner = inner;
-    registerNodeParent(this.#inner, this);
+    attachNodeToParent(this.#inner, this);
   }
 
   get inner(): Node<C> {
@@ -212,9 +210,8 @@ export class Wrapper<C extends CanvasRenderingContext2D> implements Node<C> {
     if (newNode === this.#inner) {
       return;
     }
-    unregisterNodeParent(this.#inner);
+    replaceNodeParent(this.#inner, newNode, this);
     this.#inner = newNode;
-    registerNodeParent(newNode, this);
   }
 
   measure(ctx: Context<C>): Box {

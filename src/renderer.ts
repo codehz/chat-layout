@@ -10,7 +10,7 @@ import type {
   RendererOptions,
 } from "./types";
 import { shallow, shallowMerge } from "./utils";
-import { getNodeParent } from "./registry";
+import { forEachNodeAncestor } from "./registry";
 
 /** 每个节点最多保留的约束变体数量，防止缓存无限累积 */
 const MAX_CONSTRAINT_VARIANTS = 8;
@@ -95,11 +95,10 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   invalidateNode(node: Node<C>): void {
     this.#cache.delete(node);
     this.#layoutCache.delete(node);
-    let it: Node<C> | undefined = node;
-    while ((it = getNodeParent(it))) {
-      this.#cache.delete(it);
-      this.#layoutCache.delete(it);
-    }
+    forEachNodeAncestor(node, (ancestor) => {
+      this.#cache.delete(ancestor);
+      this.#layoutCache.delete(ancestor);
+    });
   }
 
   getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined {

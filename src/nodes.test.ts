@@ -553,4 +553,17 @@ describe("Place", () => {
       "A node can only be attached to one parent. Shared nodes are not supported.",
     );
   });
+
+  test("Wrapper child replacement detaches the previous child and attaches the new one", () => {
+    const first = new Fixed<C>(10, 10);
+    const second = new Fixed<C>(20, 20);
+    const wrapper = new Place<C>(first, { align: "start" });
+
+    wrapper.inner = second;
+
+    expect(() => new PaddingBox<C>(first, { top: 1 })).not.toThrow();
+    expect(() => new PaddingBox<C>(second, { top: 1 })).toThrow(
+      "A node can only be attached to one parent. Shared nodes are not supported.",
+    );
+  });
 });
