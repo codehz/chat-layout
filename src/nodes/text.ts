@@ -1,5 +1,16 @@
-import { layoutFirstLine, layoutFirstLineIntrinsic, layoutText, layoutTextIntrinsic } from "../text";
+import { layoutFirstLine, layoutFirstLineIntrinsic, layoutText, layoutTextIntrinsic, type TextLayout } from "../text";
 import type { Box, Context, MultilineTextOptions, Node, PhysicalTextAlign, TextOptions } from "../types";
+
+type SingleLineLayout = TextLayout;
+type MultiLineLayout = {
+  width: number;
+  lines: TextLayout[];
+};
+
+type TextLayoutCacheAccess<C extends CanvasRenderingContext2D> = {
+  getTextLayout<T>(node: Node<C>, key: string): T | undefined;
+  setTextLayout<T>(node: Node<C>, key: string, layout: T): void;
+};
 
 function resolvePhysicalTextAlign(
   options: Pick<MultilineTextOptions<any>, "align" | "physicalAlign">,
@@ -20,6 +31,65 @@ function resolvePhysicalTextAlign(
   return "left";
 }
 
+function normalizeTextMaxWidth(maxWidth: number | undefined): number | undefined {
+  if (maxWidth == null) {
+    return undefined;
+  }
+  return Math.max(0, maxWidth);
+}
+
+function getTextLayoutContext<C extends CanvasRenderingContext2D>(ctx: Context<C>): Context<C> & TextLayoutCacheAccess<C> {
+  return ctx as Context<C> & TextLayoutCacheAccess<C>;
+}
+
+function readCachedTextLayout<C extends CanvasRenderingContext2D, T>(
+  node: Node<C>,
+  ctx: Context<C>,
+  key: string,
+  compute: () => T,
+): T {
+  const textCtx = getTextLayoutContext(ctx);
+  const cached = textCtx.getTextLayout<T>(node, key);
+  if (cached != null) {
+    return cached;
+  }
+  const layout = compute();
+  textCtx.setTextLayout(node, key, layout);
+  return layout;
+}
+
+function getSingleLineLayoutKey(maxWidth: number | undefined): string {
+  return maxWidth == null ? "single:intrinsic" : `single:${maxWidth}`;
+}
+
+function getMultiLineLayoutKey(maxWidth: number | undefined): string {
+  return maxWidth == null ? "multi:intrinsic" : `multi:${maxWidth}`;
+}
+
+function getSingleLineLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  text: string,
+  whitespace: TextOptions<C>["whitespace"],
+): SingleLineLayout {
+  const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+  return readCachedTextLayout(node, ctx, getSingleLineLayoutKey(maxWidth), () =>
+    maxWidth == null ? layoutFirstLineIntrinsic(ctx, text, whitespace) : layoutFirstLine(ctx, text, maxWidth, whitespace)
+  );
+}
+
+function getMultiLineLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  text: string,
+  whitespace: MultilineTextOptions<C>["whitespace"],
+): MultiLineLayout {
+  const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+  return readCachedTextLayout(node, ctx, getMultiLineLayoutKey(maxWidth), () =>
+    maxWidth == null ? layoutTextIntrinsic(ctx, text, whitespace) : layoutText(ctx, text, maxWidth, whitespace)
+  );
+}
+
 export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(
     readonly text: string,
@@ -29,10 +99,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   measure(ctx: Context<C>): Box {
     return ctx.with((g) => {
       g.font = this.options.font;
-      const maxWidth = ctx.constraints?.maxWidth;
-      const { width, lines } = maxWidth == null
-        ? layoutTextIntrinsic(ctx, this.text, this.options.whitespace)
-        : layoutText(ctx, this.text, maxWidth, this.options.whitespace);
+      const { width, lines } = getMultiLineLayout(this, ctx, this.text, this.options.whitespace);
       return { width, height: lines.length * this.options.lineHeight };
     });
   }
@@ -41,10 +108,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.style);
-      const maxWidth = ctx.constraints?.maxWidth;
-      const { lines } = maxWidth == null
-        ? layoutTextIntrinsic(ctx, this.text, this.options.whitespace)
-        : layoutText(ctx, this.text, maxWidth, this.options.whitespace);
+      const { width, lines } = getMultiLineLayout(this, ctx, this.text, this.options.whitespace);
       switch (resolvePhysicalTextAlign(this.options)) {
         case "left":
           for (const { text, shift } of lines) {
@@ -53,8 +117,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           }
           break;
         case "right": {
-          const rightWidth = Math.max(...lines.map((line) => line.width));
-          x += rightWidth;
+          x += width;
           g.textAlign = "right";
           for (const { text, shift } of lines) {
             g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
@@ -63,8 +126,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           break;
         }
         case "center": {
-          const centerWidth = Math.max(...lines.map((line) => line.width));
-          x += centerWidth / 2;
+          x += width / 2;
           g.textAlign = "center";
           for (const { text, shift } of lines) {
             g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
@@ -91,10 +153,7 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
   measure(ctx: Context<C>): Box {
     return ctx.with((g) => {
       g.font = this.options.font;
-      const maxWidth = ctx.constraints?.maxWidth;
-      const { width } = maxWidth == null
-        ? layoutFirstLineIntrinsic(ctx, this.text, this.options.whitespace)
-        : layoutFirstLine(ctx, this.text, maxWidth, this.options.whitespace);
+      const { width } = getSingleLineLayout(this, ctx, this.text, this.options.whitespace);
       return { width, height: this.options.lineHeight };
     });
   }
@@ -103,10 +162,7 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.style);
-      const maxWidth = ctx.constraints?.maxWidth;
-      const { text, shift } = maxWidth == null
-        ? layoutFirstLineIntrinsic(ctx, this.text, this.options.whitespace)
-        : layoutFirstLine(ctx, this.text, maxWidth, this.options.whitespace);
+      const { text, shift } = getSingleLineLayout(this, ctx, this.text, this.options.whitespace);
       g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
       return false;
     });

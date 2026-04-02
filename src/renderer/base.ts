@@ -18,6 +18,11 @@ type LayoutCacheAccess<C extends CanvasRenderingContext2D> = {
   setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void;
 };
 
+type TextLayoutCacheAccess<C extends CanvasRenderingContext2D> = {
+  getTextLayout<T>(node: Node<C>, key: string): T | undefined;
+  setTextLayout<T>(node: Node<C>, key: string, layout: T): void;
+};
+
 type BoxCacheEntry = {
   revision: number;
   box: Box;
@@ -28,7 +33,12 @@ type LayoutCacheEntry<C extends CanvasRenderingContext2D> = {
   layout: FlexLayoutResult<C>;
 };
 
-type RendererContext<C extends CanvasRenderingContext2D> = Context<C> & LayoutCacheAccess<C>;
+type TextLayoutCacheEntry = {
+  revision: number;
+  layout: unknown;
+};
+
+type RendererContext<C extends CanvasRenderingContext2D> = Context<C> & LayoutCacheAccess<C> & TextLayoutCacheAccess<C>;
 
 function constraintKey(constraints: LayoutConstraints | undefined): string {
   if (constraints == null) return "";
@@ -41,6 +51,7 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   #lastWidth: number;
   #cache = new WeakMap<Node<C>, Map<string, BoxCacheEntry>>();
   #layoutCache = new WeakMap<Node<C>, Map<string, LayoutCacheEntry<C>>>();
+  #textLayoutCache = new WeakMap<Node<C>, Map<string, TextLayoutCacheEntry>>();
 
   protected get context(): Context<C> {
     return shallow(this.#ctx);
@@ -64,6 +75,12 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints) {
         self.setLayoutResult(node, result, constraints);
       },
+      getTextLayout<T>(node: Node<C>, key: string) {
+        return self.getTextLayout<T>(node, key);
+      },
+      setTextLayout<T>(node: Node<C>, key: string, layout: T) {
+        self.setTextLayout(node, key, layout);
+      },
       invalidateNode: this.invalidateNode.bind(this),
       resolveDynValue<T>(value: DynValue<C, T>): T {
         if (typeof value === "function") {
@@ -81,6 +98,21 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       },
     };
     this.#lastWidth = this.graphics.canvas.clientWidth;
+  }
+
+  #clearAllCaches(): void {
+    this.#cache = new WeakMap<Node<C>, Map<string, BoxCacheEntry>>();
+    this.#layoutCache = new WeakMap<Node<C>, Map<string, LayoutCacheEntry<C>>>();
+    this.#textLayoutCache = new WeakMap<Node<C>, Map<string, TextLayoutCacheEntry>>();
+  }
+
+  #syncCachesToViewportWidth(): void {
+    const width = this.graphics.canvas.clientWidth;
+    if (this.#lastWidth === width) {
+      return;
+    }
+    this.#clearAllCaches();
+    this.#lastWidth = width;
   }
 
   protected getRootConstraints(): LayoutConstraints {
@@ -110,15 +142,19 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   }
 
   invalidateNode(node: Node<C>): void {
+    this.#syncCachesToViewportWidth();
     this.#cache.delete(node);
     this.#layoutCache.delete(node);
+    this.#textLayoutCache.delete(node);
     forEachNodeAncestor(node, (ancestor) => {
       this.#cache.delete(ancestor);
       this.#layoutCache.delete(ancestor);
+      this.#textLayoutCache.delete(ancestor);
     });
   }
 
   getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined {
+    this.#syncCachesToViewportWidth();
     const nodeCache = this.#layoutCache.get(node);
     if (nodeCache == null) {
       return undefined;
@@ -136,6 +172,7 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   }
 
   setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void {
+    this.#syncCachesToViewportWidth();
     let nodeCache = this.#layoutCache.get(node);
     if (nodeCache == null) {
       nodeCache = new Map();
@@ -150,12 +187,42 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     });
   }
 
+  protected getTextLayout<T>(node: Node<C>, key: string): T | undefined {
+    this.#syncCachesToViewportWidth();
+    const nodeCache = this.#textLayoutCache.get(node);
+    if (nodeCache == null) {
+      return undefined;
+    }
+    const cached = nodeCache.get(key);
+    if (cached == null) {
+      return undefined;
+    }
+    if (cached.revision !== getNodeRevision(node)) {
+      nodeCache.delete(key);
+      return undefined;
+    }
+    return cached.layout as T;
+  }
+
+  protected setTextLayout<T>(node: Node<C>, key: string, layout: T): void {
+    this.#syncCachesToViewportWidth();
+    let nodeCache = this.#textLayoutCache.get(node);
+    if (nodeCache == null) {
+      nodeCache = new Map();
+      this.#textLayoutCache.set(node, nodeCache);
+    } else if (nodeCache.size >= MAX_CONSTRAINT_VARIANTS) {
+      const firstKey = nodeCache.keys().next().value!;
+      nodeCache.delete(firstKey);
+    }
+    nodeCache.set(key, {
+      revision: getNodeRevision(node),
+      layout,
+    });
+  }
+
   measureNode(node: Node<C>, constraints?: LayoutConstraints): Box {
-    if (this.#lastWidth !== this.graphics.canvas.clientWidth) {
-      this.#cache = new WeakMap<Node<C>, Map<string, BoxCacheEntry>>();
-      this.#layoutCache = new WeakMap<Node<C>, Map<string, LayoutCacheEntry<C>>>();
-      this.#lastWidth = this.graphics.canvas.clientWidth;
-    } else {
+    this.#syncCachesToViewportWidth();
+    {
       const nodeCache = this.#cache.get(node);
       if (nodeCache != null) {
         const key = constraintKey(constraints);
