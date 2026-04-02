@@ -1,4 +1,14 @@
-import type { Box, Context, DynValue, HitTest, LayoutConstraints, Node, RenderFeedback, RendererOptions } from "./types";
+import type {
+  Box,
+  Context,
+  DynValue,
+  FlexLayoutResult,
+  HitTest,
+  LayoutConstraints,
+  Node,
+  RenderFeedback,
+  RendererOptions,
+} from "./types";
 import { shallow, shallowMerge } from "./utils";
 import { getNodeParent } from "./registry";
 
@@ -15,6 +25,7 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   #ctx: Context<C>;
   #lastWidth: number;
   #cache = new WeakMap<Node<C>, Map<string, Box>>();
+  #layoutCache = new WeakMap<Node<C>, Map<string, FlexLayoutResult<C>>>();
 
   protected get context(): Context<C> {
     return shallow(this.#ctx);
@@ -40,6 +51,12 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       measureNode(node: Node<C>, constraints?: LayoutConstraints) {
         return self.measureNode(node, constraints);
       },
+      getLayoutResult(node: Node<C>, constraints?: LayoutConstraints) {
+        return self.getLayoutResult(node, constraints);
+      },
+      setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints) {
+        self.setLayoutResult(node, result, constraints);
+      },
       invalidateNode: this.invalidateNode.bind(this),
       resolveDynValue<T>(value: DynValue<C, T>): T {
         if (typeof value === "function") {
@@ -61,15 +78,38 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
 
   invalidateNode(node: Node<C>): void {
     this.#cache.delete(node);
+    this.#layoutCache.delete(node);
     let it: Node<C> | undefined = node;
     while ((it = getNodeParent(it))) {
       this.#cache.delete(it);
+      this.#layoutCache.delete(it);
     }
+  }
+
+  getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined {
+    const nodeCache = this.#layoutCache.get(node);
+    if (nodeCache == null) {
+      return undefined;
+    }
+    return nodeCache.get(constraintKey(constraints));
+  }
+
+  setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void {
+    let nodeCache = this.#layoutCache.get(node);
+    if (nodeCache == null) {
+      nodeCache = new Map();
+      this.#layoutCache.set(node, nodeCache);
+    } else if (nodeCache.size >= MAX_CONSTRAINT_VARIANTS) {
+      const firstKey = nodeCache.keys().next().value!;
+      nodeCache.delete(firstKey);
+    }
+    nodeCache.set(constraintKey(constraints), result);
   }
 
   measureNode(node: Node<C>, constraints?: LayoutConstraints): Box {
     if (this.#lastWidth !== this.graphics.canvas.clientWidth) {
       this.#cache = new WeakMap<Node<C>, Map<string, Box>>();
+      this.#layoutCache = new WeakMap<Node<C>, Map<string, FlexLayoutResult<C>>>();
       this.#lastWidth = this.graphics.canvas.clientWidth;
     } else {
       const nodeCache = this.#cache.get(node);

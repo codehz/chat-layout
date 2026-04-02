@@ -4,19 +4,28 @@ import type {
   ChildLayoutResult,
   Context,
   DynValue,
-  FlexLayoutResult,
   HitTest,
-  LayoutRect,
+  LayoutConstraints,
   Node,
 } from "./types";
-import { createRect, offsetRect, pointInRect } from "./layout";
-import { layoutFirstLine, layoutText, type TextLayout } from "./text";
+import { createRect, pointInRect } from "./layout";
+import { layoutFirstLine, layoutText } from "./text";
 import { shallow, shallowMerge } from "./utils";
 import { registerNodeParent, unregisterNodeParent } from "./registry";
 
-export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
-  #layoutResult?: FlexLayoutResult<C>;
+function withConstraints<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  constraints: LayoutConstraints | undefined,
+): Context<C> {
+  const next = shallow(ctx);
+  next.constraints = constraints;
+  if (constraints?.maxWidth != null) {
+    next.remainingWidth = constraints.maxWidth;
+  }
+  return next;
+}
 
+export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(readonly children: Node<C>[]) {
     for (const child of children) {
       registerNodeParent(child, this);
@@ -29,20 +38,6 @@ export abstract class Group<C extends CanvasRenderingContext2D> implements Node<
 
   get flex(): boolean {
     return this.children.some((item) => item.flex);
-  }
-
-  /**
-   * 获取最近的布局结果（如果有）
-   */
-  get layoutResult(): FlexLayoutResult<C> | undefined {
-    return this.#layoutResult;
-  }
-
-  /**
-   * 设置布局结果
-   */
-  protected setLayoutResult(result: FlexLayoutResult<C>): void {
-    this.#layoutResult = result;
   }
 }
 
@@ -105,18 +100,18 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
         )
       : contentBox;
     
-    this.setLayoutResult({
+    ctx.setLayoutResult(this, {
       containerBox,
       contentBox,
       children: childResults,
       constraints: ctx.constraints,
-    });
+    }, ctx.constraints);
     
     return { width, height };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    const layoutResult = this.layoutResult;
+    const layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     if (!layoutResult) {
       // 退回到旧逻辑
       return this.drawLegacy(ctx, x, y);
@@ -129,7 +124,7 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
     }
 
     for (const childResult of layoutResult.children) {
-      const curCtx = shallow(ctx);
+      const curCtx = withConstraints(ctx, childResult.constraints);
       let offsetX = 0;
       
       if (alignment === "right") {
@@ -182,7 +177,7 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
-    const layoutResult = this.layoutResult;
+    const layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     if (!layoutResult) {
       // 退回到旧逻辑
       return this.hittestLegacy(ctx, test);
@@ -204,8 +199,8 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
       const localX = test.x - offsetX;
       const localY = test.y - childResult.rect.y;
       
-      if (pointInRect(localX, localY, childResult.rect)) {
-        const curCtx = shallow(ctx);
+      if (pointInRect(localX, localY, createRect(0, 0, childResult.rect.width, childResult.rect.height))) {
+        const curCtx = withConstraints(ctx, childResult.constraints);
         return childResult.node.hittest(
           curCtx,
           shallowMerge(test, {
@@ -361,18 +356,18 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
         )
       : contentBox;
     
-    this.setLayoutResult({
+    ctx.setLayoutResult(this, {
       containerBox,
       contentBox,
       children: childResults,
       constraints: ctx.constraints,
-    });
+    }, ctx.constraints);
 
     return { width, height };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
-    const layoutResult = this.layoutResult;
+    const layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     if (!layoutResult) {
       // 退回到旧逻辑
       return this.drawLegacy(ctx, x, y);
@@ -388,7 +383,7 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
     const children = reverse ? [...layoutResult.children].reverse() : layoutResult.children;
     
     for (const childResult of children) {
-      const curCtx = shallow(ctx);
+      const curCtx = withConstraints(ctx, childResult.constraints);
       const drawX = x + (reverse ? layoutResult.contentBox.width - childResult.rect.x - childResult.rect.width : childResult.rect.x);
       const drawY = y + childResult.rect.y;
       
@@ -465,7 +460,7 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
-    const layoutResult = this.layoutResult;
+    const layoutResult = ctx.getLayoutResult(this, ctx.constraints);
     if (!layoutResult) {
       // 退回到旧逻辑
       return this.hittestLegacy(ctx, test);
@@ -486,8 +481,8 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
       const localX = test.x - offsetX;
       const localY = test.y - childResult.rect.y;
       
-      if (pointInRect(localX, localY, childResult.rect)) {
-        const curCtx = shallow(ctx);
+      if (pointInRect(localX, localY, createRect(0, 0, childResult.rect.width, childResult.rect.height))) {
+        const curCtx = withConstraints(ctx, childResult.constraints);
         return childResult.node.hittest(
           curCtx,
           shallowMerge(test, {

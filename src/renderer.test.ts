@@ -1,10 +1,47 @@
 import { describe, expect, test } from "bun:test";
 
+import { AlignBox, Fixed, HStack, MultilineText, Text } from "./nodes";
 import { BaseRenderer, ChatRenderer, ListState, TimelineRenderer, memoRenderItem } from "./renderer";
 import type { Box, Context, HitTest, LayoutConstraints, Node, RenderFeedback } from "./types";
 import { registerNodeParent, unregisterNodeParent } from "./registry";
 
 type C = CanvasRenderingContext2D;
+
+class MockOffscreenCanvasRenderingContext2D {
+  font = "16px sans-serif";
+
+  measureText(text: string): TextMetrics {
+    return {
+      width: text.length * 8,
+      actualBoundingBoxAscent: 8,
+      actualBoundingBoxDescent: 2,
+      fontBoundingBoxAscent: 8,
+      fontBoundingBoxDescent: 2,
+    } as TextMetrics;
+  }
+}
+
+class MockOffscreenCanvas {
+  constructor(
+    readonly width: number,
+    readonly height: number,
+  ) {}
+
+  getContext(type: string): MockOffscreenCanvasRenderingContext2D | null {
+    if (type !== "2d") {
+      return null;
+    }
+    return new MockOffscreenCanvasRenderingContext2D();
+  }
+}
+
+if (typeof globalThis.OffscreenCanvas === "undefined") {
+  Object.defineProperty(globalThis, "OffscreenCanvas", {
+    configurable: true,
+    writable: true,
+    value: MockOffscreenCanvas,
+  });
+}
 
 function createGraphics(viewportHeight: number): C {
   return {
@@ -14,9 +51,68 @@ function createGraphics(viewportHeight: number): C {
     },
     textRendering: "auto",
     clearRect() {},
+    fillText() {},
+    measureText() {
+      return {
+        width: 0,
+        fontBoundingBoxAscent: 8,
+        fontBoundingBoxDescent: 2,
+      } as TextMetrics;
+    },
     save() {},
     restore() {},
   } as unknown as C;
+}
+
+function createTextGraphics(viewportWidth = 320, viewportHeight = 100): C {
+  return {
+    canvas: {
+      clientWidth: viewportWidth,
+      clientHeight: viewportHeight,
+    },
+    fillStyle: "#000",
+    font: "16px sans-serif",
+    textAlign: "left",
+    textRendering: "auto",
+    clearRect() {},
+    fillText() {},
+    measureText(text: string) {
+      return {
+        width: text.length * 8,
+        fontBoundingBoxAscent: 8,
+        fontBoundingBoxDescent: 2,
+      } as TextMetrics;
+    },
+    save() {},
+    restore() {},
+  } as unknown as C;
+}
+
+class ConstraintTestRenderer extends BaseRenderer<C> {
+  #contextWithConstraints(constraints?: LayoutConstraints): Context<C> {
+    const ctx = this.context;
+    ctx.constraints = constraints;
+    if (constraints?.maxWidth != null) {
+      ctx.remainingWidth = constraints.maxWidth;
+    }
+    return ctx;
+  }
+
+  drawNode(node: Node<C>, constraints?: LayoutConstraints): boolean {
+    return node.draw(this.#contextWithConstraints(constraints), 0, 0);
+  }
+
+  hittestNode(node: Node<C>, test: HitTest, constraints?: LayoutConstraints): boolean {
+    return node.hittest(this.#contextWithConstraints(constraints), test);
+  }
+}
+
+function createTextNode(text: string): Text<C> {
+  return new Text(text, {
+    lineHeight: 20,
+    font: "16px sans-serif",
+    style: "#000",
+  });
 }
 
 function createNode(height: number): Node<C> {
@@ -1104,5 +1200,105 @@ describe("constraint-aware cache", () => {
     // 早期被驱逐的条目需要重新测量
     renderer.measureNode(node, { maxWidth: 1 });
     expect(calls).toBe(callsBefore + 1);
+  });
+});
+
+describe("stateless layout results", () => {
+  test("group layout results stay isolated across repeated constraint measurements", () => {
+    const drawXs: number[] = [];
+    const hitXs: number[] = [];
+    const follower: Node<C> = {
+      flex: false,
+      measure() {
+        return { width: 20, height: 20 };
+      },
+      draw(_ctx, x) {
+        drawXs.push(x);
+        return false;
+      },
+      hittest(_ctx, test) {
+        hitXs.push(test.x);
+        return true;
+      },
+    };
+
+    const node = new HStack<C>([
+      new AlignBox(createTextNode("alpha beta gamma delta epsilon zeta eta theta"), {
+        alignment: "right",
+      }),
+      follower,
+    ]);
+    const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
+
+    renderer.measureNode(node, { maxWidth: 200 });
+    renderer.measureNode(node, { maxWidth: 100 });
+
+    renderer.drawNode(node, { maxWidth: 200 });
+    expect(drawXs.at(-1)).toBe(200);
+
+    expect(renderer.hittestNode(node, { x: 210, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
+    expect(hitXs.at(-1)).toBe(10);
+  });
+
+  test("nested groups draw and hittest with their own child constraints", () => {
+    const drawXs: number[] = [];
+    const hitXs: number[] = [];
+    const tail: Node<C> = {
+      flex: false,
+      measure() {
+        return { width: 20, height: 20 };
+      },
+      draw(_ctx, x) {
+        drawXs.push(x);
+        return false;
+      },
+      hittest(_ctx, test) {
+        hitXs.push(test.x);
+        return true;
+      },
+    };
+
+    const nested = new HStack<C>([
+      new AlignBox(createTextNode("alpha beta gamma delta epsilon zeta eta theta"), {
+        alignment: "right",
+      }),
+      tail,
+    ]);
+    const root = new HStack<C>([new Fixed(30, 20), nested]);
+    const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
+
+    renderer.measureNode(root, { maxWidth: 200 });
+    renderer.measureNode(root, { maxWidth: 100 });
+
+    renderer.drawNode(root, { maxWidth: 200 });
+    expect(drawXs.at(-1)).toBe(200);
+
+    expect(renderer.hittestNode(root, { x: 210, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
+    expect(hitXs.at(-1)).toBe(10);
+  });
+
+  test("text nodes measure safely across multiple constraint variants", () => {
+    const renderer = new BaseRenderer(createTextGraphics(), {});
+    const singleLine = createTextNode("alpha beta gamma delta epsilon zeta eta theta");
+    const multiLine = new MultilineText<C>("alpha beta gamma delta epsilon zeta eta theta\niota kappa lambda mu nu xi omicron", {
+      alignment: "left",
+      lineHeight: 20,
+      font: "16px sans-serif",
+      style: "#000",
+    });
+
+    const wideSingle = renderer.measureNode(singleLine, { maxWidth: 200 });
+    const narrowSingle = renderer.measureNode(singleLine, { maxWidth: 60 });
+    const wideSingleAgain = renderer.measureNode(singleLine, { maxWidth: 200 });
+    expect(wideSingleAgain).toEqual(wideSingle);
+    expect(narrowSingle.width).toBeLessThanOrEqual(60);
+    expect(wideSingle.width).toBeGreaterThanOrEqual(narrowSingle.width);
+
+    const wideMulti = renderer.measureNode(multiLine, { maxWidth: 200 });
+    const narrowMulti = renderer.measureNode(multiLine, { maxWidth: 60 });
+    const wideMultiAgain = renderer.measureNode(multiLine, { maxWidth: 200 });
+    expect(wideMultiAgain).toEqual(wideMulti);
+    expect(narrowMulti.width).toBeLessThanOrEqual(60);
+    expect(narrowMulti.height).toBeGreaterThanOrEqual(wideMulti.height);
   });
 });
