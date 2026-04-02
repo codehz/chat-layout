@@ -35,9 +35,6 @@ class ConstraintTestRenderer extends BaseRenderer<C> {
   #contextWithConstraints(constraints?: LayoutConstraints): Context<C> {
     const ctx = this.context;
     ctx.constraints = constraints;
-    if (constraints?.maxWidth != null) {
-      ctx.remainingWidth = constraints.maxWidth;
-    }
     return ctx;
   }
 
@@ -52,7 +49,6 @@ class ConstraintTestRenderer extends BaseRenderer<C> {
 
 function createProbe(label: string, width = 10, height = 10, draws: ProbeDraw[] = [], hits: ProbeHit[] = []): Node<C> {
   return {
-    flex: false,
     measure() {
       return { width, height };
     },
@@ -227,5 +223,23 @@ describe("Flex", () => {
     expect(renderer.hittestNode(node, { x: 5, y: 5, type: "click" }, constraints)).toBe(true);
     expect(hits[0]).toEqual({ x: 5, y: 5, label: "grow" });
     expect(renderer.hittestNode(node, { x: 50, y: 5, type: "click" }, constraints)).toBe(false);
+  });
+
+  test("only FlexItem enables grow behavior", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const constraints = { maxWidth: 100 };
+
+    const plain = new Flex<C>([new Fixed(10, 10)], {
+      direction: "row",
+    });
+    const explicit = new Flex<C>([new FlexItem(new Fixed(10, 10), { grow: 1 })], {
+      direction: "row",
+    });
+
+    renderer.measureNode(plain, constraints);
+    renderer.measureNode(explicit, constraints);
+
+    expect(renderer.getLayoutResult(plain, constraints)?.children[0]?.rect.width).toBe(10);
+    expect(renderer.getLayoutResult(explicit, constraints)?.children[0]?.rect.width).toBe(100);
   });
 });

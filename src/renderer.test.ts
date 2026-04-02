@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { AlignBox, Fixed, HStack, MultilineText, Text } from "./nodes";
-import { BaseRenderer, ChatRenderer, ListState, TimelineRenderer, memoRenderItem } from "./renderer";
+import { Fixed, Flex, FlexItem, MultilineText, Place, Text } from "./nodes";
+import { BaseRenderer, ChatRenderer, DebugRenderer, ListState, TimelineRenderer, memoRenderItem } from "./renderer";
 import type { Box, Context, HitTest, LayoutConstraints, Node, RenderFeedback } from "./types";
 import { registerNodeParent, unregisterNodeParent } from "./registry";
 
@@ -92,9 +92,6 @@ class ConstraintTestRenderer extends BaseRenderer<C> {
   #contextWithConstraints(constraints?: LayoutConstraints): Context<C> {
     const ctx = this.context;
     ctx.constraints = constraints;
-    if (constraints?.maxWidth != null) {
-      ctx.remainingWidth = constraints.maxWidth;
-    }
     return ctx;
   }
 
@@ -117,7 +114,6 @@ function createTextNode(text: string): Text<C> {
 
 function createNode(height: number): Node<C> {
   return {
-    flex: false,
     measure(_ctx: Context<C>): Box {
       return { width: 320, height };
     },
@@ -977,7 +973,6 @@ describe("RenderFeedback", () => {
     const makeItems = (): Item[] => Array.from({ length: 1000 }, () => ({ height: 12 }));
     const measureCount = { count: 0 };
     const renderItem = memoRenderItem<C, Item>((item) => ({
-      flex: false,
       measure(_ctx: Context<C>): Box {
         measureCount.count += 1;
         return { width: 320, height: item.height };
@@ -1039,7 +1034,6 @@ describe("constraint-aware cache", () => {
 
   function createConstraintAwareNode(measureFn: (constraints: LayoutConstraints | undefined) => Box): Node<C> {
     return {
-      flex: false,
       measure(ctx: Context<C>): Box {
         return measureFn(ctx.constraints);
       },
@@ -1203,12 +1197,84 @@ describe("constraint-aware cache", () => {
   });
 });
 
+describe("root constraints", () => {
+  test("DebugRenderer supplies viewport maxWidth to root draw and hittest", () => {
+    const seen: Array<number | undefined> = [];
+    const node: Node<C> = {
+      measure(ctx) {
+        seen.push(ctx.constraints?.maxWidth);
+        return { width: 0, height: 0 };
+      },
+      draw(ctx) {
+        seen.push(ctx.constraints?.maxWidth);
+        return false;
+      },
+      hittest(ctx) {
+        seen.push(ctx.constraints?.maxWidth);
+        return true;
+      },
+    };
+
+    const renderer = new DebugRenderer(createTextGraphics(180, 100), {});
+    renderer.draw(node);
+    renderer.hittest(node, { x: 0, y: 0, type: "click" });
+
+    expect(seen).toEqual([180, 180]);
+  });
+
+  test("virtualized renderers measure items with viewport maxWidth", () => {
+    const timelineWidths: Array<number | undefined> = [];
+    const chatWidths: Array<number | undefined> = [];
+    const list = new ListState<number>();
+    list.push(1);
+
+    const timeline = new TimelineRenderer(createTextGraphics(180, 100), {
+      list,
+      renderItem: () => ({
+        measure(ctx) {
+          timelineWidths.push(ctx.constraints?.maxWidth);
+          return { width: 0, height: 20 };
+        },
+        draw() {
+          return false;
+        },
+        hittest() {
+          return false;
+        },
+      }),
+    });
+
+    const chatList = new ListState<number>();
+    chatList.push(1);
+    const chat = new ChatRenderer(createTextGraphics(220, 100), {
+      list: chatList,
+      renderItem: () => ({
+        measure(ctx) {
+          chatWidths.push(ctx.constraints?.maxWidth);
+          return { width: 0, height: 20 };
+        },
+        draw() {
+          return false;
+        },
+        hittest() {
+          return false;
+        },
+      }),
+    });
+
+    timeline.render();
+    chat.render();
+
+    expect(timelineWidths).toContain(180);
+    expect(chatWidths).toContain(220);
+  });
+});
+
 describe("stateless layout results", () => {
-  test("group layout results stay isolated across repeated constraint measurements", () => {
+  test("place layout results stay isolated across repeated constraint measurements", () => {
     const drawXs: number[] = [];
     const hitXs: number[] = [];
     const follower: Node<C> = {
-      flex: false,
       measure() {
         return { width: 20, height: 20 };
       },
@@ -1222,21 +1288,18 @@ describe("stateless layout results", () => {
       },
     };
 
-    const node = new HStack<C>([
-      new AlignBox(createTextNode("alpha beta gamma delta epsilon zeta eta theta"), {
-        alignment: "right",
-      }),
-      follower,
-    ]);
+    const node = new Place<C>(follower, {
+      align: "end",
+    });
     const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
 
     renderer.measureNode(node, { maxWidth: 200 });
     renderer.measureNode(node, { maxWidth: 100 });
 
     renderer.drawNode(node, { maxWidth: 200 });
-    expect(drawXs.at(-1)).toBe(200);
+    expect(drawXs.at(-1)).toBe(180);
 
-    expect(renderer.hittestNode(node, { x: 210, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
+    expect(renderer.hittestNode(node, { x: 190, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
     expect(hitXs.at(-1)).toBe(10);
   });
 
@@ -1244,7 +1307,6 @@ describe("stateless layout results", () => {
     const drawXs: number[] = [];
     const hitXs: number[] = [];
     const tail: Node<C> = {
-      flex: false,
       measure() {
         return { width: 20, height: 20 };
       },
@@ -1258,22 +1320,24 @@ describe("stateless layout results", () => {
       },
     };
 
-    const nested = new HStack<C>([
-      new AlignBox(createTextNode("alpha beta gamma delta epsilon zeta eta theta"), {
-        alignment: "right",
-      }),
-      tail,
-    ]);
-    const root = new HStack<C>([new Fixed(30, 20), nested]);
+    const nested = new Place<C>(tail, {
+      align: "end",
+    });
+    const root = new Flex<C>([
+      new Fixed(30, 20),
+      new FlexItem(nested, { grow: 1 }),
+    ], {
+      direction: "row",
+    });
     const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
 
     renderer.measureNode(root, { maxWidth: 200 });
     renderer.measureNode(root, { maxWidth: 100 });
 
     renderer.drawNode(root, { maxWidth: 200 });
-    expect(drawXs.at(-1)).toBe(200);
+    expect(drawXs.at(-1)).toBe(180);
 
-    expect(renderer.hittestNode(root, { x: 210, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
+    expect(renderer.hittestNode(root, { x: 190, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
     expect(hitXs.at(-1)).toBe(10);
   });
 

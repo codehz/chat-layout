@@ -10,8 +10,6 @@ The current recommended APIs are:
 - `Text` / `MultilineText` `alignment` for text content alignment
 - `ChatRenderer` plus `ListState` for virtualized chat rendering
 
-Legacy `HStack` / `VStack` / `AlignBox` still exist as compatibility wrappers, but new code should prefer the v2 APIs above.
-
 **Layout Model**
 `Flex` and `Place` split layout concerns more clearly than the older API:
 
@@ -89,7 +87,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
 That combination gives you:
 
 - explicit row/column structure
-- explicit grow behavior instead of legacy `child.flex`
+- explicit grow behavior through `FlexItem`
 - left/right chat placement through `Place`
 - wrapped message bubbles that respect available width
 

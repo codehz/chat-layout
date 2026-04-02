@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { AlignBox, Fixed, HStack, MultilineText, PaddingBox, Place, Text, VStack } from "./nodes";
+import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, Text } from "./nodes";
 import { BaseRenderer } from "./renderer";
 import type { Context, HitTest, LayoutConstraints, Node } from "./types";
 
@@ -75,9 +75,6 @@ class ConstraintTestRenderer extends BaseRenderer<C> {
   #contextWithConstraints(constraints?: LayoutConstraints): Context<C> {
     const ctx = this.context;
     ctx.constraints = constraints;
-    if (constraints?.maxWidth != null) {
-      ctx.remainingWidth = constraints.maxWidth;
-    }
     return ctx;
   }
 
@@ -101,7 +98,6 @@ function createProbeNode(): {
     draws,
     hits,
     node: {
-      flex: false,
       measure() {
         return { width: 20, height: 10 };
       },
@@ -117,24 +113,8 @@ function createProbeNode(): {
   };
 }
 
-function createBubble(): PaddingBox<C> {
-  return new PaddingBox(
-    new Text("alpha beta gamma delta epsilon zeta eta theta", {
-      lineHeight: 20,
-      font: "16px sans-serif",
-      style: "#000",
-    }),
-    {
-      top: 6,
-      bottom: 6,
-      left: 10,
-      right: 10,
-    },
-  );
-}
-
 function createChatLikeBubble(message: string): Place<C> {
-  const senderLine = new HStack<C>(
+  const senderLine = new Flex<C>(
     [
       new PaddingBox(
         new Text("A", {
@@ -145,7 +125,7 @@ function createChatLikeBubble(message: string): Place<C> {
       ),
       new Fixed(15, 15),
     ],
-    { gap: 4, expand: false },
+    { direction: "row", gap: 4, expandMain: false },
   );
 
   const content = new PaddingBox(
@@ -163,13 +143,18 @@ function createChatLikeBubble(message: string): Place<C> {
     },
   );
 
-  const row = new HStack<C>(
+  const body = new Flex<C>(
+    [senderLine, content],
+    { direction: "column", alignItems: "start" },
+  );
+
+  const row = new Flex<C>(
     [
       new Fixed(32, 32),
-      new VStack<C>([senderLine, content]),
+      new FlexItem(body, { grow: 1 }),
       new Fixed(32, 0),
     ],
-    { gap: 4 },
+    { direction: "row", gap: 4 },
   );
 
   return new Place<C>(
@@ -219,23 +204,19 @@ describe("Place", () => {
     expect(renderer.hittestNode(place, { x: 5, y: 5, type: "click" }, constraints)).toBe(false);
   });
 
-  test("matches AlignBox for a padded text bubble migration", () => {
+  test("shrink-wraps when no maxWidth constraint is available", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
-    const constraints = { maxWidth: 180 };
-    const legacy = new AlignBox<C>(createBubble(), { alignment: "right" });
-    const modern = new Place<C>(createBubble(), { align: "end" });
+    const node = new Place<C>(new Fixed(20, 10), { align: "end" });
 
-    const legacyBox = renderer.measureNode(legacy, constraints);
-    const modernBox = renderer.measureNode(modern, constraints);
-    const legacyLayout = renderer.getLayoutResult(legacy, constraints);
-    const modernLayout = renderer.getLayoutResult(modern, constraints);
+    const box = renderer.measureNode(node);
+    const layout = renderer.getLayoutResult(node);
 
-    expect(modernBox).toEqual(legacyBox);
-    expect(modernLayout?.containerBox).toEqual(legacyLayout?.containerBox);
-    expect(modernLayout?.children[0]?.rect).toEqual(legacyLayout?.children[0]?.rect);
+    expect(box).toEqual({ width: 20, height: 10 });
+    expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 20, height: 10 });
+    expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 20, height: 10 });
   });
 
-  test("bridges top-level remainingWidth into child maxWidth constraints for chat bubbles", () => {
+  test("chat bubbles only wrap when maxWidth is passed explicitly", () => {
     const renderer = new BaseRenderer(createGraphics(320, 200), {});
     const node = createChatLikeBubble("long message ".repeat(30));
 
@@ -244,10 +225,10 @@ describe("Place", () => {
     const constrainedBox = renderer.measureNode(node, { maxWidth: 320 });
     const constrainedLayout = renderer.getLayoutResult(node, { maxWidth: 320 });
 
-    expect(unconstrainedBox.width).toBe(320);
+    expect(unconstrainedBox.width).toBeGreaterThan(constrainedBox.width);
     expect(unconstrainedLayout?.children[0]?.rect.width).toBeLessThanOrEqual(unconstrainedBox.width);
-    expect(unconstrainedBox).toEqual(constrainedBox);
-    expect(unconstrainedLayout?.children[0]?.rect).toEqual(constrainedLayout?.children[0]?.rect);
+    expect(constrainedBox.width).toBe(320);
+    expect(constrainedLayout?.children[0]?.rect.width).toBeLessThanOrEqual(constrainedBox.width);
   });
 
   test("does not synthesize child maxWidth constraints when expand=false", () => {
@@ -268,9 +249,9 @@ describe("Place", () => {
     expect(layout?.children[0]?.constraints).toBeUndefined();
   });
 
-  test("VStack right alignment pins a narrower sender line to the bubble's right edge", () => {
+  test("column end alignment pins a narrower sender line to the bubble's right edge", () => {
     const renderer = new BaseRenderer(createGraphics(320, 100), {});
-    const senderLine = new HStack<C>(
+    const senderLine = new Flex<C>(
       [
         new PaddingBox(
           new Text("A", {
@@ -281,7 +262,7 @@ describe("Place", () => {
         ),
         new Fixed(15, 15),
       ],
-      { gap: 4, expand: false },
+      { direction: "row", gap: 4, expandMain: false },
     );
     const content = new PaddingBox(
       new MultilineText("longer bubble content", {
@@ -297,7 +278,10 @@ describe("Place", () => {
         right: 10,
       },
     );
-    const column = new VStack<C>([senderLine, content], { alignment: "right" });
+    const column = new Flex<C>([senderLine, content], {
+      direction: "column",
+      alignItems: "end",
+    });
 
     renderer.measureNode(column, { maxWidth: 240 });
     const layout = renderer.getLayoutResult(column, { maxWidth: 240 });

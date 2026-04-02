@@ -15,8 +15,6 @@ export interface RenderFeedback {
   max: number;
 }
 
-export type Alignment = "left" | "center" | "right";
-
 // v2 Flex Layout types
 export type Axis = "row" | "column";
 
@@ -58,13 +56,6 @@ export interface FlexContainerOptions {
 export interface Context<C extends CanvasRenderingContext2D> {
   graphics: C;
 
-  /** @deprecated 使用 constraints.maxWidth 替代 */
-  remainingWidth: number;
-  /** @deprecated 布局对齐请使用 Place.align、Flex.alignItems 或 FlexItem.alignSelf */
-  alignment: Alignment;
-  /** @deprecated 使用 Flex 的 reverse 选项替代 */
-  reverse: boolean;
-
   /** v2: 显式布局约束 */
   constraints?: LayoutConstraints;
 
@@ -91,8 +82,6 @@ export interface Node<C extends CanvasRenderingContext2D> {
   measure(ctx: Context<C>): Box;
   draw(ctx: Context<C>, x: number, y: number): boolean;
   hittest(ctx: Context<C>, test: HitTest): boolean;
-  /** @deprecated 不再推荐依赖 child.flex，改用 FlexItem(child, { grow: 1 }) */
-  readonly flex: boolean;
 }
 
 // v2: 统一布局结果结构

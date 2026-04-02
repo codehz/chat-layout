@@ -40,14 +40,6 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     const self = this;
     this.#ctx = {
       graphics: this.graphics,
-      get remainingWidth() {
-        return this.graphics.canvas.clientWidth;
-      },
-      set remainingWidth(value: number) {
-        Object.defineProperty(this, "remainingWidth", { value, writable: true });
-      },
-      alignment: "left",
-      reverse: false,
       measureNode(node: Node<C>, constraints?: LayoutConstraints) {
         return self.measureNode(node, constraints);
       },
@@ -74,6 +66,30 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       },
     };
     this.#lastWidth = this.graphics.canvas.clientWidth;
+  }
+
+  protected getRootConstraints(): LayoutConstraints {
+    return {
+      maxWidth: this.graphics.canvas.clientWidth,
+    };
+  }
+
+  protected getRootContext(): Context<C> {
+    const ctx = this.context;
+    ctx.constraints = this.getRootConstraints();
+    return ctx;
+  }
+
+  protected measureRootNode(node: Node<C>): Box {
+    return this.measureNode(node, this.getRootConstraints());
+  }
+
+  protected drawRootNode(node: Node<C>, x = 0, y = 0): boolean {
+    return node.draw(this.getRootContext(), x, y);
+  }
+
+  protected hittestRootNode(node: Node<C>, test: HitTest): boolean {
+    return node.hittest(this.getRootContext(), test);
   }
 
   invalidateNode(node: Node<C>): void {
@@ -119,14 +135,9 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
         if (cached != null) return cached;
       }
     }
-    // 创建带有约束的上下文
     const ctx = this.context;
     if (constraints != null) {
       ctx.constraints = constraints;
-      // 兼容处理：从约束推导 remainingWidth
-      if (constraints.maxWidth != null) {
-        ctx.remainingWidth = constraints.maxWidth;
-      }
     }
     const result = node.measure(ctx);
     const key = constraintKey(constraints);
@@ -148,11 +159,11 @@ export class DebugRenderer<C extends CanvasRenderingContext2D> extends BaseRende
   draw(node: Node<C>): boolean {
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
-    return node.draw(this.context, 0, 0);
+    return this.drawRootNode(node);
   }
 
   hittest(node: Node<C>, test: HitTest): boolean {
-    return node.hittest(this.context, test);
+    return this.hittestRootNode(node, test);
   }
 }
 
@@ -398,7 +409,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       if (y + height < 0 || y > viewportHeight) {
         continue;
       }
-      if (node.draw(this.context, 0, y)) {
+      if (this.drawRootNode(node, 0, y)) {
         result = true;
       }
     }
@@ -455,7 +466,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   protected _getItemHeight(index: number): number {
     const item = this.items[index];
     const node = this.options.renderItem(item);
-    return this.measureNode(node).height;
+    return this.measureRootNode(node).height;
   }
 
   protected _getAnchorAtOffset(index: number, offset: number): number {
@@ -580,7 +591,7 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
         for (let i = this.position - 1; i >= 0; i -= 1) {
           const item = this.items[i];
           const node = this.options.renderItem(item);
-          const { height } = this.measureNode(node);
+          const { height } = this.measureRootNode(node);
           this.position = i;
           this.offset -= height;
           if (this.offset <= 0) {
@@ -598,7 +609,7 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
     for (let i = this.position; i < this.items.length; i += 1) {
       const item = this.items[i];
       const node = this.options.renderItem(item);
-      const { height } = this.measureNode(node);
+      const { height } = this.measureRootNode(node);
       if (y + height > 0) {
         drawList.push({ idx: i, node, offset: y, height });
         drawLength += height;
@@ -624,7 +635,7 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
         for (let i = this.position - 1; i >= 0; i -= 1) {
           const item = this.items[(lastIdx = i)];
           const node = this.options.renderItem(item);
-          const { height } = this.measureNode(node);
+          const { height } = this.measureRootNode(node);
           drawLength += height;
           y -= height;
           drawList.push({ idx: i, node, offset: y - shift, height });
@@ -651,10 +662,10 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
     for (let i = this.position; i < this.items.length; i += 1) {
       const item = this.items[i];
       const node = this.options.renderItem(item);
-      const { height } = this.measureNode(node);
+      const { height } = this.measureRootNode(node);
       if (test.y < y + height) {
         return node.hittest(
-          this.context,
+          this.getRootContext(),
           shallowMerge(test, {
             y: test.y - y,
           }),
@@ -742,7 +753,7 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
         for (let i = this.position + 1; i < this.items.length; i += 1) {
           const item = this.items[i];
           const node = this.options.renderItem(item);
-          const { height } = this.measureNode(node);
+          const { height } = this.measureRootNode(node);
           this.position = i;
           this.offset += height;
           if (this.offset > 0) {
@@ -757,7 +768,7 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
     for (let i = this.position; i >= 0; i -= 1) {
       const item = this.items[i];
       const node = this.options.renderItem(item);
-      const { height } = this.measureNode(node);
+      const { height } = this.measureRootNode(node);
       y -= height;
       if (y <= viewportHeight) {
         drawList.push({ idx: i, node, offset: y, height });
@@ -779,7 +790,7 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
         for (let i = this.position + 1; i < this.items.length; i += 1) {
           const item = this.items[i];
           const node = this.options.renderItem(item);
-          const { height } = this.measureNode(node);
+          const { height } = this.measureRootNode(node);
           drawList.push({ idx: i, node, offset: y - shift, height });
           y = (drawLength += height);
           this.position = i;
@@ -809,7 +820,7 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
     for (let i = this.position; i >= 0; i -= 1) {
       const item = this.items[i];
       const node = this.options.renderItem(item);
-      const { height } = this.measureNode(node);
+      const { height } = this.measureRootNode(node);
       drawLength += height;
       heights.push([node, height]);
     }
@@ -823,7 +834,7 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
       y -= height;
       if (test.y > y) {
         return node.hittest(
-          this.context,
+          this.getRootContext(),
           shallowMerge(test, {
             y: test.y - y,
           }),

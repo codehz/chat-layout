@@ -14,6 +14,54 @@ function preprocessSegments(text: string): string[] {
     .filter(Boolean);
 }
 
+function measureShift<C extends CanvasRenderingContext2D>(ctx: Context<C>, text: string): number {
+  const {
+    fontBoundingBoxAscent: ascent = 0,
+    fontBoundingBoxDescent: descent = 0,
+  } = ctx.graphics.measureText(text);
+  return ascent - descent;
+}
+
+export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  text: string,
+): TextLayout {
+  const segments = preprocessSegments(text);
+  const segment = segments[0];
+  if (!segment) {
+    return { width: 0, text: "", shift: 0 };
+  }
+  return {
+    width: ctx.graphics.measureText(segment).width,
+    text: segment,
+    shift: measureShift(ctx, segment),
+  };
+}
+
+export function layoutTextIntrinsic<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  text: string,
+): { width: number; lines: TextLayout[] } {
+  const segments = preprocessSegments(text);
+  if (segments.length === 0) {
+    return { width: 0, lines: [] };
+  }
+
+  let width = 0;
+  const lines: TextLayout[] = [];
+  for (const segment of segments) {
+    const measuredWidth = ctx.graphics.measureText(segment).width;
+    width = Math.max(width, measuredWidth);
+    lines.push({
+      width: measuredWidth,
+      text: segment,
+      shift: measureShift(ctx, segment),
+    });
+  }
+
+  return { width, lines };
+}
+
 export function layoutFirstLine<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
@@ -27,11 +75,7 @@ export function layoutFirstLine<C extends CanvasRenderingContext2D>(
   if (!segment) {
     return { width: 0, text: "", shift: 0 };
   }
-  const {
-    fontBoundingBoxAscent: ascent = 0,
-    fontBoundingBoxDescent: descent = 0,
-  } = ctx.graphics.measureText(segment);
-  const shift = ascent - descent;
+  const shift = measureShift(ctx, segment);
   if (maxWidth === 0) {
     return { width: 0, text: "", shift };
   }
@@ -62,11 +106,7 @@ export function layoutText<C extends CanvasRenderingContext2D>(
   const lines: TextLayout[] = [];
 
   for (const segment of segments) {
-    const {
-      fontBoundingBoxAscent: ascent = 0,
-      fontBoundingBoxDescent: descent = 0,
-    } = ctx.graphics.measureText(segment);
-    const shift = ascent - descent;
+    const shift = measureShift(ctx, segment);
     const prepared = prepareWithSegments(segment, font);
     const { lines: segLines } = layoutWithLines(prepared, maxWidth, 0);
     for (const segLine of segLines) {
