@@ -354,6 +354,33 @@ describe("Flex", () => {
     expect(renderer.hittestNode(node, { x: 50, y: 5, type: "click" }, constraints)).toBe(false);
   });
 
+  test("overlapping children hittest the last drawn child first", () => {
+    const draws: ProbeDraw[] = [];
+    const hits: ProbeHit[] = [];
+    const renderer = new ConstraintTestRenderer(createGraphics(), {});
+    const node = new Flex<C>([
+      createProbe("A", 10, 10, draws, hits),
+      createProbe("B", 10, 10, draws, hits),
+    ], {
+      direction: "row",
+      gap: -5,
+      mainAxisSize: "fit-content",
+    });
+
+    renderer.measureNode(node);
+    renderer.drawNode(node);
+
+    expect(draws).toEqual([
+      { x: 0, y: 0, label: "A" },
+      { x: 5, y: 0, label: "B" },
+    ]);
+
+    expect(renderer.hittestNode(node, { x: 7, y: 5, type: "click" })).toBe(true);
+    expect(hits).toEqual([
+      { x: 2, y: 5, label: "B" },
+    ]);
+  });
+
   test("only FlexItem enables grow behavior", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 100 };

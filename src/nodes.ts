@@ -11,6 +11,7 @@ import type {
   HitTest,
   LayoutConstraints,
   Node,
+  TextWhitespaceMode,
   TextAlign,
 } from "./types";
 import { computeContentBox, createRect, findChildAtPoint, getSingleChildLayout } from "./layout";
@@ -759,6 +760,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
       font: string;
       alignment: "left" | "center" | "right";
       style: DynValue<C, string>;
+      whitespace?: TextWhitespaceMode;
     },
   ) {}
 
@@ -767,8 +769,8 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
       g.font = this.options.font;
       const maxWidth = ctx.constraints?.maxWidth;
       const { width, lines } = maxWidth == null
-        ? layoutTextIntrinsic(ctx, this.text)
-        : layoutText(ctx, this.text, maxWidth);
+        ? layoutTextIntrinsic(ctx, this.text, this.options.whitespace)
+        : layoutText(ctx, this.text, maxWidth, this.options.whitespace);
       return { width, height: lines.length * this.options.lineHeight };
     });
   }
@@ -779,8 +781,8 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
       g.fillStyle = ctx.resolveDynValue(this.options.style);
       const maxWidth = ctx.constraints?.maxWidth;
       const { lines } = maxWidth == null
-        ? layoutTextIntrinsic(ctx, this.text)
-        : layoutText(ctx, this.text, maxWidth);
+        ? layoutTextIntrinsic(ctx, this.text, this.options.whitespace)
+        : layoutText(ctx, this.text, maxWidth, this.options.whitespace);
       switch (this.options.alignment) {
         case "left":
           for (const { text, shift } of lines) {
@@ -823,6 +825,7 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
       lineHeight: number;
       font: string;
       style: DynValue<C, string>;
+      whitespace?: TextWhitespaceMode;
     },
   ) {}
 
@@ -831,8 +834,8 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
       g.font = this.options.font;
       const maxWidth = ctx.constraints?.maxWidth;
       const { width } = maxWidth == null
-        ? layoutFirstLineIntrinsic(ctx, this.text)
-        : layoutFirstLine(ctx, this.text, maxWidth);
+        ? layoutFirstLineIntrinsic(ctx, this.text, this.options.whitespace)
+        : layoutFirstLine(ctx, this.text, maxWidth, this.options.whitespace);
       return { width, height: this.options.lineHeight };
     });
   }
@@ -843,8 +846,8 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
       g.fillStyle = ctx.resolveDynValue(this.options.style);
       const maxWidth = ctx.constraints?.maxWidth;
       const { text, shift } = maxWidth == null
-        ? layoutFirstLineIntrinsic(ctx, this.text)
-        : layoutFirstLine(ctx, this.text, maxWidth);
+        ? layoutFirstLineIntrinsic(ctx, this.text, this.options.whitespace)
+        : layoutFirstLine(ctx, this.text, maxWidth, this.options.whitespace);
       g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
       return false;
     });

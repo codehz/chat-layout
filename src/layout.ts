@@ -110,7 +110,8 @@ export function findChildAtPoint<C extends CanvasRenderingContext2D>(
       localY: number;
     }
   | undefined {
-  for (const child of children) {
+  for (let i = children.length - 1; i >= 0; i -= 1) {
+    const child = children[i]!;
     const target = box === "rect" ? child.rect : child.contentBox;
     if (!pointInRect(x, y, target)) {
       continue;

@@ -71,6 +71,39 @@ function createGraphics(viewportWidth = 320, viewportHeight = 100): C {
   } as unknown as C;
 }
 
+function createTextRecordingGraphics(viewportWidth = 320, viewportHeight = 100): {
+  graphics: C;
+  fillTexts: Array<{ text: string; x: number; y: number }>;
+} {
+  const fillTexts: Array<{ text: string; x: number; y: number }> = [];
+  return {
+    fillTexts,
+    graphics: {
+      canvas: {
+        clientWidth: viewportWidth,
+        clientHeight: viewportHeight,
+      },
+      fillStyle: "#000",
+      font: "16px sans-serif",
+      textAlign: "left",
+      textRendering: "auto",
+      clearRect() {},
+      fillText(text: string, x: number, y: number) {
+        fillTexts.push({ text, x, y });
+      },
+      measureText(text: string) {
+        return {
+          width: text.length * 8,
+          fontBoundingBoxAscent: 8,
+          fontBoundingBoxDescent: 2,
+        } as TextMetrics;
+      },
+      save() {},
+      restore() {},
+    } as unknown as C,
+  };
+}
+
 class ConstraintTestRenderer extends BaseRenderer<C> {
   #contextWithConstraints(constraints?: LayoutConstraints): Context<C> {
     const ctx = this.context;
@@ -301,6 +334,67 @@ function measureChatLikeBubbleTree(
 }
 
 describe("Place", () => {
+  test("Text preserves leading and trailing whitespace by default", () => {
+    const { graphics, fillTexts } = createTextRecordingGraphics();
+    const renderer = new ConstraintTestRenderer(graphics, {});
+    const node = new Text<C>("  padded text  ", {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      style: "#000",
+    });
+
+    const box = renderer.measureNode(node);
+    renderer.drawNode(node);
+
+    expect(box).toEqual({ width: 120, height: 20 });
+    expect(fillTexts).toEqual([
+      { text: "  padded text  ", x: 0, y: 13 },
+    ]);
+  });
+
+  test("MultilineText preserves blank lines and edge whitespace by default", () => {
+    const { graphics, fillTexts } = createTextRecordingGraphics();
+    const renderer = new ConstraintTestRenderer(graphics, {});
+    const node = new MultilineText<C>("  alpha  \n\n beta ", {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      alignment: "left",
+      style: "#000",
+    });
+
+    const box = renderer.measureNode(node);
+    renderer.drawNode(node);
+
+    expect(box).toEqual({ width: 72, height: 60 });
+    expect(fillTexts.map(({ text }) => text)).toEqual(["  alpha  ", "", " beta "]);
+  });
+
+  test("Text and MultilineText only normalize whitespace when explicitly requested", () => {
+    const { graphics, fillTexts } = createTextRecordingGraphics();
+    const renderer = new ConstraintTestRenderer(graphics, {});
+    const textNode = new Text<C>("  padded text  ", {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      style: "#000",
+      whitespace: "trim-and-collapse",
+    });
+    const multilineNode = new MultilineText<C>("  alpha  \n\n beta ", {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      alignment: "left",
+      style: "#000",
+      whitespace: "trim-and-collapse",
+    });
+
+    expect(renderer.measureNode(textNode)).toEqual({ width: 88, height: 20 });
+    renderer.drawNode(textNode);
+
+    expect(renderer.measureNode(multilineNode)).toEqual({ width: 40, height: 40 });
+    renderer.drawNode(multilineNode);
+
+    expect(fillTexts.map(({ text }) => text)).toEqual(["padded text", "alpha", "beta"]);
+  });
+
   test("produces expected child rects for start, center, and end alignment", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
     const constraints = { maxWidth: 100 };

@@ -30,6 +30,7 @@ export type CrossAxisAlignment = "start" | "center" | "end" | "stretch";
 export type MainAxisSize = "fill" | "fit-content";
 
 export type TextAlign = "start" | "center" | "end";
+export type TextWhitespaceMode = "preserve" | "trim-and-collapse";
 
 export interface LayoutConstraints {
   minWidth?: number;

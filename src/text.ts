@@ -1,5 +1,5 @@
 import { layoutWithLines, prepareWithSegments } from "@chenglou/pretext";
-import type { Context } from "./types";
+import type { Context, TextWhitespaceMode } from "./types";
 
 export interface TextLayout {
   width: number;
@@ -7,11 +7,14 @@ export interface TextLayout {
   shift: number;
 }
 
-function preprocessSegments(text: string): string[] {
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+function preprocessSegments(text: string, whitespace: TextWhitespaceMode = "preserve"): string[] {
+  const segments = text.split("\n");
+  if (whitespace === "trim-and-collapse") {
+    return segments
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  }
+  return segments;
 }
 
 function measureShift<C extends CanvasRenderingContext2D>(ctx: Context<C>, text: string): number {
@@ -25,8 +28,9 @@ function measureShift<C extends CanvasRenderingContext2D>(ctx: Context<C>, text:
 export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
+  whitespace: TextWhitespaceMode = "preserve",
 ): TextLayout {
-  const segments = preprocessSegments(text);
+  const segments = preprocessSegments(text, whitespace);
   const segment = segments[0];
   if (!segment) {
     return { width: 0, text: "", shift: 0 };
@@ -41,8 +45,9 @@ export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
 export function layoutTextIntrinsic<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
+  whitespace: TextWhitespaceMode = "preserve",
 ): { width: number; lines: TextLayout[] } {
-  const segments = preprocessSegments(text);
+  const segments = preprocessSegments(text, whitespace);
   if (segments.length === 0) {
     return { width: 0, lines: [] };
   }
@@ -66,11 +71,12 @@ export function layoutFirstLine<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
   maxWidth: number,
+  whitespace: TextWhitespaceMode = "preserve",
 ): TextLayout {
   if (maxWidth < 0) {
     maxWidth = 0;
   }
-  const segments = preprocessSegments(text);
+  const segments = preprocessSegments(text, whitespace);
   const segment = segments[0];
   if (!segment) {
     return { width: 0, text: "", shift: 0 };
@@ -91,12 +97,13 @@ export function layoutText<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
   maxWidth: number,
+  whitespace: TextWhitespaceMode = "preserve",
 ): { width: number; lines: TextLayout[] } {
   if (maxWidth < 0) {
     maxWidth = 0;
   }
 
-  const segments = preprocessSegments(text);
+  const segments = preprocessSegments(text, whitespace);
   if (segments.length === 0 || maxWidth === 0) {
     return { width: 0, lines: [] };
   }
@@ -107,6 +114,10 @@ export function layoutText<C extends CanvasRenderingContext2D>(
 
   for (const segment of segments) {
     const shift = measureShift(ctx, segment);
+    if (segment.length === 0) {
+      lines.push({ width: 0, text: "", shift });
+      continue;
+    }
     const prepared = prepareWithSegments(segment, font);
     const { lines: segLines } = layoutWithLines(prepared, maxWidth, 0);
     for (const segLine of segLines) {
