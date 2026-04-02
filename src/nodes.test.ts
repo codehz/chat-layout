@@ -115,11 +115,16 @@ function createProbeNode(): {
 
 function createChatLikeBubbleTree(
   message: string,
-  reply?: {
-    sender: string;
-    content: string;
+  options: {
+    sender?: "A" | "B";
+    reply?: {
+      sender: string;
+      content: string;
+    };
   },
 ) {
+  const sender = options.sender ?? "B";
+  const reply = options.reply;
   const senderLine = new Flex<C>(
     [
       new PaddingBox(
@@ -197,16 +202,28 @@ function createChatLikeBubbleTree(
 
   const body = new Flex<C>(
     [senderLine, bubble],
-    { direction: "column", alignItems: "start" },
+    {
+      direction: "column",
+      alignItems: sender === "A" ? "end" : "start",
+    },
+  );
+
+  const alignedBody = new Place<C>(
+    body,
+    { align: sender === "A" ? "end" : "start" },
   );
 
   const row = new Flex<C>(
     [
       new Fixed(32, 32),
-      new FlexItem(body, { grow: 1 }),
+      new FlexItem(alignedBody, { grow: 1 }),
       new Fixed(32, 0),
     ],
-    { direction: "row", gap: 4 },
+    {
+      direction: "row",
+      gap: 4,
+      reverse: sender === "A",
+    },
   );
 
   const padded = new PaddingBox(row, {
@@ -216,12 +233,15 @@ function createChatLikeBubbleTree(
     right: 4,
   });
 
-  const node = new Place<C>(padded, { align: "start" });
+  const node = new Place<C>(padded, {
+    align: sender === "A" ? "end" : "start",
+  });
 
   return {
     node,
     padded,
     row,
+    alignedBody,
     body,
     bubble,
     bubbleColumn,
@@ -230,7 +250,7 @@ function createChatLikeBubbleTree(
 }
 
 function createChatLikeBubble(message: string): Place<C> {
-  return createChatLikeBubbleTree(message).node;
+  return createChatLikeBubbleTree(message, {}).node;
 }
 
 function measureChatLikeBubbleTree(
@@ -242,7 +262,8 @@ function measureChatLikeBubbleTree(
   const placeLayout = renderer.getLayoutResult(tree.node, constraints)!;
   const paddedLayout = renderer.getLayoutResult(tree.padded, placeLayout.children[0]!.constraints)!;
   const rowLayout = renderer.getLayoutResult(tree.row, paddedLayout.children[0]!.constraints)!;
-  const bodyLayout = renderer.getLayoutResult(tree.body, rowLayout.children[1]!.constraints)!;
+  const alignedBodyLayout = renderer.getLayoutResult(tree.alignedBody, rowLayout.children[1]!.constraints)!;
+  const bodyLayout = renderer.getLayoutResult(tree.body, alignedBodyLayout.children[0]!.constraints)!;
   const bubbleLayout = renderer.getLayoutResult(tree.bubble, bodyLayout.children[1]!.constraints)!;
   const bubbleColumnLayout = renderer.getLayoutResult(tree.bubbleColumn, bubbleLayout.children[0]!.constraints)!;
 
@@ -250,6 +271,7 @@ function measureChatLikeBubbleTree(
     placeLayout,
     paddedLayout,
     rowLayout,
+    alignedBodyLayout,
     bodyLayout,
     bubbleLayout,
     bubbleColumnLayout,
@@ -306,7 +328,7 @@ describe("Place", () => {
 
   test("chat bubbles wrap under maxWidth without forcing the bubble itself full width", () => {
     const renderer = new BaseRenderer(createGraphics(320, 200), {});
-    const tree = createChatLikeBubbleTree("long message ".repeat(30));
+    const tree = createChatLikeBubbleTree("long message ".repeat(30), {});
 
     const unconstrainedBox = renderer.measureNode(tree.node);
     const unconstrainedLayout = renderer.getLayoutResult(tree.node);
@@ -324,8 +346,10 @@ describe("Place", () => {
     const tree = createChatLikeBubbleTree(
       "short message",
       {
-        sender: "B",
-        content: "tiny reply preview",
+        reply: {
+          sender: "B",
+          content: "tiny reply preview",
+        },
       },
     );
 
@@ -336,6 +360,26 @@ describe("Place", () => {
     expect(constrained.bubbleColumnLayout.children[1]!.rect.width).toBeLessThan(
       constrained.bubbleColumnLayout.children[0]!.rect.width,
     );
+  });
+
+  test("outgoing chat bubbles stay right-aligned inside the grow slot", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 200), {});
+    const tree = createChatLikeBubbleTree(
+      "update timeline layout bubble render update update layout",
+      {
+        sender: "A",
+        reply: {
+          sender: "B",
+          content: "测试aa中文aaa",
+        },
+      },
+    );
+
+    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
+    const bodyRect = constrained.alignedBodyLayout.children[0]!.rect;
+
+    expect(bodyRect.x).toBeGreaterThan(0);
+    expect(bodyRect.x + bodyRect.width).toBe(constrained.alignedBodyLayout.containerBox.width);
   });
 
   test("does not synthesize child maxWidth constraints when expand=false", () => {

@@ -245,10 +245,14 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     alignItems: item.sender === "A" ? "end" : "start",
   });
 
+  const alignedBody = new Place<C>(body, {
+    align: item.sender === "A" ? "end" : "start",
+  });
+
   const row = new Flex<C>(
     [
       new Circle(32, { fill: "red" }),
-      new FlexItem(body, { grow: 1 }),
+      new FlexItem(alignedBody, { grow: 1 }),
       new Fixed(32, 0),
     ],
     {
