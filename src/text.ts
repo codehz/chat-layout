@@ -7,6 +7,9 @@ export interface TextLayout {
   shift: number;
 }
 
+// `fontBoundingBox*` depends on the active font, so one fixed probe is enough.
+const FONT_SHIFT_PROBE = "M";
+
 function preprocessSegments(text: string, whitespace: TextWhitespaceMode = "preserve"): string[] {
   const segments = text.split("\n");
   if (whitespace === "trim-and-collapse") {
@@ -17,11 +20,11 @@ function preprocessSegments(text: string, whitespace: TextWhitespaceMode = "pres
   return segments;
 }
 
-function measureShift<C extends CanvasRenderingContext2D>(ctx: Context<C>, text: string): number {
+function measureFontShift<C extends CanvasRenderingContext2D>(ctx: Context<C>): number {
   const {
     fontBoundingBoxAscent: ascent = 0,
     fontBoundingBoxDescent: descent = 0,
-  } = ctx.graphics.measureText(text);
+  } = ctx.graphics.measureText(FONT_SHIFT_PROBE);
   return ascent - descent;
 }
 
@@ -35,10 +38,11 @@ export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
   if (!segment) {
     return { width: 0, text: "", shift: 0 };
   }
+  const shift = measureFontShift(ctx);
   return {
     width: ctx.graphics.measureText(segment).width,
     text: segment,
-    shift: measureShift(ctx, segment),
+    shift,
   };
 }
 
@@ -52,6 +56,7 @@ export function layoutTextIntrinsic<C extends CanvasRenderingContext2D>(
     return { width: 0, lines: [] };
   }
 
+  const shift = measureFontShift(ctx);
   let width = 0;
   const lines: TextLayout[] = [];
   for (const segment of segments) {
@@ -60,7 +65,7 @@ export function layoutTextIntrinsic<C extends CanvasRenderingContext2D>(
     lines.push({
       width: measuredWidth,
       text: segment,
-      shift: measureShift(ctx, segment),
+      shift,
     });
   }
 
@@ -81,7 +86,7 @@ export function layoutFirstLine<C extends CanvasRenderingContext2D>(
   if (!segment) {
     return { width: 0, text: "", shift: 0 };
   }
-  const shift = measureShift(ctx, segment);
+  const shift = measureFontShift(ctx);
   if (maxWidth === 0) {
     return { width: 0, text: "", shift };
   }
@@ -109,11 +114,11 @@ export function layoutText<C extends CanvasRenderingContext2D>(
   }
 
   const font = ctx.graphics.font;
+  const shift = measureFontShift(ctx);
   let width = 0;
   const lines: TextLayout[] = [];
 
   for (const segment of segments) {
-    const shift = measureShift(ctx, segment);
     if (segment.length === 0) {
       lines.push({ width: 0, text: "", shift });
       continue;
