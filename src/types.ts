@@ -88,3 +88,25 @@ export interface Node<C extends CanvasRenderingContext2D> {
   hittest(ctx: Context<C>, test: HitTest): boolean;
   readonly flex: boolean;
 }
+
+// v2: 统一布局结果结构
+export interface LayoutRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ChildLayoutResult<C extends CanvasRenderingContext2D> {
+  node: Node<C>;
+  rect: LayoutRect;
+  contentBox: LayoutRect;
+  constraints?: LayoutConstraints;
+}
+
+export interface FlexLayoutResult<C extends CanvasRenderingContext2D> {
+  containerBox: LayoutRect;
+  contentBox: LayoutRect;
+  children: ChildLayoutResult<C>[];
+  constraints?: LayoutConstraints;
+}

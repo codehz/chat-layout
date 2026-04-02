@@ -1,9 +1,22 @@
-import type { Alignment, Box, Context, DynValue, HitTest, Node } from "./types";
+import type {
+  Alignment,
+  Box,
+  ChildLayoutResult,
+  Context,
+  DynValue,
+  FlexLayoutResult,
+  HitTest,
+  LayoutRect,
+  Node,
+} from "./types";
+import { createRect, offsetRect, pointInRect } from "./layout";
 import { layoutFirstLine, layoutText, type TextLayout } from "./text";
 import { shallow, shallowMerge } from "./utils";
 import { registerNodeParent, unregisterNodeParent } from "./registry";
 
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
+  #layoutResult?: FlexLayoutResult<C>;
+
   constructor(readonly children: Node<C>[]) {
     for (const child of children) {
       registerNodeParent(child, this);
@@ -16,6 +29,20 @@ export abstract class Group<C extends CanvasRenderingContext2D> implements Node<
 
   get flex(): boolean {
     return this.children.some((item) => item.flex);
+  }
+
+  /**
+   * 获取最近的布局结果（如果有）
+   */
+  get layoutResult(): FlexLayoutResult<C> | undefined {
+    return this.#layoutResult;
+  }
+
+  /**
+   * 设置布局结果
+   */
+  protected setLayoutResult(result: FlexLayoutResult<C>): void {
+    this.#layoutResult = result;
   }
 }
 
@@ -34,6 +61,8 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
       ctx.alignment = this.options.alignment;
     }
 
+    const childResults: ChildLayoutResult<C>[] = [];
+
     for (const [index, child] of this.children.entries()) {
       if (this.options.gap != null && index !== 0) {
         height += this.options.gap;
@@ -44,19 +73,82 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
             ...ctx.constraints,
           }
         : undefined;
-      const result = shallow(ctx).measureNode(child, childConstraints);
-      height += result.height;
-      width = Math.max(width, result.width);
+      const childBox = shallow(ctx).measureNode(child, childConstraints);
+      
+      // 为每个子节点创建布局结果
+      const childResult: ChildLayoutResult<C> = {
+        node: child,
+        rect: createRect(0, height, childBox.width, childBox.height),
+        contentBox: createRect(0, height, childBox.width, childBox.height),
+        constraints: childConstraints,
+      };
+      childResults.push(childResult);
+      
+      height += childBox.height;
+      width = Math.max(width, childBox.width);
     }
+    
     // 不再修改 remainingWidth，改为设置约束
     if (ctx.constraints == null) {
       ctx.constraints = { maxWidth: width };
       ctx.remainingWidth = width;
     }
+    
+    // 存储布局结果
+    const contentBox = createRect(0, 0, width, height);
+    const containerBox = ctx.constraints
+      ? createRect(
+          0,
+          0,
+          Math.max(width, ctx.constraints.minWidth ?? 0),
+          Math.max(height, ctx.constraints.minHeight ?? 0),
+        )
+      : contentBox;
+    
+    this.setLayoutResult({
+      containerBox,
+      contentBox,
+      children: childResults,
+      constraints: ctx.constraints,
+    });
+    
     return { width, height };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
+    const layoutResult = this.layoutResult;
+    if (!layoutResult) {
+      // 退回到旧逻辑
+      return this.drawLegacy(ctx, x, y);
+    }
+    
+    let result = false;
+    const alignment = this.options.alignment ?? ctx.alignment;
+    if (this.options.alignment != null) {
+      ctx.alignment = this.options.alignment;
+    }
+
+    for (const childResult of layoutResult.children) {
+      const curCtx = shallow(ctx);
+      let offsetX = 0;
+      
+      if (alignment === "right") {
+        offsetX = layoutResult.contentBox.width - childResult.rect.width;
+      } else if (alignment === "center") {
+        offsetX = (layoutResult.contentBox.width - childResult.rect.width) / 2;
+      }
+      
+      const drawX = x + offsetX;
+      const drawY = y + childResult.rect.y;
+      
+      const requestRedraw = childResult.node.draw(curCtx, drawX, drawY);
+      result ||= requestRedraw;
+    }
+    
+    return result;
+  }
+
+  private drawLegacy(ctx: Context<C>, x: number, y: number): boolean {
     let result = false;
     const { width: fullWidth } = ctx.measureNode(this, ctx.constraints);
     const alignment = this.options.alignment ?? ctx.alignment;
@@ -90,6 +182,44 @@ export class VStack<C extends CanvasRenderingContext2D> extends Group<C> {
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
+    const layoutResult = this.layoutResult;
+    if (!layoutResult) {
+      // 退回到旧逻辑
+      return this.hittestLegacy(ctx, test);
+    }
+    
+    const alignment = this.options.alignment ?? ctx.alignment;
+    if (this.options.alignment != null) {
+      ctx.alignment = this.options.alignment;
+    }
+
+    for (const childResult of layoutResult.children) {
+      const offsetX =
+        alignment === "right"
+          ? layoutResult.contentBox.width - childResult.rect.width
+          : alignment === "center"
+            ? (layoutResult.contentBox.width - childResult.rect.width) / 2
+            : 0;
+      
+      const localX = test.x - offsetX;
+      const localY = test.y - childResult.rect.y;
+      
+      if (pointInRect(localX, localY, childResult.rect)) {
+        const curCtx = shallow(ctx);
+        return childResult.node.hittest(
+          curCtx,
+          shallowMerge(test, {
+            x: localX,
+            y: localY,
+          }),
+        );
+      }
+    }
+    
+    return false;
+  }
+
+  private hittestLegacy(ctx: Context<C>, test: HitTest): boolean {
     let y = 0;
     const { width: fullWidth } = ctx.measureNode(this, ctx.constraints);
     const alignment = this.options.alignment ?? ctx.alignment;
@@ -147,10 +277,13 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
     let width = 0;
     let height = 0;
     let firstFlex: Node<C> | undefined;
+    const childResults: ChildLayoutResult<C>[] = [];
+    let currentX = 0;
 
     for (const [index, child] of this.children.entries()) {
       if (this.options.gap != null && index !== 0) {
         width += this.options.gap;
+        currentX += this.options.gap;
       }
       if (firstFlex == null && child.flex) {
         firstFlex = child;
@@ -172,8 +305,19 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
         }
       }
       const result = curCtx.measureNode(child, childConstraints);
+      
+      // 为每个子节点创建布局结果
+      const childResult: ChildLayoutResult<C> = {
+        node: child,
+        rect: createRect(currentX, 0, result.width, result.height),
+        contentBox: createRect(currentX, 0, result.width, result.height),
+        constraints: childConstraints,
+      };
+      childResults.push(childResult);
+      
       width += result.width;
       height = Math.max(height, result.height);
+      currentX += result.width;
     }
 
     if (firstFlex != null) {
@@ -192,14 +336,70 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
         }
       }
       const result = curCtx.measureNode(firstFlex, childConstraints);
+      
+      // 为 flex 子节点创建布局结果
+      const childResult: ChildLayoutResult<C> = {
+        node: firstFlex,
+        rect: createRect(currentX, 0, result.width, result.height),
+        contentBox: createRect(currentX, 0, result.width, result.height),
+        constraints: childConstraints,
+      };
+      childResults.push(childResult);
+      
       width += result.width;
       height = Math.max(height, result.height);
     }
+
+    // 存储布局结果
+    const contentBox = createRect(0, 0, width, height);
+    const containerBox = ctx.constraints
+      ? createRect(
+          0,
+          0,
+          Math.max(width, ctx.constraints.minWidth ?? 0),
+          Math.max(height, ctx.constraints.minHeight ?? 0),
+        )
+      : contentBox;
+    
+    this.setLayoutResult({
+      containerBox,
+      contentBox,
+      children: childResults,
+      constraints: ctx.constraints,
+    });
 
     return { width, height };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
+    const layoutResult = this.layoutResult;
+    if (!layoutResult) {
+      // 退回到旧逻辑
+      return this.drawLegacy(ctx, x, y);
+    }
+    
+    let result = false;
+    const reverse = this.options.reverse ?? ctx.reverse;
+    if (this.options.reverse) {
+      ctx.reverse = this.options.reverse;
+    }
+
+    // 使用布局结果进行绘制
+    const children = reverse ? [...layoutResult.children].reverse() : layoutResult.children;
+    
+    for (const childResult of children) {
+      const curCtx = shallow(ctx);
+      const drawX = x + (reverse ? layoutResult.contentBox.width - childResult.rect.x - childResult.rect.width : childResult.rect.x);
+      const drawY = y + childResult.rect.y;
+      
+      const requestRedraw = childResult.node.draw(curCtx, drawX, drawY);
+      result ||= requestRedraw;
+    }
+    
+    return result;
+  }
+
+  private drawLegacy(ctx: Context<C>, x: number, y: number): boolean {
     let result = false;
     const reverse = this.options.reverse ?? ctx.reverse;
     if (this.options.reverse) {
@@ -265,6 +465,43 @@ export class HStack<C extends CanvasRenderingContext2D> extends Group<C> {
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
+    const layoutResult = this.layoutResult;
+    if (!layoutResult) {
+      // 退回到旧逻辑
+      return this.hittestLegacy(ctx, test);
+    }
+    
+    const reverse = this.options.reverse ?? ctx.reverse;
+    if (this.options.reverse) {
+      ctx.reverse = this.options.reverse;
+    }
+
+    // 使用布局结果进行命中测试
+    const children = reverse ? [...layoutResult.children].reverse() : layoutResult.children;
+    
+    for (const childResult of children) {
+      const offsetX = reverse 
+        ? layoutResult.contentBox.width - childResult.rect.x - childResult.rect.width 
+        : childResult.rect.x;
+      const localX = test.x - offsetX;
+      const localY = test.y - childResult.rect.y;
+      
+      if (pointInRect(localX, localY, childResult.rect)) {
+        const curCtx = shallow(ctx);
+        return childResult.node.hittest(
+          curCtx,
+          shallowMerge(test, {
+            x: localX,
+            y: localY,
+          }),
+        );
+      }
+    }
+    
+    return false;
+  }
+
+  private hittestLegacy(ctx: Context<C>, test: HitTest): boolean {
     const reverse = this.options.reverse ?? ctx.reverse;
     if (this.options.reverse) {
       ctx.reverse = this.options.reverse;
