@@ -116,6 +116,10 @@ ctx.scale(devicePixelRatio, devicePixelRatio);
 type ChatItem = {
   sender: string;
   content: string;
+  reply?: {
+    sender: string;
+    content: string;
+  };
 };
 
 let currentHover: ChatItem | undefined;
@@ -167,12 +171,58 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     },
   );
 
-  const content = new RoundedBox(
+  const messageText = new FlexItem(
     new MultilineText(item.content, {
       lineHeight: 20,
       font: "16px system-ui",
       style: "black",
       alignment: "left",
+    }),
+    { alignSelf: "start" },
+  );
+
+  const bubbleChildren: Node<C>[] = [];
+  if (item.reply != null) {
+    const replyPreview = new RoundedBox(
+      new Flex<C>(
+        [
+          new Text(item.reply.sender, {
+            lineHeight: 14,
+            font: "11px system-ui",
+            style: () => (currentHover === item ? "#4d4d4d" : "#666"),
+          }),
+          new MultilineText(item.reply.content, {
+            lineHeight: 16,
+            font: "13px system-ui",
+            style: () => (currentHover === item ? "#222" : "#444"),
+            alignment: "left",
+          }),
+        ],
+        {
+          direction: "column",
+          gap: 2,
+          alignItems: "start",
+        },
+      ),
+      {
+        top: 5,
+        bottom: 5,
+        left: 8,
+        right: 8,
+        radii: 6,
+        fill: () => (currentHover === item ? "#c2c2c2" : "#e2e2e2"),
+      },
+    );
+    bubbleChildren.push(replyPreview);
+  }
+  bubbleChildren.push(messageText);
+
+  const content = new RoundedBox(
+    new Flex<C>(bubbleChildren, {
+      direction: "column",
+      gap: 6,
+      // Stretch the reply preview across the bubble while keeping the main text intrinsic.
+      alignItems: item.reply == null ? "start" : "stretch",
     }),
     {
       top: 6,
@@ -290,11 +340,29 @@ function randomText(words: number): string {
 }
 
 list.pushAll([
-  { sender: "A", content: randomText(20) },
-  { sender: "B", content: "aaaa" },
+  {
+    sender: "A",
+    content: "hello world chat layout message render bubble timeline virtualized canvas",
+  },
+  {
+    sender: "B",
+    content: "aaaa",
+    reply: {
+      sender: "A",
+      content: "hello world chat layout message render",
+    },
+  },
   { sender: "B", content: "aaaabbb" },
   { sender: "B", content: "测试中文" },
   { sender: "B", content: "测试aa中文aaa" },
+  {
+    sender: "A",
+    content: randomText(8),
+    reply: {
+      sender: "B",
+      content: "测试aa中文aaa",
+    },
+  },
   { sender: "B", content: randomText(5) },
 ]);
 

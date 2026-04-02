@@ -23,6 +23,15 @@ The current recommended APIs are:
 This is the recommended chat bubble shape used by [example/chat.ts](./example/chat.ts):
 
 ```ts
+type ChatItem = {
+  sender: string;
+  content: string;
+  reply?: {
+    sender: string;
+    content: string;
+  };
+};
+
 const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
   const senderLine = new Flex<C>(
     [avatarDot, senderLabel],
@@ -34,13 +43,58 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     },
   );
 
-  const content = new RoundedBox(
+  const messageText = new FlexItem(
     new MultilineText(item.content, {
       lineHeight: 20,
       font: "16px system-ui",
       style: "black",
       alignment: "left",
     }),
+    { alignSelf: "start" },
+  );
+
+  const replyPreview = item.reply == null
+    ? undefined
+    : new RoundedBox(
+        new Flex<C>(
+          [
+            new Text(item.reply.sender, {
+              lineHeight: 14,
+              font: "11px system-ui",
+              style: "#666",
+            }),
+            new MultilineText(item.reply.content, {
+              lineHeight: 16,
+              font: "13px system-ui",
+              style: "#444",
+              alignment: "left",
+            }),
+          ],
+          {
+            direction: "column",
+            gap: 2,
+            alignItems: "start",
+          },
+        ),
+        {
+          top: 5,
+          bottom: 5,
+          left: 8,
+          right: 8,
+          radii: 6,
+          fill: "#e2e2e2",
+        },
+      );
+
+  const content = new RoundedBox(
+    new Flex<C>(
+      replyPreview == null ? [messageText] : [replyPreview, messageText],
+      {
+        direction: "column",
+        gap: 6,
+        alignItems: item.reply == null ? "start" : "stretch",
+      },
+    ),
     {
       top: 6,
       bottom: 6,
@@ -90,6 +144,7 @@ That combination gives you:
 - explicit grow behavior through `FlexItem`
 - left/right chat placement through `Place`
 - wrapped message bubbles that respect available width
+- nested reply previews that use cross-axis `stretch` to fill the bubble width
 
 **Development**
 Install dependencies:
