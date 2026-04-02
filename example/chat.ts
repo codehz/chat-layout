@@ -183,47 +183,52 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
 
   const bubbleChildren: Node<C>[] = [];
   if (item.reply != null) {
-    const replyPreview = new RoundedBox(
-      new Flex<C>(
-        [
-          new Text(item.reply.sender, {
-            lineHeight: 14,
-            font: "11px system-ui",
-            style: () => (currentHover === item ? "#4d4d4d" : "#666"),
-          }),
-          new MultilineText(item.reply.content, {
-            lineHeight: 16,
-            font: "13px system-ui",
-            style: () => (currentHover === item ? "#222" : "#444"),
-            alignment: "left",
-          }),
-        ],
+    const replyPreview = new FlexItem(
+      new RoundedBox(
+        new Flex<C>(
+          [
+            new Text(item.reply.sender, {
+              lineHeight: 14,
+              font: "11px system-ui",
+              style: () => (currentHover === item ? "#4d4d4d" : "#666"),
+            }),
+            new MultilineText(item.reply.content, {
+              lineHeight: 16,
+              font: "13px system-ui",
+              style: () => (currentHover === item ? "#222" : "#444"),
+              alignment: "left",
+            }),
+          ],
+          {
+            direction: "column",
+            gap: 2,
+            alignItems: "start",
+          },
+        ),
         {
-          direction: "column",
-          gap: 2,
-          alignItems: "start",
+          top: 5,
+          bottom: 5,
+          left: 8,
+          right: 8,
+          radii: 6,
+          fill: () => (currentHover === item ? "#c2c2c2" : "#e2e2e2"),
         },
       ),
-      {
-        top: 5,
-        bottom: 5,
-        left: 8,
-        right: 8,
-        radii: 6,
-        fill: () => (currentHover === item ? "#c2c2c2" : "#e2e2e2"),
-      },
+      { alignSelf: "stretch" },
     );
     bubbleChildren.push(replyPreview);
   }
   bubbleChildren.push(messageText);
 
+  const bubbleColumn = new Flex<C>(bubbleChildren, {
+    direction: "column",
+    gap: 6,
+    // The bubble itself shrink-wraps on the cross axis; only the reply preview stretches.
+    alignItems: "start",
+  });
+
   const content = new RoundedBox(
-    new Flex<C>(bubbleChildren, {
-      direction: "column",
-      gap: 6,
-      // Stretch the reply preview across the bubble while keeping the main text intrinsic.
-      alignItems: item.reply == null ? "start" : "stretch",
-    }),
+    bubbleColumn,
     {
       top: 6,
       bottom: 6,

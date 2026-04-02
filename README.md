@@ -15,6 +15,8 @@ The current recommended APIs are:
 
 - Use `new Flex(children, { direction: "row" | "column" })` for main-axis layout.
 - Use `new FlexItem(child, { grow: 1 })` when a child should consume remaining space.
+- `Flex` shrink-wraps on the cross axis by default; `maxWidth` / `maxHeight` act as measurement caps rather than implicit fill signals.
+- Use `alignItems` / `alignSelf: "stretch"` when a specific child should fill the container's computed cross axis.
 - Use `new Place(child, { align: "start" | "center" | "end" })` when a single child should fill available width and then be placed left/center/right.
 - Use `justifyContent`, `alignItems`, and `alignSelf` for container/item placement.
 - Keep text alignment on `Text` / `MultilineText` via `alignment: "left" | "center" | "right"`.
@@ -53,48 +55,56 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     { alignSelf: "start" },
   );
 
-  const replyPreview = item.reply == null
-    ? undefined
-    : new RoundedBox(
-        new Flex<C>(
-          [
-            new Text(item.reply.sender, {
-              lineHeight: 14,
-              font: "11px system-ui",
-              style: "#666",
-            }),
-            new MultilineText(item.reply.content, {
-              lineHeight: 16,
-              font: "13px system-ui",
-              style: "#444",
-              alignment: "left",
-            }),
-          ],
+  const bubbleChildren: Node<C>[] = [];
+  if (item.reply != null) {
+    bubbleChildren.push(
+      new FlexItem(
+        new RoundedBox(
+          new Flex<C>(
+            [
+              new Text(item.reply.sender, {
+                lineHeight: 14,
+                font: "11px system-ui",
+                style: "#666",
+              }),
+              new MultilineText(item.reply.content, {
+                lineHeight: 16,
+                font: "13px system-ui",
+                style: "#444",
+                alignment: "left",
+              }),
+            ],
+            {
+              direction: "column",
+              gap: 2,
+              alignItems: "start",
+            },
+          ),
           {
-            direction: "column",
-            gap: 2,
-            alignItems: "start",
+            top: 5,
+            bottom: 5,
+            left: 8,
+            right: 8,
+            radii: 6,
+            fill: "#e2e2e2",
           },
         ),
-        {
-          top: 5,
-          bottom: 5,
-          left: 8,
-          right: 8,
-          radii: 6,
-          fill: "#e2e2e2",
-        },
-      );
+        { alignSelf: "stretch" },
+      ),
+    );
+  }
+  bubbleChildren.push(messageText);
+
+  const bubbleColumn = new Flex<C>(bubbleChildren, {
+    direction: "column",
+    gap: 6,
+    // The bubble itself stays intrinsic on the cross axis.
+    // Only the reply preview stretches to the bubble width.
+    alignItems: "start",
+  });
 
   const content = new RoundedBox(
-    new Flex<C>(
-      replyPreview == null ? [messageText] : [replyPreview, messageText],
-      {
-        direction: "column",
-        gap: 6,
-        alignItems: item.reply == null ? "start" : "stretch",
-      },
-    ),
+    bubbleColumn,
     {
       top: 6,
       bottom: 6,
@@ -143,8 +153,10 @@ That combination gives you:
 - explicit row/column structure
 - explicit grow behavior through `FlexItem`
 - left/right chat placement through `Place`
-- wrapped message bubbles that respect available width
-- nested reply previews that use cross-axis `stretch` to fill the bubble width
+- wrapped message bubbles that respect available width without becoming full-width by default
+- nested reply previews that use item-level cross-axis `stretch` to fill the bubble width
+
+In other words: a finite `maxWidth` / `maxHeight` limits measurement, but does not force the `Flex` container to fill the cross axis. If you want a child to fill the computed bubble width, mark that child with `alignSelf: "stretch"` (or inherit `alignItems: "stretch"` from the parent).
 
 **Development**
 Install dependencies:
