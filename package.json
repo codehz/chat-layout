@@ -19,5 +19,5 @@
     "example": "cd example && bun run build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "version": "1.0.0-6"
+  "version": "1.0.0"
 }
