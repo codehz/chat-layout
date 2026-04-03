@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { Fixed, Flex, FlexItem, PaddingBox } from "../../src/nodes";
+import { Fixed, Flex, FlexItem, MultilineText, PaddingBox } from "../../src/nodes";
 import { BaseRenderer } from "../../src/renderer";
 import type { Context, HitTest, LayoutConstraints, Node } from "../../src/types";
+import { createTextGraphics, ensureMockOffscreenCanvas } from "../helpers/graphics";
 
 type C = CanvasRenderingContext2D;
 
@@ -17,6 +18,8 @@ type ProbeDraw = {
   y: number;
   label: string;
 };
+
+ensureMockOffscreenCanvas();
 
 function cloneConstraints(constraints?: LayoutConstraints): LayoutConstraints | undefined {
   return constraints == null ? undefined : { ...constraints };
@@ -508,5 +511,105 @@ describe("Flex", () => {
     const layout = renderer.getLayoutResult(node, { maxWidth: 50 });
 
     expect(layout?.children.map((child) => child.rect.width)).toEqual([40, 10]);
+  });
+
+  test("row multiline text shrink increases cross size", () => {
+    const renderer = new BaseRenderer(createTextGraphics(320, 200), {});
+    const node = new Flex<C>([
+      new Fixed(20, 10),
+      new FlexItem(new MultilineText<C>("alpha beta gamma delta", {
+        align: "start",
+        lineHeight: 20,
+        font: "16px sans-serif",
+        style: "#000",
+      }), { shrink: 1 }),
+    ], {
+      direction: "row",
+    });
+
+    const box = renderer.measureNode(node, { maxWidth: 60 });
+    const layout = renderer.getLayoutResult(node, { maxWidth: 60 });
+
+    expect(box.height).toBe(80);
+    expect(layout?.children[1]?.rect.width).toBe(40);
+    expect(layout?.children[1]?.contentBox.height).toBe(80);
+  });
+
+  test("stretch remeasure keeps finalMain after shrink", () => {
+    const measures: Array<LayoutConstraints | undefined> = [];
+    const draws: Array<LayoutConstraints | undefined> = [];
+    const hits: Array<LayoutConstraints | undefined> = [];
+    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 120), {});
+    const probe: Node<C> = {
+      measure(ctx) {
+        measures.push(cloneConstraints(ctx.constraints));
+        if (ctx.constraints?.minHeight === 40 && ctx.constraints?.maxHeight === 40) {
+          return { width: 20, height: 40 };
+        }
+        if (ctx.constraints?.maxWidth === 20) {
+          return { width: 20, height: 10 };
+        }
+        return { width: 40, height: 10 };
+      },
+      measureMinContent() {
+        return { width: 20, height: 10 };
+      },
+      draw(ctx) {
+        draws.push(cloneConstraints(ctx.constraints));
+        return false;
+      },
+      hittest(ctx) {
+        hits.push(cloneConstraints(ctx.constraints));
+        return true;
+      },
+    };
+    const node = new Flex<C>([
+      new Fixed(40, 40),
+      new FlexItem(probe, { shrink: 1, alignSelf: "stretch" }),
+    ], {
+      direction: "row",
+      alignItems: "stretch",
+    });
+    const constraints = { maxWidth: 60, maxHeight: 100 };
+
+    renderer.measureNode(node, constraints);
+    const layout = renderer.getLayoutResult(node, constraints);
+    renderer.drawNode(node, constraints);
+    renderer.hittestNode(node, { x: 45, y: 5, type: "click" }, constraints);
+
+    expect(measures).toEqual([
+      { minWidth: undefined, maxWidth: undefined, minHeight: undefined, maxHeight: 100 },
+      { minWidth: undefined, maxWidth: 20, minHeight: undefined, maxHeight: 100 },
+      { minWidth: undefined, maxWidth: 20, minHeight: 40, maxHeight: 40 },
+    ]);
+    expect(layout?.children[1]?.rect).toEqual({ x: 40, y: 0, width: 20, height: 40 });
+    expect(layout?.children[1]?.constraints).toEqual({ minWidth: undefined, maxWidth: 20, minHeight: 40, maxHeight: 40 });
+    expect(draws).toEqual([{ minWidth: undefined, maxWidth: 20, minHeight: 40, maxHeight: 40 }]);
+    expect(hits).toEqual([{ minWidth: undefined, maxWidth: 20, minHeight: 40, maxHeight: 40 }]);
+  });
+
+  test("nested flex responds to parent finalMain", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const inner = new Flex<C>([
+      new FlexItem(createShrinkProbe(50, 10, 10), { shrink: 1 }),
+      new FlexItem(createShrinkProbe(50, 10, 10), { shrink: 1 }),
+    ], {
+      direction: "row",
+    });
+    const outer = new Flex<C>([
+      new Fixed(20, 10),
+      new FlexItem(inner, { shrink: 1 }),
+    ], {
+      direction: "row",
+    });
+
+    renderer.measureNode(outer, { maxWidth: 80 });
+    const outerLayout = renderer.getLayoutResult(outer, { maxWidth: 80 })!;
+    const innerConstraints = outerLayout.children[1]!.constraints;
+    const innerLayout = renderer.getLayoutResult(inner, innerConstraints)!;
+
+    expect(outerLayout.children[1]!.rect.width).toBe(60);
+    expect(innerConstraints).toEqual({ minWidth: undefined, maxWidth: 60, minHeight: undefined, maxHeight: undefined });
+    expect(innerLayout.children.map((child) => child.rect.width)).toEqual([30, 30]);
   });
 });

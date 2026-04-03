@@ -82,6 +82,19 @@ function clampToConstraints(value: number, min?: number, max?: number): number {
   return result;
 }
 
+function constraintsEqual(left: LayoutConstraints | undefined, right: LayoutConstraints | undefined): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left == null || right == null) {
+    return left == null && right == null;
+  }
+  return left.minWidth === right.minWidth
+    && left.maxWidth === right.maxWidth
+    && left.minHeight === right.minHeight
+    && left.maxHeight === right.maxHeight;
+}
+
 function getCrossAlignment(alignSelf: CrossAxisAlignment | "auto" | undefined, alignItems: CrossAxisAlignment): CrossAxisAlignment {
   if (alignSelf == null || alignSelf === "auto") {
     return alignItems;
@@ -335,7 +348,20 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
       if (!(measurement.grow > 0 && finiteMain && remainingMain != null && totalGrow > 0)) {
         measurement.measured = measurement.basisMeasured;
         measurement.initialConstraints = measurement.basisConstraints;
-        measurement.finalConstraints = measurement.basisConstraints;
+        measurement.finalConstraints = finiteMain
+          ? createAxisConstraints(
+              axis,
+              constraints,
+              {
+                min: undefined,
+                max: measurement.finalMain,
+              },
+              {
+                min: undefined,
+                max: maxCross,
+              },
+            )
+          : measurement.basisConstraints;
         measurement.allocatedMain = undefined;
         measurement.finalMain = measurement.basis;
         measurement.frameMain = measurement.basis;
@@ -366,6 +392,15 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
     }
   }
 
+  for (const child of orderedChildren) {
+    const measurement = measurements.get(child)!;
+    if (!constraintsEqual(measurement.initialConstraints, measurement.finalConstraints)) {
+      measurement.measured = measureChild(child, measurement.finalConstraints);
+    }
+    measurement.frameMain = measurement.finalMain;
+    measurement.frameCross = getCrossSize(axis, measurement.measured);
+  }
+
   let contentMain = gapTotal;
   let contentCross = 0;
   for (const child of orderedChildren) {
@@ -387,10 +422,10 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
 
       const finalConstraints = createAxisConstraints(
         axis,
-        measurement.initialConstraints,
+        measurement.finalConstraints,
         {
-          min: getMinMain(axis, measurement.initialConstraints),
-          max: getMaxMain(axis, measurement.initialConstraints),
+          min: getMinMain(axis, measurement.finalConstraints),
+          max: getMaxMain(axis, measurement.finalConstraints),
         },
         {
           min: containerCross,

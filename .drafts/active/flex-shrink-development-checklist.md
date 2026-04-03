@@ -28,10 +28,10 @@
 - [x] Phase 1. 扩展类型与最小测量接口
 - [x] Phase 2. 落地 `min-content` 测量能力
 - [x] Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
-- [ ] Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
+- [x] Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
 - [ ] Phase 5. 补齐测试、示例、文档与发布检查
 
-当前进度：`4 / 6` 已完成
+当前进度：`5 / 6` 已完成
 
 ---
 
@@ -201,7 +201,7 @@
 
 ## Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
 
-状态：`[ ] 未开始`
+状态：`[x] 已完成`
 
 目标：
 
@@ -221,24 +221,26 @@
 
 行动清单：
 
-- [ ] shrink 分配完成后，以每个子项的 `finalMain` 作为主轴上限重新测量，生成最终 `measured` 与 `finalConstraints`。
-- [ ] 用重测后的子项尺寸重新汇总 `contentCross` 和容器交叉轴，覆盖文本折行变高的场景。
-- [ ] 调整 stretch pass 顺序为“shrink/grow 后重测 -> 计算 containerCross -> stretch 精确重测”。
-- [ ] 确保 stretch 第二阶段使用的是 shrink 后的 `finalMain`，不会回退到原始 basis 或旧的剩余空间约束。
-- [ ] 检查 `contentBox`、`rect`、`draw`、`hittest` 读取到的都是最终约束对应的布局结果。
-- [ ] 覆盖嵌套 Flex：outer shrink 传入 `finalMain` 后，inner flex 能递归响应自己的 shrink / grow 逻辑。
-- [ ] 评估并记录 `column shrink + MultilineText` 的表现；若不处理裁剪，至少在备注和文档中说明限制。
+- [x] shrink 分配完成后，以每个子项的 `finalMain` 作为主轴上限重新测量，生成最终 `measured` 与 `finalConstraints`。
+- [x] 用重测后的子项尺寸重新汇总 `contentCross` 和容器交叉轴，覆盖文本折行变高的场景。
+- [x] 调整 stretch pass 顺序为“shrink/grow 后重测 -> 计算 containerCross -> stretch 精确重测”。
+- [x] 确保 stretch 第二阶段使用的是 shrink 后的 `finalMain`，不会回退到原始 basis 或旧的剩余空间约束。
+- [x] 检查 `contentBox`、`rect`、`draw`、`hittest` 读取到的都是最终约束对应的布局结果。
+- [x] 覆盖嵌套 Flex：outer shrink 传入 `finalMain` 后，inner flex 能递归响应自己的 shrink / grow 逻辑。
+- [x] 评估并记录 `column shrink + MultilineText` 的表现；若不处理裁剪，至少在备注和文档中说明限制。
 
 验收标准：
 
-- [ ] `row + MultilineText` shrink 后会因折行变多而正确增高容器。
-- [ ] stretch 子项最终 frame 使用的是容器最终交叉轴，且主轴仍受 shrink 后约束控制。
-- [ ] 布局缓存、绘制、命中测试不会混用第一阶段和最终阶段的约束结果。
-- [ ] 嵌套 Flex 在 shrink 场景下没有明显回归。
+- [x] `row + MultilineText` shrink 后会因折行变多而正确增高容器。
+- [x] stretch 子项最终 frame 使用的是容器最终交叉轴，且主轴仍受 shrink 后约束控制。
+- [x] 布局缓存、绘制、命中测试不会混用第一阶段和最终阶段的约束结果。
+- [x] 嵌套 Flex 在 shrink 场景下没有明显回归。
 
 备注：
 
-- 如果这一阶段暴露出 draw 层需要裁剪能力，先把 shrink 主路径合并，再评估是否拆出独立 follow-up。
+- 已增加 final-main remeasure：只有当初测约束与最终约束不同才重测，避免非 shrink 场景平白增加测量噪音。
+- stretch pass 现基于 `finalConstraints` 再固定交叉轴，因此 shrink 后的主轴上限不会在第二阶段被回退。
+- `column shrink + MultilineText` 仍未补裁剪系统；本轮通过测试和文档明确它属于已知限制，而不是隐藏行为。
 
 ## Phase 5. 补齐测试、示例、文档与发布检查
 

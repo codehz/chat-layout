@@ -179,6 +179,46 @@ describe("layout context", () => {
     expect(hitXs.at(-1)).toBe(10);
   });
 
+  test("shrink layouts reuse final child constraints for draw and hittest", () => {
+    const seenMeasureWidths: Array<number | undefined> = [];
+    const seenDrawWidths: Array<number | undefined> = [];
+    const seenHitWidths: Array<number | undefined> = [];
+    const tail: Node<C> = {
+      measure(ctx) {
+        seenMeasureWidths.push(ctx.constraints?.maxWidth);
+        return { width: ctx.constraints?.maxWidth ?? 50, height: 20 };
+      },
+      measureMinContent() {
+        return { width: 10, height: 20 };
+      },
+      draw(ctx) {
+        seenDrawWidths.push(ctx.constraints?.maxWidth);
+        return false;
+      },
+      hittest(ctx) {
+        seenHitWidths.push(ctx.constraints?.maxWidth);
+        return true;
+      },
+    };
+
+    const root = new Flex<C>([
+      new Fixed(20, 20),
+      new FlexItem(tail, { shrink: 1 }),
+    ], {
+      direction: "row",
+    });
+    const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
+    const constraints = { maxWidth: 60 };
+
+    renderer.measureNode(root, constraints);
+    renderer.drawNode(root, constraints);
+    renderer.hittestNode(root, { x: 30, y: 10, type: "click" }, constraints);
+
+    expect(seenMeasureWidths).toEqual([undefined, 40]);
+    expect(seenDrawWidths).toEqual([40]);
+    expect(seenHitWidths).toEqual([40]);
+  });
+
   test("text nodes measure safely across multiple constraint variants", () => {
     const renderer = new BaseRenderer(createTextGraphics(), {});
     const singleLine = createTextNode("alpha beta gamma delta epsilon zeta eta theta");
