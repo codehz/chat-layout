@@ -72,6 +72,27 @@ function createProbe(label: string, width = 10, height = 10, draws: ProbeDraw[] 
   };
 }
 
+function createShrinkProbe(width: number, height: number, minContentMain: number, direction: "row" | "column" = "row"): Node<C> {
+  return {
+    measure() {
+      return direction === "row"
+        ? { width, height }
+        : { width: height, height: width };
+    },
+    measureMinContent() {
+      return direction === "row"
+        ? { width: minContentMain, height }
+        : { width: height, height: minContentMain };
+    },
+    draw() {
+      return false;
+    },
+    hittest() {
+      return false;
+    },
+  };
+}
+
 describe("Flex", () => {
   test("row direction distributes grow space proportionally and keeps content boxes separate", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
@@ -424,5 +445,68 @@ describe("Flex", () => {
       width: 43,
       height: 7,
     });
+  });
+
+  test("row shrink distributes overflow proportionally", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const node = new Flex<C>([
+      new FlexItem(createShrinkProbe(30, 10, 10), { shrink: 1 }),
+      new FlexItem(createShrinkProbe(30, 10, 10), { shrink: 1 }),
+      new FlexItem(createShrinkProbe(30, 10, 10), { shrink: 1 }),
+    ], {
+      direction: "row",
+    });
+
+    const box = renderer.measureNode(node, { maxWidth: 60 });
+    const layout = renderer.getLayoutResult(node, { maxWidth: 60 });
+
+    expect(box).toEqual({ width: 60, height: 10 });
+    expect(layout?.children.map((child) => child.rect.width)).toEqual([20, 20, 20]);
+  });
+
+  test("column shrink distributes overflow proportionally", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const node = new Flex<C>([
+      new FlexItem(createShrinkProbe(50, 20, 10, "column"), { shrink: 1 }),
+      new FlexItem(createShrinkProbe(50, 20, 10, "column"), { shrink: 1 }),
+    ], {
+      direction: "column",
+    });
+
+    const box = renderer.measureNode(node, { maxHeight: 80 });
+    const layout = renderer.getLayoutResult(node, { maxHeight: 80 });
+
+    expect(box).toEqual({ width: 20, height: 80 });
+    expect(layout?.children.map((child) => child.rect.height)).toEqual([40, 40]);
+  });
+
+  test("shrink respects min-content and freezes saturated items", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const node = new Flex<C>([
+      new FlexItem(createShrinkProbe(50, 10, 40), { shrink: 1 }),
+      new FlexItem(createShrinkProbe(50, 10, 10), { shrink: 1 }),
+    ], {
+      direction: "row",
+    });
+
+    renderer.measureNode(node, { maxWidth: 60 });
+    const layout = renderer.getLayoutResult(node, { maxWidth: 60 });
+
+    expect(layout?.children.map((child) => child.rect.width)).toEqual([40, 20]);
+  });
+
+  test("shrink=0 items opt out of overflow redistribution", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const node = new Flex<C>([
+      new FlexItem(createShrinkProbe(40, 10, 10), { shrink: 0 }),
+      new FlexItem(createShrinkProbe(40, 10, 10), { shrink: 1 }),
+    ], {
+      direction: "row",
+    });
+
+    renderer.measureNode(node, { maxWidth: 50 });
+    const layout = renderer.getLayoutResult(node, { maxWidth: 50 });
+
+    expect(layout?.children.map((child) => child.rect.width)).toEqual([40, 10]);
   });
 });

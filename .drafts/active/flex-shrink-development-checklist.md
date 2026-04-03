@@ -27,11 +27,11 @@
 - [x] Phase 0. 锁定语义范围与兼容策略
 - [x] Phase 1. 扩展类型与最小测量接口
 - [x] Phase 2. 落地 `min-content` 测量能力
-- [ ] Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
+- [x] Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
 - [ ] Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
 - [ ] Phase 5. 补齐测试、示例、文档与发布检查
 
-当前进度：`3 / 6` 已完成
+当前进度：`4 / 6` 已完成
 
 ---
 
@@ -158,7 +158,7 @@
 
 ## Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
 
-状态：`[ ] 未开始`
+状态：`[x] 已完成`
 
 目标：
 
@@ -177,25 +177,27 @@
 
 行动清单：
 
-- [ ] 在 `computeFlexLayout` 中新增 Phase 0 basis 测量：对所有子项使用“移除主轴 max、保留交叉轴约束”的方式测量自然主轴尺寸。
-- [ ] 扩展内部 `FlexMeasurement` 结构，至少记录 `basis`、`shrink`、`minContentMain`、`finalMain`、`frozen`、`allocatedMain`。
-- [ ] 以 `availableMain - totalBasis` 判断分支：`freeSpace < 0` 进入 shrink，`freeSpace >= 0` 继续沿用 grow / 原有分配。
-- [ ] 实现 shrink 权重分配公式：按 `shrink * basis` 比例分担溢出量。
-- [ ] 实现冻结迭代：子项触底 `min-content` 后冻结，并把剩余 deficit 重新分配给未冻结项。
-- [ ] 处理 `shrink = 0` 或 `totalScaled = 0` 的退化路径，确保算法可以带着剩余溢出安全退出。
-- [ ] 保证无限主轴约束下不进入 shrink 路径，继续按 intrinsic 行为工作。
-- [ ] 保持现有 grow 路径在非溢出场景下行为不回退。
+- [x] 在 `computeFlexLayout` 中新增 Phase 0 basis 测量：对所有子项使用“移除主轴 max、保留交叉轴约束”的方式测量自然主轴尺寸。
+- [x] 扩展内部 `FlexMeasurement` 结构，至少记录 `basis`、`shrink`、`minContentMain`、`finalMain`、`frozen`、`allocatedMain`。
+- [x] 以 `availableMain - totalBasis` 判断分支：`freeSpace < 0` 进入 shrink，`freeSpace >= 0` 继续沿用 grow / 原有分配。
+- [x] 实现 shrink 权重分配公式：按 `shrink * basis` 比例分担溢出量。
+- [x] 实现冻结迭代：子项触底 `min-content` 后冻结，并把剩余 deficit 重新分配给未冻结项。
+- [x] 处理 `shrink = 0` 或 `totalScaled = 0` 的退化路径，确保算法可以带着剩余溢出安全退出。
+- [x] 保证无限主轴约束下不进入 shrink 路径，继续按 intrinsic 行为工作。
+- [x] 保持现有 grow 路径在非溢出场景下行为不回退。
 
 验收标准：
 
-- [ ] `row` 和 `column` 都能在有限主轴下按 shrink 权重分配溢出量。
-- [ ] 某个子项达到 `min-content` 后，其余子项能继续吸收剩余 shrink 量。
-- [ ] 没有 shrink 的旧场景仍与当前行为一致。
-- [ ] 代码中不再依赖“后测的子项拿到更小 maxMain”来模拟 shrink。
+- [x] `row` 和 `column` 都能在有限主轴下按 shrink 权重分配溢出量。
+- [x] 某个子项达到 `min-content` 后，其余子项能继续吸收剩余 shrink 量。
+- [x] 没有 shrink 的旧场景仍与当前行为一致。
+- [x] 代码中不再依赖“后测的子项拿到更小 maxMain”来模拟 shrink。
 
 备注：
 
-- 这一阶段优先把主轴分配逻辑跑通，先不要把 stretch 和重测细节揉在一起收尾。
+- 已改为 basis-first：所有子项先做自然主轴测量，再按 `availableMain - totalBasis` 选择 grow / shrink 路径。
+- shrink 冻结迭代会只扣除已饱和项真实吸收的 deficit，避免把未冻结项的暂态 shrink 提前算死。
+- 非 shrink 场景不会额外触发 `measureMinContent()`，保留现有 grow/stetch 测量次数和行为基线。
 
 ## Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
 

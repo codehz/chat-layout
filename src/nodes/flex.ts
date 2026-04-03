@@ -140,16 +140,25 @@ function createRectFromAxis(axis: Axis, main: number, cross: number, mainSize: n
     : createRect(cross, main, crossSize, mainSize);
 }
 
+const SHRINK_EPSILON = 1e-6;
+
 type FlexMeasurement<C extends CanvasRenderingContext2D> = {
   child: Node<C>;
   item: FlexItemOptions;
+  basisMeasured: Box;
   measured: Box;
+  basisConstraints?: LayoutConstraints;
   initialConstraints?: LayoutConstraints;
   finalConstraints?: LayoutConstraints;
   allocatedMain?: number;
   grow: number;
+  shrink: number;
   effectiveAlign: CrossAxisAlignment;
   stretch: boolean;
+  basis: number;
+  minContentMain: number;
+  finalMain: number;
+  frozen: boolean;
   frameMain: number;
   frameCross: number;
 };
@@ -176,6 +185,7 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
   options: FlexContainerOptions,
   constraints: LayoutConstraints | undefined,
   measureChild: (node: Node<C>, constraints?: LayoutConstraints) => Box,
+  measureChildMinContent: (node: Node<C>, constraints?: LayoutConstraints) => Box,
 ): MeasuredLayout<C> {
   const axis = options.direction ?? "row";
   const gap = options.gap ?? 0;
@@ -192,89 +202,168 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
   const finiteMain = maxMain != null;
   const finiteCross = maxCross != null;
   const availableMain = finiteMain ? Math.max(0, maxMain - gapTotal) : undefined;
-  let consumedMain = 0;
   let totalGrow = 0;
+  let totalBasis = 0;
+  let nonGrowBasis = 0;
   const measurements = new Map<Node<C>, FlexMeasurement<C>>();
+  const basisConstraints = createAxisConstraints(
+    axis,
+    constraints,
+    {
+      min: undefined,
+      max: undefined,
+    },
+    {
+      min: undefined,
+      max: maxCross,
+    },
+  );
 
   for (const child of orderedChildren) {
     const item = readFlexItemOptions(child);
     const grow = item.grow ?? 0;
+    const shrink = item.shrink ?? 0;
     totalGrow += grow;
-    if (grow > 0 && finiteMain) {
-      continue;
-    }
-
     const effectiveAlign = getCrossAlignment(item.alignSelf, alignItems);
     const stretch = effectiveAlign === "stretch";
-    const childConstraints = createAxisConstraints(
-      axis,
-      constraints,
-      {
-        max: finiteMain && availableMain != null ? Math.max(0, availableMain - consumedMain) : maxMain,
-      },
-      {
-        min: undefined,
-        max: maxCross,
-      },
-    );
-    const measured = measureChild(child, childConstraints);
-    const frameMain = getMainSize(axis, measured);
-    const frameCross = getCrossSize(axis, measured);
+    const basisMeasured = measureChild(child, basisConstraints);
+    const basis = getMainSize(axis, basisMeasured);
+
+    totalBasis += basis;
+    if (grow <= 0) {
+      nonGrowBasis += basis;
+    }
+
     measurements.set(child, {
       child,
       item,
-      measured,
-      initialConstraints: childConstraints,
-      finalConstraints: childConstraints,
+      basisMeasured,
+      measured: basisMeasured,
+      basisConstraints,
+      initialConstraints: basisConstraints,
+      finalConstraints: basisConstraints,
       allocatedMain: undefined,
       grow,
+      shrink,
       effectiveAlign,
       stretch,
-      frameMain,
-      frameCross,
+      basis,
+      minContentMain: basis,
+      finalMain: basis,
+      frozen: false,
+      frameMain: basis,
+      frameCross: getCrossSize(axis, basisMeasured),
     });
-    consumedMain += frameMain;
   }
 
-  const remainingMain = finiteMain && availableMain != null ? Math.max(0, availableMain - consumedMain) : undefined;
+  const entersShrinkPath = finiteMain && availableMain != null && totalBasis - availableMain > SHRINK_EPSILON;
 
-  for (const child of orderedChildren) {
-    if (measurements.has(child)) {
-      continue;
+  if (entersShrinkPath) {
+    const totalDeficit = totalBasis - availableMain!;
+    let remainingDeficit = totalDeficit;
+
+    for (const child of orderedChildren) {
+      const measurement = measurements.get(child)!;
+      const minContentMeasured = measureChildMinContent(child, measurement.basisConstraints);
+      measurement.minContentMain = Math.min(measurement.basis, getMainSize(axis, minContentMeasured));
+      measurement.finalMain = measurement.basis;
+      measurement.frozen = measurement.shrink <= 0 || measurement.basis - measurement.minContentMain <= SHRINK_EPSILON;
     }
-    const item = readFlexItemOptions(child);
-    const grow = item.grow ?? 0;
-    const effectiveAlign = getCrossAlignment(item.alignSelf, alignItems);
-    const stretch = effectiveAlign === "stretch";
-    const allocatedMain = finiteMain && remainingMain != null && totalGrow > 0 ? (remainingMain * grow) / totalGrow : undefined;
-    const childConstraints = createAxisConstraints(
-      axis,
-      constraints,
-      {
-        max: allocatedMain,
-      },
-      {
-        min: undefined,
-        max: maxCross,
-      },
-    );
-    const measured = measureChild(child, childConstraints);
-    const measuredMain = getMainSize(axis, measured);
-    const frameMain = allocatedMain ?? measuredMain;
-    const frameCross = getCrossSize(axis, measured);
-    measurements.set(child, {
-      child,
-      item,
-      measured,
-      initialConstraints: childConstraints,
-      finalConstraints: childConstraints,
-      allocatedMain,
-      grow,
-      effectiveAlign,
-      stretch,
-      frameMain,
-      frameCross,
-    });
+
+    while (remainingDeficit > SHRINK_EPSILON) {
+      const active = orderedChildren
+        .map((child) => measurements.get(child)!)
+        .filter((measurement) => !measurement.frozen && measurement.shrink > 0);
+      const totalScaled = active.reduce((sum, measurement) => sum + measurement.shrink * measurement.basis, 0);
+
+      if (active.length === 0 || totalScaled <= SHRINK_EPSILON) {
+        break;
+      }
+
+      let frozeAny = false;
+      for (const measurement of active) {
+        const tentative = measurement.basis - remainingDeficit * ((measurement.shrink * measurement.basis) / totalScaled);
+        if (tentative <= measurement.minContentMain + SHRINK_EPSILON) {
+          measurement.finalMain = measurement.minContentMain;
+          measurement.frozen = true;
+          frozeAny = true;
+        } else {
+          measurement.finalMain = tentative;
+        }
+      }
+
+      if (!frozeAny) {
+        remainingDeficit = 0;
+        break;
+      }
+
+      let absorbedDeficit = 0;
+      for (const child of orderedChildren) {
+        const measurement = measurements.get(child)!;
+        if (measurement.frozen) {
+          absorbedDeficit += Math.max(0, measurement.basis - measurement.finalMain);
+        }
+      }
+      remainingDeficit = Math.max(0, totalDeficit - absorbedDeficit);
+    }
+
+    for (const child of orderedChildren) {
+      const measurement = measurements.get(child)!;
+      measurement.measured = measurement.basisMeasured;
+      measurement.initialConstraints = measurement.basisConstraints;
+      measurement.finalConstraints = createAxisConstraints(
+        axis,
+        constraints,
+        {
+          min: undefined,
+          max: measurement.finalMain,
+        },
+        {
+          min: undefined,
+          max: maxCross,
+        },
+      );
+      measurement.allocatedMain = undefined;
+      measurement.frameMain = measurement.finalMain;
+      measurement.frameCross = getCrossSize(axis, measurement.measured);
+    }
+  } else {
+    const remainingMain = finiteMain && availableMain != null ? Math.max(0, availableMain - nonGrowBasis) : undefined;
+
+    for (const child of orderedChildren) {
+      const measurement = measurements.get(child)!;
+      if (!(measurement.grow > 0 && finiteMain && remainingMain != null && totalGrow > 0)) {
+        measurement.measured = measurement.basisMeasured;
+        measurement.initialConstraints = measurement.basisConstraints;
+        measurement.finalConstraints = measurement.basisConstraints;
+        measurement.allocatedMain = undefined;
+        measurement.finalMain = measurement.basis;
+        measurement.frameMain = measurement.basis;
+        measurement.frameCross = getCrossSize(axis, measurement.measured);
+        continue;
+      }
+
+      const allocatedMain = (remainingMain * measurement.grow) / totalGrow;
+      const childConstraints = createAxisConstraints(
+        axis,
+        constraints,
+        {
+          max: allocatedMain,
+        },
+        {
+          min: undefined,
+          max: maxCross,
+        },
+      );
+      const measured = measureChild(child, childConstraints);
+      measurement.measured = measured;
+      measurement.initialConstraints = childConstraints;
+      measurement.finalConstraints = childConstraints;
+      measurement.allocatedMain = allocatedMain;
+      measurement.finalMain = allocatedMain;
+      measurement.frameMain = allocatedMain;
+      measurement.frameCross = getCrossSize(axis, measured);
+    }
   }
 
   let contentMain = gapTotal;
@@ -390,7 +479,13 @@ export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
   }
 
   measure(ctx: Context<C>): Box {
-    const result = computeFlexLayout(this.children, this.options, ctx.constraints, (node, constraints) => ctx.measureNode(node, constraints));
+    const result = computeFlexLayout(
+      this.children,
+      this.options,
+      ctx.constraints,
+      (node, constraints) => ctx.measureNode(node, constraints),
+      (node, constraints) => measureNodeMinContent(ctx, node, constraints),
+    );
     writeLayoutResult(this, ctx, result.layout);
     return result.box;
   }
