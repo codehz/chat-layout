@@ -168,7 +168,7 @@ In other words: a finite `maxWidth` / `maxHeight` limits measurement, but does n
 ## API notes
 
 - `memoRenderItem()` now only accepts object items. If your list item is a primitive or you want to memoize by an explicit id, use `memoRenderItemBy(keyOf, renderItem)`.
-- `FlexItemOptions` intentionally exposes only the implemented item-level controls: `grow` and `alignSelf`. The previously documented `shrink` / `basis` fields were removed because they were never implemented.
+- `FlexItemOptions` keeps `shrink` opt-in when enabled: the rollout uses a compatibility-first default of `0`, while `basis` remains internal-only and fixed to `"auto"`.
 - `ListState.position` now uses `undefined` as the explicit “use renderer default anchor” state. Use `list.setAnchor(position, offset)` to opt into a concrete anchor.
 - `ListState` can be seeded with `new ListState(items)` and reset with `list.reset(nextItems)`.
 - `MultilineText` now uses only `align` / `physicalAlign`; the old `alignment` field has been removed.
@@ -183,7 +183,8 @@ In other words: a finite `maxWidth` / `maxHeight` limits measurement, but does n
   - `new FlexItem(node, { grow: 1, shrink: 1, basis: 100 })`
 - After:
   - `new FlexItem(node, { grow: 1 })`
-  - unsupported sizing semantics should be modeled explicitly in node measurement/layout instead of `shrink` / `basis`
+  - current compatibility policy keeps `shrink` opt-in and leaves `basis` internal-only (`"auto"`)
+  - unsupported sizing semantics beyond that should still be modeled explicitly in node measurement/layout
 - Before:
   - `new MultilineText(text, { alignment: "left" })`
 - After:
