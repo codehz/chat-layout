@@ -53,6 +53,40 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 - `Text` supports `overflow: "ellipsis"` with `ellipsisPosition: "start" | "end" | "middle"` when measured under a finite `maxWidth`.
 - `MultilineText` supports `overflow: "ellipsis"` together with `maxLines`; values below `1` are treated as `1`.
 
+## Text ellipsis
+
+Single-line `Text` can ellipsize at the start, end, or middle when a finite width constraint is present:
+
+```ts
+const title = new Text("Extremely long thread title that should not blow out the row", {
+  lineHeight: 20,
+  font: "16px system-ui",
+  style: "#111",
+  overflow: "ellipsis",
+  ellipsisPosition: "middle",
+});
+```
+
+Multi-line `MultilineText` can cap the visible line count and convert the last visible line to an end ellipsis:
+
+```ts
+const preview = new MultilineText(reply.content, {
+  lineHeight: 16,
+  font: "13px system-ui",
+  style: "#444",
+  align: "start",
+  overflow: "ellipsis",
+  maxLines: 2,
+});
+```
+
+Notes:
+
+- Ellipsis is only inserted when the node is measured under a finite `maxWidth` and content actually overflows that constraint.
+- `MultilineText` only supports end ellipsis on the last visible line; start/middle ellipsis are intentionally single-line only.
+- `maxLines` defaults to unlimited, and values below `1` are clamped to `1`.
+- Current `measureMinContent()` behavior stays compatibility-first: ellipsis affects constrained measurement/drawing, but does not lower the min-content shrink floor by itself.
+
 ## Shrink behavior
 
 - `FlexItemOptions.shrink` defaults to `0`, so old layouts keep their previous behavior unless you opt in.

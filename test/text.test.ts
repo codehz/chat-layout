@@ -9,12 +9,55 @@ import {
   measureTextIntrinsic,
   measureTextMinContent,
 } from "../src/text";
+import { MultilineText, Text } from "../src/nodes";
 import type { Context } from "../src/types";
 import { ensureMockOffscreenCanvas } from "./helpers/graphics";
+import { ConstraintTestRenderer } from "./helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
 
 ensureMockOffscreenCanvas();
+
+function createMeasuredContext(font: string): Context<C> {
+  return {
+    graphics: {
+      font,
+      measureText(text: string) {
+        return {
+          width: text.length * 8,
+          fontBoundingBoxAscent: 8,
+          fontBoundingBoxDescent: 2,
+        } as TextMetrics;
+      },
+    },
+  } as Context<C>;
+}
+
+function createRecordingGraphics(recordedTexts: string[]): C {
+  return {
+    canvas: {
+      clientWidth: 320,
+      clientHeight: 100,
+    },
+    fillStyle: "#000",
+    font: "16px sans-serif",
+    textAlign: "left",
+    textRendering: "auto",
+    clearRect() {},
+    fillText(text: string) {
+      recordedTexts.push(text);
+    },
+    measureText(text: string) {
+      return {
+        width: text.length * 8,
+        fontBoundingBoxAscent: 8,
+        fontBoundingBoxDescent: 2,
+      } as TextMetrics;
+    },
+    save() {},
+    restore() {},
+  } as unknown as C;
+}
 
 describe("text metrics", () => {
   test("multiline intrinsic layout measures font shift once per layout", () => {
@@ -137,18 +180,7 @@ describe("text metrics", () => {
   });
 
   test("single-line end ellipsis keeps the visible prefix within maxWidth", () => {
-    const ctx = {
-      graphics: {
-        font: "16px ellipsis-end",
-        measureText(text: string) {
-          return {
-            width: text.length * 8,
-            fontBoundingBoxAscent: 8,
-            fontBoundingBoxDescent: 2,
-          } as TextMetrics;
-        },
-      },
-    } as Context<C>;
+    const ctx = createMeasuredContext("16px ellipsis-end");
 
     expect(layoutEllipsizedFirstLine(ctx, "alphabet", 40, "end")).toEqual({
       width: 40,
@@ -159,18 +191,7 @@ describe("text metrics", () => {
   });
 
   test("single-line start ellipsis keeps the visible suffix within maxWidth", () => {
-    const ctx = {
-      graphics: {
-        font: "16px ellipsis-start",
-        measureText(text: string) {
-          return {
-            width: text.length * 8,
-            fontBoundingBoxAscent: 8,
-            fontBoundingBoxDescent: 2,
-          } as TextMetrics;
-        },
-      },
-    } as Context<C>;
+    const ctx = createMeasuredContext("16px ellipsis-start");
 
     expect(layoutEllipsizedFirstLine(ctx, "alphabet", 40, "start")).toEqual({
       width: 40,
@@ -181,18 +202,7 @@ describe("text metrics", () => {
   });
 
   test("single-line middle ellipsis keeps both ends when space allows", () => {
-    const ctx = {
-      graphics: {
-        font: "16px ellipsis-middle",
-        measureText(text: string) {
-          return {
-            width: text.length * 8,
-            fontBoundingBoxAscent: 8,
-            fontBoundingBoxDescent: 2,
-          } as TextMetrics;
-        },
-      },
-    } as Context<C>;
+    const ctx = createMeasuredContext("16px ellipsis-middle");
 
     expect(layoutEllipsizedFirstLine(ctx, "alphabet", 40, "middle")).toEqual({
       width: 40,
@@ -203,18 +213,7 @@ describe("text metrics", () => {
   });
 
   test("ellipsis helper returns an empty string when even the ellipsis glyph cannot fit", () => {
-    const ctx = {
-      graphics: {
-        font: "16px ellipsis-tight",
-        measureText(text: string) {
-          return {
-            width: text.length * 8,
-            fontBoundingBoxAscent: 8,
-            fontBoundingBoxDescent: 2,
-          } as TextMetrics;
-        },
-      },
-    } as Context<C>;
+    const ctx = createMeasuredContext("16px ellipsis-tight");
 
     expect(layoutEllipsizedFirstLine(ctx, "alphabet", 4, "end")).toEqual({
       width: 0,
@@ -225,18 +224,7 @@ describe("text metrics", () => {
   });
 
   test("multiline overflow ellipsis rewrites the last visible line only when truncated", () => {
-    const ctx = {
-      graphics: {
-        font: "16px multiline-ellipsis",
-        measureText(text: string) {
-          return {
-            width: text.length * 8,
-            fontBoundingBoxAscent: 8,
-            fontBoundingBoxDescent: 2,
-          } as TextMetrics;
-        },
-      },
-    } as Context<C>;
+    const ctx = createMeasuredContext("16px multiline-ellipsis");
 
     expect(layoutTextWithOverflow(ctx, "abcdefghij", 40, { overflow: "ellipsis", maxLines: 1 })).toEqual({
       width: 40,
@@ -254,23 +242,94 @@ describe("text metrics", () => {
   });
 
   test("multiline maxLines clips without ellipsis when overflow stays in clip mode", () => {
-    const ctx = {
-      graphics: {
-        font: "16px multiline-clip",
-        measureText(text: string) {
-          return {
-            width: text.length * 8,
-            fontBoundingBoxAscent: 8,
-            fontBoundingBoxDescent: 2,
-          } as TextMetrics;
-        },
-      },
-    } as Context<C>;
+    const ctx = createMeasuredContext("16px multiline-clip");
 
     expect(layoutTextWithOverflow(ctx, "abcdefghij", 40, { maxLines: 1 })).toEqual({
       width: 40,
       lines: [{ width: 40, text: "abcde", shift: 6, overflowed: false }],
       overflowed: true,
     });
+  });
+
+  test("multiline ellipsis clamps maxLines values below one to a single visible line", () => {
+    const ctx = createMeasuredContext("16px multiline-clamp");
+
+    expect(layoutTextWithOverflow(ctx, "abcdefghijklmno", 40, { overflow: "ellipsis", maxLines: 0 })).toEqual({
+      width: 40,
+      lines: [{ width: 40, text: "abcd…", shift: 6, overflowed: true }],
+      overflowed: true,
+    });
+  });
+
+  test("multiline ellipsis truncates the last visible line for maxLines=2", () => {
+    const ctx = createMeasuredContext("16px multiline-two-lines");
+
+    expect(layoutTextWithOverflow(ctx, "abcdefghijklmno", 40, { overflow: "ellipsis", maxLines: 2 })).toEqual({
+      width: 40,
+      lines: [
+        { width: 40, text: "abcde", shift: 6, overflowed: false },
+        { width: 40, text: "fghi…", shift: 6, overflowed: true },
+      ],
+      overflowed: true,
+    });
+  });
+
+  test("trim-and-collapse ellipsis drops blank lines before applying maxLines", () => {
+    const ctx = createMeasuredContext("16px multiline-trim-ellipsis");
+
+    expect(layoutTextWithOverflow(ctx, "  alpha beta  \n \n  gamma delta  ", 40, {
+      overflow: "ellipsis",
+      maxLines: 1,
+      whitespace: "trim-and-collapse",
+    })).toEqual({
+      width: 40,
+      lines: [{ width: 40, text: "alph…", shift: 6, overflowed: true }],
+      overflowed: true,
+    });
+  });
+
+  test("multiline ellipsis never returns an over-wide last line in ultra-narrow constraints", () => {
+    const ctx = createMeasuredContext("16px multiline-tight");
+
+    expect(layoutTextWithOverflow(ctx, "alphabet", 4, { overflow: "ellipsis", maxLines: 1 })).toEqual({
+      width: 0,
+      lines: [{ width: 0, text: "", shift: 6, overflowed: true }],
+      overflowed: true,
+    });
+  });
+
+  test("Text nodes draw the ellipsized single-line layout", () => {
+    const recordedTexts: string[] = [];
+    const renderer = new ConstraintTestRenderer(createRecordingGraphics(recordedTexts), {});
+    const node = new Text<C>("alphabet", {
+      lineHeight: 20,
+      font: "16px text-node-ellipsis",
+      style: "#000",
+      overflow: "ellipsis",
+      ellipsisPosition: "middle",
+    });
+
+    expect(renderer.measureNode(node, { maxWidth: 40 })).toEqual({ width: 40, height: 20 });
+    renderer.drawNode(node, { maxWidth: 40 });
+
+    expect(recordedTexts).toEqual(["al…et"]);
+  });
+
+  test("MultilineText nodes measure and draw the same truncated layout", () => {
+    const recordedTexts: string[] = [];
+    const renderer = new ConstraintTestRenderer(createRecordingGraphics(recordedTexts), {});
+    const node = new MultilineText<C>("abcdefghijklmno", {
+      lineHeight: 20,
+      font: "16px multiline-node-ellipsis",
+      style: "#000",
+      align: "start",
+      overflow: "ellipsis",
+      maxLines: 2,
+    });
+
+    expect(renderer.measureNode(node, { maxWidth: 40 })).toEqual({ width: 40, height: 40 });
+    renderer.drawNode(node, { maxWidth: 40 });
+
+    expect(recordedTexts).toEqual(["abcde", "fghi…"]);
   });
 });
