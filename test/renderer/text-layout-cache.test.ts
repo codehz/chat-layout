@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { MultilineText, Text } from "../../src/nodes";
+import type { MultilineTextOptions, TextOptions } from "../../src/types";
 import { ChatRenderer, DebugRenderer, ListState, memoRenderItem } from "../../src/renderer";
 import { createTextGraphics, ensureMockOffscreenCanvas, withOffscreenMeasureCounter } from "../helpers/graphics";
 import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
@@ -9,20 +10,22 @@ type C = CanvasRenderingContext2D;
 
 ensureMockOffscreenCanvas();
 
-function createSingleLineNode(text: string, font: string): Text<C> {
+function createSingleLineNode(text: string, font: string, options: Partial<TextOptions<C>> = {}): Text<C> {
   return new Text(text, {
     lineHeight: 20,
     font,
     style: "#000",
+    ...options,
   });
 }
 
-function createMultilineNode(text: string, font: string): MultilineText<C> {
+function createMultilineNode(text: string, font: string, options: Partial<MultilineTextOptions<C>> = {}): MultilineText<C> {
   return new MultilineText(text, {
     align: "start",
     lineHeight: 20,
     font,
     style: "#000",
+    ...options,
   });
 }
 
@@ -207,6 +210,60 @@ describe("text layout cache", () => {
       expect(constrained).toEqual({ width: 80, height: 40 });
       expect(graphicsMeasures).toBe(afterMinContentGraphics);
       expect(offscreen.count).toBe(afterMinContentOffscreen);
+    });
+  });
+
+  test("ellipsized multiline nodes reuse prepared text and ellipsis width caches across maxWidth changes", () => {
+    let graphicsMeasures = 0;
+    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
+      graphicsMeasures += 1;
+    }), {});
+    const node = createMultilineNode(
+      "alpha beta gamma delta epsilon zeta eta theta ellipsis-cache-width-reuse",
+      "16px cache-test-ellipsis-width-reuse",
+      { overflow: "ellipsis", maxLines: 2 },
+    );
+
+    withOffscreenMeasureCounter((offscreen) => {
+      renderer.drawNode(node, { maxWidth: 96 });
+      const warmGraphicsMeasures = graphicsMeasures;
+      const warmOffscreenMeasures = offscreen.count;
+
+      renderer.drawNode(node, { maxWidth: 56 });
+
+      expect(graphicsMeasures).toBe(warmGraphicsMeasures);
+      expect(offscreen.count).toBe(warmOffscreenMeasures);
+
+      const cachedGraphicsMeasures = graphicsMeasures;
+      const cachedOffscreenMeasures = offscreen.count;
+
+      renderer.drawNode(node, { maxWidth: 96 });
+      renderer.drawNode(node, { maxWidth: 56 });
+
+      expect(graphicsMeasures).toBe(cachedGraphicsMeasures);
+      expect(offscreen.count).toBe(cachedOffscreenMeasures);
+    });
+  });
+
+  test("same text with different ellipsis positions shares prepared text work", () => {
+    let graphicsMeasures = 0;
+    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
+      graphicsMeasures += 1;
+    }), {});
+    const text = "alpha beta gamma delta epsilon ellipsis-cache-cross-position";
+    const font = "16px cache-test-cross-position";
+    const startNode = createSingleLineNode(text, font, { overflow: "ellipsis", ellipsisPosition: "start" });
+    const middleNode = createSingleLineNode(text, font, { overflow: "ellipsis", ellipsisPosition: "middle" });
+
+    withOffscreenMeasureCounter((offscreen) => {
+      renderer.drawNode(startNode, { maxWidth: 96 });
+      const warmGraphicsMeasures = graphicsMeasures;
+      const warmOffscreenMeasures = offscreen.count;
+
+      renderer.drawNode(middleNode, { maxWidth: 96 });
+
+      expect(graphicsMeasures).toBe(warmGraphicsMeasures);
+      expect(offscreen.count).toBe(warmOffscreenMeasures);
     });
   });
 });
