@@ -219,7 +219,7 @@ function createChatLikeBubbleTree(
   const row = new Flex<C>(
     [
       new Fixed(32, 32),
-      new FlexItem(alignedBody, { grow: 1 }),
+      new FlexItem(alignedBody, { grow: 1, shrink: 1 }),
       new Fixed(32, 0),
     ],
     {

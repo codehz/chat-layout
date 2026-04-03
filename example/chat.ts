@@ -267,7 +267,8 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
   const row = new Flex<C>(
     [
       new Circle(32, { fill: "red" }),
-      new FlexItem(alignedBody, { grow: 1 }),
+      // Opt into shrink so narrow viewports wrap the bubble body instead of overflowing the row.
+      new FlexItem(alignedBody, { grow: 1, shrink: 1 }),
       new Fixed(32, 0),
     ],
     {

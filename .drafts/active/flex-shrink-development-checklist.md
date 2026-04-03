@@ -29,9 +29,9 @@
 - [x] Phase 2. 落地 `min-content` 测量能力
 - [x] Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
 - [x] Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
-- [ ] Phase 5. 补齐测试、示例、文档与发布检查
+- [x] Phase 5. 补齐测试、示例、文档与发布检查
 
-当前进度：`5 / 6` 已完成
+当前进度：`6 / 6` 已完成
 
 ---
 
@@ -244,7 +244,7 @@
 
 ## Phase 5. 补齐测试、示例、文档与发布检查
 
-状态：`[ ] 未开始`
+状态：`[x] 已完成`
 
 目标：
 
@@ -266,27 +266,28 @@
 
 行动清单：
 
-- [ ] 新增 `row shrink distributes overflow proportionally` 测试。
-- [ ] 新增 `shrink respects min-content and freezes saturated items` 测试。
-- [ ] 新增 `shrink=0 items opt out of overflow redistribution` 测试。
-- [ ] 新增 `row multiline text shrink increases cross size` 测试。
-- [ ] 新增 `stretch remeasure keeps finalMain after shrink` 测试。
-- [ ] 新增 `nested flex responds to parent finalMain` 测试。
-- [ ] 新增文本 min-content 测试，锁定 longest token 语义和空行 / whitespace 行为。
-- [ ] 检查并在需要时更新聊天示例，验证 shrink 对 bubble、reply 预览、多段文本的实际效果。
-- [ ] 更新 README，补充 shrink 的默认值、使用方式、已知限制和迁移说明。
-- [ ] 回填本 checklist 的完成状态和实现备注，作为后续维护入口。
+- [x] 新增 `row shrink distributes overflow proportionally` 测试。
+- [x] 新增 `shrink respects min-content and freezes saturated items` 测试。
+- [x] 新增 `shrink=0 items opt out of overflow redistribution` 测试。
+- [x] 新增 `row multiline text shrink increases cross size` 测试。
+- [x] 新增 `stretch remeasure keeps finalMain after shrink` 测试。
+- [x] 新增 `nested flex responds to parent finalMain` 测试。
+- [x] 新增文本 min-content 测试，锁定 longest token 语义和空行 / whitespace 行为。
+- [x] 检查并在需要时更新聊天示例，验证 shrink 对 bubble、reply 预览、多段文本的实际效果。
+- [x] 更新 README，补充 shrink 的默认值、使用方式、已知限制和迁移说明。
+- [x] 回填本 checklist 的完成状态和实现备注，作为后续维护入口。
 
 验收标准：
 
-- [ ] shrink 核心行为至少被一组单测和一组组合场景测试锁住。
-- [ ] 示例能展示 shrink 的真实收益，而不是只在测试里存在。
-- [ ] README 与实现一致，没有残留旧语义描述。
-- [ ] 兼容性说明已经明确：哪些布局不会变，哪些布局需要显式开启或调整。
+- [x] shrink 核心行为至少被一组单测和一组组合场景测试锁住。
+- [x] 示例能展示 shrink 的真实收益，而不是只在测试里存在。
+- [x] README 与实现一致，没有残留旧语义描述。
+- [x] 兼容性说明已经明确：哪些布局不会变，哪些布局需要显式开启或调整。
 
 备注：
 
-- 如果某个行为仍存在争议，优先通过 README 和测试名称把语义写清楚，再决定是否继续扩能力。
+- 示例与组合测试已统一切换为显式 `shrink: 1`，和“默认 `0`、按需开启”的兼容策略保持一致。
+- README 新增了 `Flex shrink` 小节，覆盖默认值、分配规则、`measureMinContent()` 扩展点，以及 `column + MultilineText` 的已知限制。
 
 ## 建议执行顺序
 
@@ -297,14 +298,14 @@
 
 ## 建议验证命令
 
-- [ ] `bun run typecheck`
-- [ ] `bun test test/text.test.ts test/nodes/flex.test.ts test/nodes/composition.test.ts`
-- [ ] `bun test test/renderer/text-layout-cache.test.ts test/renderer/layout-context.test.ts`
-- [ ] `bun run example`
+- [x] `bun run typecheck`
+- [x] `bun test test/text.test.ts test/nodes/flex.test.ts test/nodes/composition.test.ts`
+- [x] `bun test test/renderer/text-layout-cache.test.ts test/renderer/layout-context.test.ts`
+- [x] `bun run example`
 
 ## 风险跟踪
 
-- [ ] `measureTextMinContent()` 的近似方案在 mock canvas 和真实 canvas 下都稳定。
-- [ ] shrink 新逻辑不会破坏现有 grow、justifyContent、reverse、stretch 语义。
-- [ ] shrink 后的二次测量不会造成布局缓存错配或显著性能回退。
-- [ ] `column shrink + MultilineText` 的限制已被明确记录，不会在发布后变成隐性 bug。
+- [x] `measureTextMinContent()` 的近似方案在 mock canvas 和真实 canvas 下都稳定。
+- [x] shrink 新逻辑不会破坏现有 grow、justifyContent、reverse、stretch 语义。
+- [x] shrink 后的二次测量不会造成布局缓存错配或显著性能回退。
+- [x] `column shrink + MultilineText` 的限制已被明确记录，不会在发布后变成隐性 bug。
