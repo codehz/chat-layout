@@ -1,7 +1,7 @@
 import { createRect, findChildAtPoint, getSingleChildLayout } from "../layout";
 import type { Box, Context, HitTest, Node, TextAlign } from "../types";
 import { shallowMerge } from "../utils";
-import { Wrapper } from "./base";
+import { measureNodeMinContent, Wrapper } from "./base";
 import { readLayoutResult, withConstraints, writeLayoutResult } from "./shared";
 
 function resolveHorizontalOffset(align: TextAlign, availableWidth: number, childWidth: number): number {
@@ -64,6 +64,10 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       width,
       height: childBox.height,
     };
+  }
+
+  measureMinContent(ctx: Context<C>): Box {
+    return measureNodeMinContent(ctx, this.inner);
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {

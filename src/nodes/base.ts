@@ -1,5 +1,30 @@
 import { attachNodeToParent, replaceNodeParent, replaceNodesParent } from "../internal/node-registry";
-import type { Box, Context, HitTest, Node } from "../types";
+import type { Box, Context, HitTest, LayoutConstraints, Node } from "../types";
+import { shallow } from "../utils";
+
+export function withNodeConstraints<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  constraints: LayoutConstraints | undefined,
+): Context<C> {
+  if (constraints === ctx.constraints) {
+    return ctx;
+  }
+  const next = shallow(ctx);
+  next.constraints = constraints;
+  return next;
+}
+
+export function measureNodeMinContent<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  node: Node<C>,
+  constraints: LayoutConstraints | undefined = ctx.constraints,
+): Box {
+  const nextCtx = withNodeConstraints(ctx, constraints);
+  if (node.measureMinContent != null) {
+    return node.measureMinContent(nextCtx);
+  }
+  return node.measure(nextCtx);
+}
 
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
   #children: Node<C>[];
@@ -46,6 +71,10 @@ export class Wrapper<C extends CanvasRenderingContext2D> implements Node<C> {
 
   measure(ctx: Context<C>): Box {
     return this.inner.measure(ctx);
+  }
+
+  measureMinContent(ctx: Context<C>): Box {
+    return measureNodeMinContent(ctx, this.inner);
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {

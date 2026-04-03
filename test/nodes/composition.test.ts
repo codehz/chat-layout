@@ -54,6 +54,11 @@ class ConstraintTestRenderer extends BaseRenderer<C> {
     return ctx;
   }
 
+  measureMinContentNode(node: Node<C>, constraints?: LayoutConstraints): Box {
+    const ctx = this.#contextWithConstraints(constraints);
+    return node.measureMinContent?.(ctx) ?? node.measure(ctx);
+  }
+
   drawNode(node: Node<C>, constraints?: LayoutConstraints): boolean {
     return node.draw(this.#contextWithConstraints(constraints), 0, 0);
   }
@@ -607,6 +612,24 @@ describe("Place", () => {
         maxHeight: 0,
       },
     ]);
+  });
+
+  test("Place forwards min-content while PaddingBox adds its padding", () => {
+    const renderer = new ConstraintTestRenderer(createGraphics(), {});
+    const node = new Place<C>(
+      new PaddingBox<C>(new Fixed(20, 10), {
+        top: 2,
+        bottom: 5,
+        left: 3,
+        right: 7,
+      }),
+      { align: "end" },
+    );
+
+    expect(renderer.measureMinContentNode(node)).toEqual({
+      width: 30,
+      height: 17,
+    });
   });
 
   test("shared nodes throw instead of silently overwriting ownership", () => {

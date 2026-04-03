@@ -18,6 +18,11 @@ export class ConstraintTestRenderer extends BaseRenderer<C> {
     return ctx;
   }
 
+  measureMinContentNode(node: Node<C>, constraints?: LayoutConstraints): Box {
+    const ctx = this.#contextWithConstraints(constraints);
+    return node.measureMinContent?.(ctx) ?? node.measure(ctx);
+  }
+
   drawNode(node: Node<C>, constraints?: LayoutConstraints): boolean {
     return node.draw(this.#contextWithConstraints(constraints), 0, 0);
   }

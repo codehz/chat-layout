@@ -1,5 +1,6 @@
 import { createRect, findChildAtPoint, getSingleChildLayout } from "../layout";
 import type { Box, Context, HitTest, Node } from "../types";
+import { measureNodeMinContent } from "./base";
 import { shallowMerge } from "../utils";
 import { Wrapper } from "./base";
 import { readLayoutResult, withConstraints, writeLayoutResult } from "./shared";
@@ -94,6 +95,29 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     };
   }
 
+  measureMinContent(ctx: Context<C>): Box {
+    const paddingLeft = this.#left;
+    const paddingRight = this.#right;
+    const paddingTop = this.#top;
+    const paddingBottom = this.#bottom;
+    const horizontalPadding = paddingLeft + paddingRight;
+    const verticalPadding = paddingTop + paddingBottom;
+    const childConstraints = ctx.constraints
+      ? {
+          ...ctx.constraints,
+          minWidth: shrinkConstraint(ctx.constraints.minWidth, horizontalPadding),
+          maxWidth: shrinkConstraint(ctx.constraints.maxWidth, horizontalPadding),
+          minHeight: shrinkConstraint(ctx.constraints.minHeight, verticalPadding),
+          maxHeight: shrinkConstraint(ctx.constraints.maxHeight, verticalPadding),
+        }
+      : undefined;
+    const { width, height } = measureNodeMinContent(ctx, this.inner, childConstraints);
+    return {
+      width: width + horizontalPadding,
+      height: height + verticalPadding,
+    };
+  }
+
   draw(ctx: Context<C>, x: number, y: number): boolean {
     const layoutResult = readLayoutResult(this, ctx);
     if (!layoutResult) {
@@ -140,6 +164,10 @@ export class Fixed<C extends CanvasRenderingContext2D> implements Node<C> {
   ) {}
 
   measure(_ctx: Context<C>): Box {
+    return { width: this.width, height: this.height };
+  }
+
+  measureMinContent(_ctx: Context<C>): Box {
     return { width: this.width, height: this.height };
   }
 

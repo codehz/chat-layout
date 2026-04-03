@@ -23,6 +23,7 @@ const FONT_SHIFT_PROBE = "M";
 const PREPARED_SEGMENT_CACHE_CAPACITY = 512;
 const FONT_SHIFT_CACHE_CAPACITY = 64;
 const LINE_START_CURSOR = { segmentIndex: 0, graphemeIndex: 0 } as const;
+const MIN_CONTENT_WIDTH_EPSILON = 0.001;
 
 const preparedSegmentCache = new Map<string, PreparedTextWithSegments>();
 const fontShiftCache = new Map<string, number>();
@@ -84,6 +85,20 @@ function measureFontShift<C extends CanvasRenderingContext2D>(ctx: Context<C>): 
     fontBoundingBoxDescent: descent = 0,
   } = ctx.graphics.measureText(FONT_SHIFT_PROBE);
   return writeLruValue(fontShiftCache, font, ascent - descent, FONT_SHIFT_CACHE_CAPACITY);
+}
+
+function measurePreparedMinContentWidth(prepared: PreparedTextWithSegments): number {
+  let maxWidth = 0;
+  let maxAnyWidth = 0;
+  for (let i = 0; i < prepared.widths.length; i += 1) {
+    const segmentWidth = prepared.widths[i] ?? 0;
+    maxAnyWidth = Math.max(maxAnyWidth, segmentWidth);
+    const segment = prepared.segments[i];
+    if (segment != null && segment.trim().length > 0) {
+      maxWidth = Math.max(maxWidth, segmentWidth);
+    }
+  }
+  return maxWidth > 0 ? maxWidth : maxAnyWidth;
 }
 
 export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
@@ -202,6 +217,41 @@ export function measureText<C extends CanvasRenderingContext2D>(
     lineCount += walkLineRanges(prepared, maxWidth, (line) => {
       width = Math.max(width, line.width);
     });
+  }
+
+  return { width, lineCount };
+}
+
+export function measureTextMinContent<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  text: string,
+  whitespace: TextWhitespaceMode = "preserve",
+): TextMeasurement {
+  const segments = preprocessSegments(text, whitespace);
+  if (segments.length === 0) {
+    return { width: 0, lineCount: 0 };
+  }
+
+  const font = ctx.graphics.font;
+  let width = 0;
+
+  for (const segment of segments) {
+    if (segment.length === 0) {
+      continue;
+    }
+    const prepared = readPreparedSegment(segment, font);
+    width = Math.max(width, measurePreparedMinContentWidth(prepared));
+  }
+
+  let lineCount = 0;
+  const lineMaxWidth = Math.max(width, MIN_CONTENT_WIDTH_EPSILON);
+  for (const segment of segments) {
+    if (segment.length === 0) {
+      lineCount += 1;
+      continue;
+    }
+    const prepared = readPreparedSegment(segment, font);
+    lineCount += walkLineRanges(prepared, lineMaxWidth, () => {});
   }
 
   return { width, lineCount };

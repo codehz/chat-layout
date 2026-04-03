@@ -11,7 +11,7 @@ import type {
   LayoutConstraints,
   Node,
 } from "../types";
-import { Group, Wrapper } from "./base";
+import { Group, measureNodeMinContent, Wrapper } from "./base";
 import { drawLayoutChildren, hittestLayoutChildren, writeLayoutResult } from "./shared";
 
 function getMainSize(axis: Axis, box: Box): number {
@@ -393,6 +393,41 @@ export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
     const result = computeFlexLayout(this.children, this.options, ctx.constraints, (node, constraints) => ctx.measureNode(node, constraints));
     writeLayoutResult(this, ctx, result.layout);
     return result.box;
+  }
+
+  measureMinContent(ctx: Context<C>): Box {
+    const axis = this.options.direction ?? "row";
+    const gap = this.options.gap ?? 0;
+    const orderedChildren = this.options.reverse ? [...this.children].reverse() : this.children;
+    const gapTotal = orderedChildren.length > 1 ? gap * (orderedChildren.length - 1) : 0;
+    const childConstraints = createAxisConstraints(
+      axis,
+      ctx.constraints,
+      {
+        min: undefined,
+        max: undefined,
+      },
+      {
+        min: undefined,
+        max: getMaxCross(axis, ctx.constraints),
+      },
+    );
+
+    let width = axis === "row" ? gapTotal : 0;
+    let height = axis === "column" ? gapTotal : 0;
+
+    for (const child of orderedChildren) {
+      const measured = measureNodeMinContent(ctx, child, childConstraints);
+      if (axis === "row") {
+        width += measured.width;
+        height = Math.max(height, measured.height);
+      } else {
+        width = Math.max(width, measured.width);
+        height += measured.height;
+      }
+    }
+
+    return { width, height };
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {

@@ -185,4 +185,28 @@ describe("text layout cache", () => {
       expect(offscreen.count).toBe(warmOffscreenMeasures);
     });
   });
+
+  test("min-content measurement uses separate cache keys from constrained layout", () => {
+    let graphicsMeasures = 0;
+    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
+      graphicsMeasures += 1;
+    }), {});
+    const node = createMultilineNode(
+      "alpha beta gamma",
+      "16px cache-test-min-content-separation",
+    );
+
+    withOffscreenMeasureCounter((offscreen) => {
+      const minContent = renderer.measureMinContentNode(node);
+      const afterMinContentGraphics = graphicsMeasures;
+      const afterMinContentOffscreen = offscreen.count;
+
+      const constrained = renderer.measureNode(node, { maxWidth: 96 });
+
+      expect(minContent).toEqual({ width: 40, height: 60 });
+      expect(constrained).toEqual({ width: 80, height: 40 });
+      expect(graphicsMeasures).toBe(afterMinContentGraphics);
+      expect(offscreen.count).toBe(afterMinContentOffscreen);
+    });
+  });
 });

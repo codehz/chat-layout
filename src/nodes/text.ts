@@ -4,6 +4,7 @@ import {
   layoutText,
   layoutTextIntrinsic,
   measureText,
+  measureTextMinContent,
   measureTextIntrinsic,
   type TextLayout,
   type TextMeasurement,
@@ -80,6 +81,14 @@ function getMultiLineDrawLayoutKey(maxWidth: number | undefined): string {
   return maxWidth == null ? "multi:draw:intrinsic" : `multi:draw:${maxWidth}`;
 }
 
+function getSingleLineMinContentLayoutKey(): string {
+  return "single:min-content";
+}
+
+function getMultiLineMinContentLayoutKey(): string {
+  return "multi:min-content";
+}
+
 function getSingleLineLayout<C extends CanvasRenderingContext2D>(
   node: Node<C>,
   ctx: Context<C>,
@@ -116,6 +125,28 @@ function getMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
   );
 }
 
+function getSingleLineMinContentLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  text: string,
+  whitespace: TextOptions<C>["whitespace"],
+): SingleLineLayout {
+  return readCachedTextLayout(node, ctx, getSingleLineMinContentLayoutKey(), () =>
+    layoutFirstLineIntrinsic(ctx, text, whitespace)
+  );
+}
+
+function getMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  text: string,
+  whitespace: MultilineTextOptions<C>["whitespace"],
+): MultiLineMeasureLayout {
+  return readCachedTextLayout(node, ctx, getMultiLineMinContentLayoutKey(), () =>
+    measureTextMinContent(ctx, text, whitespace)
+  );
+}
+
 export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C> {
   constructor(
     readonly text: string,
@@ -126,6 +157,14 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     return ctx.with((g) => {
       g.font = this.options.font;
       const { width, lineCount } = getMultiLineMeasureLayout(this, ctx, this.text, this.options.whitespace);
+      return { width, height: lineCount * this.options.lineHeight };
+    });
+  }
+
+  measureMinContent(ctx: Context<C>): Box {
+    return ctx.with((g) => {
+      g.font = this.options.font;
+      const { width, lineCount } = getMultiLineMinContentLayout(this, ctx, this.text, this.options.whitespace);
       return { width, height: lineCount * this.options.lineHeight };
     });
   }
@@ -180,6 +219,14 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
     return ctx.with((g) => {
       g.font = this.options.font;
       const { width } = getSingleLineLayout(this, ctx, this.text, this.options.whitespace);
+      return { width, height: this.options.lineHeight };
+    });
+  }
+
+  measureMinContent(ctx: Context<C>): Box {
+    return ctx.with((g) => {
+      g.font = this.options.font;
+      const { width } = getSingleLineMinContentLayout(this, ctx, this.text, this.options.whitespace);
       return { width, height: this.options.lineHeight };
     });
   }

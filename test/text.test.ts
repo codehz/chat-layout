@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { layoutText, layoutTextIntrinsic, measureText, measureTextIntrinsic } from "../src/text";
+import { layoutText, layoutTextIntrinsic, measureText, measureTextIntrinsic, measureTextMinContent } from "../src/text";
 import type { Context } from "../src/types";
 import { ensureMockOffscreenCanvas } from "./helpers/graphics";
 
@@ -86,5 +86,45 @@ describe("text metrics", () => {
       lineCount: layout.lines.length,
     });
     expect(layout.lines.every((line) => line.text.trim().length > 0)).toBe(true);
+  });
+
+  test("min-content measurement uses the longest token and preserves blank lines", () => {
+    const ctx = {
+      graphics: {
+        font: "16px text-min-content-preserve",
+        measureText(text: string) {
+          return {
+            width: text.length * 8,
+            fontBoundingBoxAscent: 8,
+            fontBoundingBoxDescent: 2,
+          } as TextMetrics;
+        },
+      },
+    } as Context<C>;
+
+    expect(measureTextMinContent(ctx, "alpha beta\n\ngamma delta", "preserve")).toEqual({
+      width: 40,
+      lineCount: 5,
+    });
+  });
+
+  test("min-content trim-and-collapse drops empty lines before tokenizing", () => {
+    const ctx = {
+      graphics: {
+        font: "16px text-min-content-trim",
+        measureText(text: string) {
+          return {
+            width: text.length * 8,
+            fontBoundingBoxAscent: 8,
+            fontBoundingBoxDescent: 2,
+          } as TextMetrics;
+        },
+      },
+    } as Context<C>;
+
+    expect(measureTextMinContent(ctx, "  alpha beta  \n \n  gamma ", "trim-and-collapse")).toEqual({
+      width: 40,
+      lineCount: 3,
+    });
   });
 });

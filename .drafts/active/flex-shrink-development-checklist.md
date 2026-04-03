@@ -26,12 +26,12 @@
 
 - [x] Phase 0. 锁定语义范围与兼容策略
 - [x] Phase 1. 扩展类型与最小测量接口
-- [ ] Phase 2. 落地 `min-content` 测量能力
+- [x] Phase 2. 落地 `min-content` 测量能力
 - [ ] Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
 - [ ] Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
 - [ ] Phase 5. 补齐测试、示例、文档与发布检查
 
-当前进度：`2 / 6` 已完成
+当前进度：`3 / 6` 已完成
 
 ---
 
@@ -112,7 +112,7 @@
 
 ## Phase 2. 落地 `min-content` 测量能力
 
-状态：`[ ] 未开始`
+状态：`[x] 已完成`
 
 目标：
 
@@ -136,24 +136,25 @@
 
 行动清单：
 
-- [ ] 在 `src/text.ts` 中新增 `measureTextMinContent()` 或等价 helper，优先采用 `walkLineRanges(0.001)` 方案实现。
-- [ ] 为 `MultilineText` 实现 `measureMinContent()`，使其宽度表示最长不可再压缩 token，高度仍按单行或相应最小行数计算。
-- [ ] 为 `Text` 实现 `measureMinContent()`，语义等同于整行不可折断宽度。
-- [ ] 为 `Fixed` 实现 `measureMinContent()`，直接返回固定尺寸。
-- [ ] 为 `PaddingBox` 实现 `measureMinContent()`，返回“内部 min-content + padding”。
-- [ ] 为 `Wrapper` / `Place` 明确转发规则，避免包装层吞掉 min-content。
-- [ ] 为 `Flex` / `FlexItem` 实现递归 `measureMinContent()`，`row` 汇总为子项主轴和，`column` 汇总为子项主轴最大值，并保留 gap 影响。
-- [ ] 为未实现 `measureMinContent()` 的节点保留安全 fallback，至少保证 shrink 不会因为空值崩溃。
+- [x] 在 `src/text.ts` 中新增 `measureTextMinContent()` 或等价 helper，优先采用 `walkLineRanges(0.001)` 方案实现。
+- [x] 为 `MultilineText` 实现 `measureMinContent()`，使其宽度表示最长不可再压缩 token，高度仍按单行或相应最小行数计算。
+- [x] 为 `Text` 实现 `measureMinContent()`，语义等同于整行不可折断宽度。
+- [x] 为 `Fixed` 实现 `measureMinContent()`，直接返回固定尺寸。
+- [x] 为 `PaddingBox` 实现 `measureMinContent()`，返回“内部 min-content + padding”。
+- [x] 为 `Wrapper` / `Place` 明确转发规则，避免包装层吞掉 min-content。
+- [x] 为 `Flex` / `FlexItem` 实现递归 `measureMinContent()`，`row` 汇总为子项主轴和，`column` 汇总为子项主轴最大值，并保留 gap 影响。
+- [x] 为未实现 `measureMinContent()` 的节点保留安全 fallback，至少保证 shrink 不会因为空值崩溃。
 
 验收标准：
 
-- [ ] 核心节点都能返回稳定的 `min-content` 尺寸。
-- [ ] 文本 `min-content` 与常规测量缓存不会互相污染。
-- [ ] 至少有测试覆盖“文本 longest token”“PaddingBox 叠加 padding”“嵌套 Flex 递归汇总”三个关键路径。
+- [x] 核心节点都能返回稳定的 `min-content` 尺寸。
+- [x] 文本 `min-content` 与常规测量缓存不会互相污染。
+- [x] 至少有测试覆盖“文本 longest token”“PaddingBox 叠加 padding”“嵌套 Flex 递归汇总”三个关键路径。
 
 备注：
 
-- 如果 `walkLineRanges(0.001)` 在某些 mock 字体下表现不稳定，需要先在测试里固定 mock 行为，再决定是否降级到更保守实现。
+- 实现时发现 `walkLineRanges(0.001)` 会落到字符级断行，不符合“longest token”目标；最终改为读取 `prepareWithSegments()` 的 segment 宽度来求 min-content，并继续复用 pretext prepared cache。
+- 已补测试覆盖文本 longest token、PaddingBox padding 叠加、Place/Wrapper 转发、以及嵌套 Flex 递归汇总。
 
 ## Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
 

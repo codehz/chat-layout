@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { Fixed, Flex, FlexItem } from "../../src/nodes";
+import { Fixed, Flex, FlexItem, PaddingBox } from "../../src/nodes";
 import { BaseRenderer } from "../../src/renderer";
 import type { Context, HitTest, LayoutConstraints, Node } from "../../src/types";
 
@@ -40,6 +40,11 @@ class ConstraintTestRenderer extends BaseRenderer<C> {
     const ctx = this.context;
     ctx.constraints = constraints;
     return ctx;
+  }
+
+  measureMinContentNode(node: Node<C>, constraints?: LayoutConstraints) {
+    const ctx = this.#contextWithConstraints(constraints);
+    return node.measureMinContent?.(ctx) ?? node.measure(ctx);
   }
 
   drawNode(node: Node<C>, constraints?: LayoutConstraints): boolean {
@@ -397,5 +402,27 @@ describe("Flex", () => {
 
     expect(renderer.getLayoutResult(plain, constraints)?.children[0]?.rect.width).toBe(10);
     expect(renderer.getLayoutResult(explicit, constraints)?.children[0]?.rect.width).toBe(100);
+  });
+
+  test("measureMinContent aggregates nested flex children recursively", () => {
+    const renderer = new ConstraintTestRenderer(createGraphics(), {});
+    const nested = new Flex<C>([
+      new Flex<C>([new Fixed(10, 5), new Fixed(15, 7)], {
+        direction: "row",
+        gap: 2,
+      }),
+      new PaddingBox<C>(new Fixed(8, 6), {
+        left: 1,
+        right: 3,
+      }),
+    ], {
+      direction: "row",
+      gap: 4,
+    });
+
+    expect(renderer.measureMinContentNode(nested)).toEqual({
+      width: 43,
+      height: 7,
+    });
   });
 });
