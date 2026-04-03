@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
 import * as api from "../src/index";
-import type { Context, FlexItemOptions, Node } from "../src/index";
+import type {
+  Context,
+  FlexItemOptions,
+  MultilineTextOptions,
+  Node,
+  TextEllipsisPosition,
+  TextOptions,
+  TextOverflowMode,
+} from "../src/index";
 
 type C = CanvasRenderingContext2D;
 
@@ -26,8 +34,32 @@ const nodeWithMinContentTypecheck: Node<C> = {
   },
 };
 
+const overflowModeTypecheck: TextOverflowMode = "ellipsis";
+const ellipsisPositionTypecheck: TextEllipsisPosition = "middle";
+
+const textOptionsTypecheck: TextOptions<C> = {
+  lineHeight: 20,
+  font: "16px sans-serif",
+  style: "#000",
+  overflow: overflowModeTypecheck,
+  ellipsisPosition: ellipsisPositionTypecheck,
+};
+
+const multilineTextOptionsTypecheck: MultilineTextOptions<C> = {
+  lineHeight: 20,
+  font: "16px sans-serif",
+  style: "#000",
+  align: "start",
+  overflow: overflowModeTypecheck,
+  maxLines: 2,
+};
+
 void flexItemOptionsTypecheck;
 void nodeWithMinContentTypecheck;
+void overflowModeTypecheck;
+void ellipsisPositionTypecheck;
+void textOptionsTypecheck;
+void multilineTextOptionsTypecheck;
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {

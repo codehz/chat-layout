@@ -66,6 +66,16 @@ export type PhysicalTextAlign = "left" | "center" | "right";
 export type TextWhitespaceMode = "preserve" | "trim-and-collapse";
 
 /**
+ * Text overflow behavior when content exceeds a finite width constraint.
+ */
+export type TextOverflowMode = "clip" | "ellipsis";
+
+/**
+ * Placement of the ellipsis glyph for single-line text.
+ */
+export type TextEllipsisPosition = "start" | "end" | "middle";
+
+/**
  * Shared text styling options for text nodes.
  */
 export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
@@ -87,12 +97,21 @@ export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extend
   align?: TextAlign;
   /** Explicit physical alignment when left/right semantics are required. */
   physicalAlign?: PhysicalTextAlign;
+  /** Default: clip hidden overflow; `ellipsis` only applies when `maxLines` truncates visible lines. */
+  overflow?: TextOverflowMode;
+  /** Maximum visible line count. Values below `1` are clamped to `1`. */
+  maxLines?: number;
 }
 
 /**
  * Options for single-line text nodes.
  */
-export interface TextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {}
+export interface TextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {
+  /** Default: clip overflow to the constrained first line. */
+  overflow?: TextOverflowMode;
+  /** Default: place the ellipsis at the end of the visible text. */
+  ellipsisPosition?: TextEllipsisPosition;
+}
 
 /**
  * Optional layout bounds passed down during measurement and drawing.

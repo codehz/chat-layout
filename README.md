@@ -50,6 +50,8 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 - `MultilineText.align` uses logical values: `start`, `center`, `end`.
 - `MultilineText.physicalAlign` uses physical values: `left`, `center`, `right`.
 - `Text` and `MultilineText` preserve blank lines and edge whitespace by default. Use `whitespace: "trim-and-collapse"` if you want cleanup.
+- `Text` supports `overflow: "ellipsis"` with `ellipsisPosition: "start" | "end" | "middle"` when measured under a finite `maxWidth`.
+- `MultilineText` supports `overflow: "ellipsis"` together with `maxLines`; values below `1` are treated as `1`.
 
 ## Shrink behavior
 
