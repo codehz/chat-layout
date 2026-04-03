@@ -215,6 +215,8 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
               font: "13px system-ui",
               style: () => (currentHover === item ? "#222" : "#444"),
               align: "start",
+              overflow: "ellipsis",
+              maxLines: 2,
             }),
           ],
           {
@@ -312,7 +314,17 @@ const list = new ListState<ChatItem>([
     content: randomText(8),
     reply: {
       sender: "B",
-      content: "测试aa中文aaa",
+      content:
+        "测试aa中文aaa hello world chat layout message render bubble timeline virtualized canvas stream session update typing history",
+    },
+  },
+  {
+    sender: "B",
+    content: "这里是一条会展示回复预览省略效果的消息。",
+    reply: {
+      sender: "A",
+      content:
+        "这是一条非常长的回复预览，用来演示 MultilineText 在 chat example 里的末尾 ellipsis 能力。它应该被限制在两行之内，而不是把整个气泡一路撑到天花板。",
     },
   },
   { sender: "B", content: randomText(5) },
