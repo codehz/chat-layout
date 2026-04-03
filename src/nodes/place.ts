@@ -15,7 +15,14 @@ function resolveHorizontalOffset(align: TextAlign, availableWidth: number, child
   }
 }
 
+/**
+ * Aligns a single child horizontally within the available width.
+ */
 export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
+  /**
+   * @param inner Wrapped child node.
+   * @param options Alignment behavior for the child.
+   */
   constructor(
     inner: Node<C>,
     readonly options: {

@@ -45,7 +45,11 @@ function constraintKey(constraints: LayoutConstraints | undefined): string {
   return `${constraints.minWidth ?? ""},${constraints.maxWidth ?? ""},${constraints.minHeight ?? ""},${constraints.maxHeight ?? ""}`;
 }
 
+/**
+ * Base renderer that provides measurement, layout caching, and drawing helpers.
+ */
 export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}> {
+  /** Canvas rendering context used by this renderer. */
   graphics: C;
   #ctx: RendererContext<C>;
   #lastWidth: number;
@@ -57,6 +61,10 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     return shallow(this.#ctx);
   }
 
+  /**
+   * @param graphics Canvas rendering context used for all layout and drawing.
+   * @param options Renderer-specific options.
+   */
   constructor(
     graphics: C,
     readonly options: RendererOptions & O,
@@ -141,6 +149,9 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     return node.hittest(this.getRootContext(), test);
   }
 
+  /**
+   * Drops cached measurements for a node and every ancestor that depends on it.
+   */
   invalidateNode(node: Node<C>): void {
     this.#syncCachesToViewportWidth();
     this.#cache.delete(node);
@@ -153,6 +164,9 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     });
   }
 
+  /**
+   * Returns the cached layout result for a node under the given constraints, if available.
+   */
   getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined {
     this.#syncCachesToViewportWidth();
     const nodeCache = this.#layoutCache.get(node);
@@ -171,6 +185,9 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     return cached.layout;
   }
 
+  /**
+   * Stores a layout result for later draw and hit-test passes.
+   */
   setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void {
     this.#syncCachesToViewportWidth();
     let nodeCache = this.#layoutCache.get(node);
@@ -220,6 +237,9 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
     });
   }
 
+  /**
+   * Measures a node under optional constraints, using cached results when possible.
+   */
   measureNode(node: Node<C>, constraints?: LayoutConstraints): Box {
     this.#syncCachesToViewportWidth();
     {
@@ -257,13 +277,22 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   }
 }
 
+/**
+ * Immediate-mode renderer for a single root node.
+ */
 export class DebugRenderer<C extends CanvasRenderingContext2D> extends BaseRenderer<C> {
+  /**
+   * Clears the viewport and draws the provided root node.
+   */
   draw(node: Node<C>): boolean {
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     return this.drawRootNode(node);
   }
 
+  /**
+   * Hit-tests the provided root node using viewport-relative coordinates.
+   */
   hittest(node: Node<C>, test: HitTest): boolean {
     return this.hittestRootNode(node, test);
   }

@@ -13,6 +13,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+/**
+ * Virtualized renderer anchored to the bottom, suitable for chat-style UIs.
+ */
 export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
   #resolveVisibleWindow(): VisibleWindowResult<Node<C>> {
     return resolveChatVisibleWindow(

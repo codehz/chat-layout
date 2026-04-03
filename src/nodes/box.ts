@@ -23,7 +23,14 @@ function shrinkConstraint(value: number | undefined, padding: number): number | 
   return Math.max(0, value - padding);
 }
 
+/**
+ * Adds padding around a single child node.
+ */
 export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
+  /**
+   * @param inner Wrapped child node.
+   * @param padding Padding in CSS pixels on each side.
+   */
   constructor(
     inner: Node<C>,
     readonly padding: {
@@ -157,7 +164,14 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 }
 
+/**
+ * A leaf node with a fixed size and no drawing behavior.
+ */
 export class Fixed<C extends CanvasRenderingContext2D> implements Node<C> {
+  /**
+   * @param width Fixed width in CSS pixels.
+   * @param height Fixed height in CSS pixels.
+   */
   constructor(
     readonly width: number,
     readonly height: number,

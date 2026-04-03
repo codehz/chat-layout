@@ -26,18 +26,28 @@ export function measureNodeMinContent<C extends CanvasRenderingContext2D>(
   return node.measure(nextCtx);
 }
 
+/**
+ * A node that owns an ordered list of child nodes.
+ */
 export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
   #children: Node<C>[];
 
+  /**
+   * @param children Initial child nodes, in layout order.
+   */
   constructor(children: Node<C>[]) {
     this.#children = [...children];
     replaceNodesParent([], this.#children, this);
   }
 
+  /** Child nodes managed by this group. */
   get children(): readonly Node<C>[] {
     return this.#children;
   }
 
+  /**
+   * Replaces the full child list while updating parent links.
+   */
   replaceChildren(nextChildren: Node<C>[]): void {
     const nextSnapshot = [...nextChildren];
     replaceNodesParent(this.#children, nextSnapshot, this);
@@ -49,18 +59,26 @@ export abstract class Group<C extends CanvasRenderingContext2D> implements Node<
   abstract hittest(ctx: Context<C>, test: HitTest): boolean;
 }
 
+/**
+ * A node that forwards layout and drawing to a single inner node.
+ */
 export class Wrapper<C extends CanvasRenderingContext2D> implements Node<C> {
   #inner: Node<C>;
 
+  /**
+   * @param inner Wrapped child node.
+   */
   constructor(inner: Node<C>) {
     this.#inner = inner;
     attachNodeToParent(this.#inner, this);
   }
 
+  /** The wrapped child node. */
   get inner(): Node<C> {
     return this.#inner;
   }
 
+  /** Replaces the wrapped child node. */
   set inner(newNode: Node<C>) {
     if (newNode === this.#inner) {
       return;

@@ -4,10 +4,17 @@ import { BaseRenderer } from "../base";
 import { ListState } from "../list-state";
 import type { NormalizedListState, VisibleListState, VisibleWindow } from "./solver";
 
+/**
+ * Options for programmatic scrolling to a target item.
+ */
 export interface JumpToOptions {
+  /** Whether to animate the jump. Defaults to `true`. */
   animated?: boolean;
+  /** Which edge of the item should align with the viewport. */
   block?: "start" | "center" | "end";
+  /** Animation duration in milliseconds. */
   duration?: number;
+  /** Called after the jump completes or finishes animating. */
   onComplete?: () => void;
 }
 
@@ -41,6 +48,9 @@ function getNow(): number {
   return globalThis.performance?.now() ?? Date.now();
 }
 
+/**
+ * Shared base class for virtualized list renderers.
+ */
 export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T extends {}> extends BaseRenderer<
   C,
   {
@@ -55,31 +65,39 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
 
+  /** Current anchor item index. */
   get position(): number | undefined {
     return this.options.list.position;
   }
 
+  /** Updates the current anchor item index. */
   set position(value: number | undefined) {
     this.options.list.position = value;
   }
 
+  /** Pixel offset from the anchored item edge. */
   get offset(): number {
     return this.options.list.offset;
   }
 
+  /** Updates the pixel offset from the anchored item edge. */
   set offset(value: number) {
     this.options.list.offset = value;
   }
 
+  /** Items currently available to the renderer. */
   get items(): T[] {
     return this.options.list.items;
   }
 
+  /** Replaces the current item collection. */
   set items(value: T[]) {
     this.options.list.items = value;
   }
 
+  /** Renders the current visible window. */
   abstract render(feedback?: RenderFeedback): boolean;
+  /** Hit-tests the current visible window. */
   abstract hittest(test: { x: number; y: number; type: "click" | "auxclick" | "hover" }): boolean;
 
   protected _readListState(): VisibleListState {
@@ -94,6 +112,9 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     this.offset = state.offset;
   }
 
+  /**
+   * Scrolls the viewport to the requested item index.
+   */
   jumpTo(index: number, options: JumpToOptions = {}): void {
     if (this.items.length === 0) {
       this.#cancelJumpAnimation();

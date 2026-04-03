@@ -13,6 +13,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+/**
+ * Virtualized renderer anchored to the top, suitable for timeline-style UIs.
+ */
 export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
   #resolveVisibleWindow(): VisibleWindowResult<Node<C>> {
     return resolveTimelineVisibleWindow(

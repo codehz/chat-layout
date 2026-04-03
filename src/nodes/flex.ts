@@ -496,7 +496,14 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
   };
 }
 
+/**
+ * Wraps a child node with per-item flex options.
+ */
 export class FlexItem<C extends CanvasRenderingContext2D> extends Wrapper<C> {
+  /**
+   * @param inner Wrapped child node.
+   * @param item Flex behavior overrides for the child.
+   */
   constructor(
     inner: Node<C>,
     readonly item: FlexItemOptions = {},
@@ -505,7 +512,14 @@ export class FlexItem<C extends CanvasRenderingContext2D> extends Wrapper<C> {
   }
 }
 
+/**
+ * Lays out children in a single flex row or column.
+ */
 export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
+  /**
+   * @param children Child nodes in visual order.
+   * @param options Flex container configuration.
+   */
   constructor(
     children: Node<C>[],
     readonly options: FlexContainerOptions = {},

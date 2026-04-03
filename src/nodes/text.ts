@@ -147,7 +147,14 @@ function getMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
   );
 }
 
+/**
+ * Draws wrapped text using the configured line height and alignment.
+ */
 export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C> {
+  /**
+   * @param text Source text to measure and draw.
+   * @param options Text layout and drawing options.
+   */
   constructor(
     readonly text: string,
     readonly options: MultilineTextOptions<C>,
@@ -209,7 +216,14 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   }
 }
 
+/**
+ * Draws a single line of text, clipped logically by measurement width.
+ */
 export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
+  /**
+   * @param text Source text to measure and draw.
+   * @param options Text layout and drawing options.
+   */
   constructor(
     readonly text: string,
     readonly options: TextOptions<C>,

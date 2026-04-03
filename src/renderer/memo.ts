@@ -4,6 +4,9 @@ function isWeakMapKey(value: unknown): value is object {
   return (typeof value === "object" && value !== null) || typeof value === "function";
 }
 
+/**
+ * Memoizes `renderItem` by object identity.
+ */
 export function memoRenderItem<C extends CanvasRenderingContext2D, T extends object>(
   renderItem: (item: T) => Node<C>,
 ): ((item: T) => Node<C>) & { reset: (key: T) => boolean } {
@@ -28,6 +31,9 @@ export function memoRenderItem<C extends CanvasRenderingContext2D, T extends obj
   });
 }
 
+/**
+ * Memoizes `renderItem` by a caller-provided cache key.
+ */
 export function memoRenderItemBy<C extends CanvasRenderingContext2D, T, K>(
   keyOf: (item: T) => K,
   renderItem: (item: T) => Node<C>,
