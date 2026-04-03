@@ -59,6 +59,8 @@ export interface LayoutConstraints {
 
 export interface FlexItemOptions {
   grow?: number;
+  /** Compatibility-first default: 0 (opt-in shrink). */
+  shrink?: number;
   alignSelf?: CrossAxisAlignment | "auto";
 }
 
@@ -95,7 +97,10 @@ export interface HitTest {
 }
 
 export interface Node<C extends CanvasRenderingContext2D> {
+  /** Measure the node under the current layout constraints. */
   measure(ctx: Context<C>): Box;
+  /** Optional intrinsic lower bound used by flex-shrink saturation. */
+  measureMinContent?(ctx: Context<C>): Box;
   draw(ctx: Context<C>, x: number, y: number): boolean;
   hittest(ctx: Context<C>, test: HitTest): boolean;
 }

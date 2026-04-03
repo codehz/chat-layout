@@ -1,6 +1,33 @@
 import { describe, expect, test } from "bun:test";
 
 import * as api from "../src/index";
+import type { Context, FlexItemOptions, Node } from "../src/index";
+
+type C = CanvasRenderingContext2D;
+
+const flexItemOptionsTypecheck: FlexItemOptions = {
+  grow: 1,
+  shrink: 0,
+  alignSelf: "auto",
+};
+
+const nodeWithMinContentTypecheck: Node<C> = {
+  measure() {
+    return { width: 10, height: 10 };
+  },
+  measureMinContent(_ctx: Context<C>) {
+    return { width: 5, height: 10 };
+  },
+  draw() {
+    return false;
+  },
+  hittest() {
+    return false;
+  },
+};
+
+void flexItemOptionsTypecheck;
+void nodeWithMinContentTypecheck;
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {

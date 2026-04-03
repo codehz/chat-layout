@@ -25,13 +25,13 @@
 ## 总览看板
 
 - [x] Phase 0. 锁定语义范围与兼容策略
-- [ ] Phase 1. 扩展类型与最小测量接口
+- [x] Phase 1. 扩展类型与最小测量接口
 - [ ] Phase 2. 落地 `min-content` 测量能力
 - [ ] Phase 3. 重构 `Flex` 主轴分配流程并接入 shrink
 - [ ] Phase 4. 完成 shrink 后重测、stretch 与嵌套场景收口
 - [ ] Phase 5. 补齐测试、示例、文档与发布检查
 
-当前进度：`1 / 6` 已完成
+当前进度：`2 / 6` 已完成
 
 ---
 
@@ -75,7 +75,7 @@
 
 ## Phase 1. 扩展类型与最小测量接口
 
-状态：`[ ] 未开始`
+状态：`[x] 已完成`
 
 目标：
 
@@ -93,21 +93,22 @@
 
 行动清单：
 
-- [ ] 在 `FlexItemOptions` 中恢复 `shrink?: number` 字段，并写明默认语义。
-- [ ] 为 `Node` 增加可选 `measureMinContent?(ctx): Box` 接口，保持现有节点向后兼容。
-- [ ] 确认 `Context.measureNode` 的现有约束传递链不需要额外签名变更；如需要，限定在最小范围内调整。
-- [ ] 检查根导出是否需要同步类型变更，避免公共 API 测试遗漏。
-- [ ] 更新相关注释或类型说明，明确 `measure()` 与 `measureMinContent()` 的职责边界。
+- [x] 在 `FlexItemOptions` 中恢复 `shrink?: number` 字段，并写明默认语义。
+- [x] 为 `Node` 增加可选 `measureMinContent?(ctx): Box` 接口，保持现有节点向后兼容。
+- [x] 确认 `Context.measureNode` 的现有约束传递链不需要额外签名变更；如需要，限定在最小范围内调整。
+- [x] 检查根导出是否需要同步类型变更，避免公共 API 测试遗漏。
+- [x] 更新相关注释或类型说明，明确 `measure()` 与 `measureMinContent()` 的职责边界。
 
 验收标准：
 
-- [ ] 类型层已经可以表达 shrink 和最小内容测量能力。
-- [ ] 旧节点在未实现 `measureMinContent()` 时仍然可以正常编译和运行。
-- [ ] 公共 API 测试能覆盖新增类型接口没有意外破坏导出面。
+- [x] 类型层已经可以表达 shrink 和最小内容测量能力。
+- [x] 旧节点在未实现 `measureMinContent()` 时仍然可以正常编译和运行。
+- [x] 公共 API 测试能覆盖新增类型接口没有意外破坏导出面。
 
 备注：
 
-- 这一阶段只做“接口打底”，不要提前把 `Flex` 算法和文本测量混在同一个提交里。
+- 已完成接口打底；`Context.measureNode` 签名保持不变，后续 shrink 仍复用现有约束传递链。
+- 公共 API 测试新增了编译期哨兵，覆盖 `FlexItemOptions.shrink` 与 `Node.measureMinContent?()` 的导出可用性。
 
 ## Phase 2. 落地 `min-content` 测量能力
 
