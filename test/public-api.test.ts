@@ -9,6 +9,7 @@ import type {
   TextEllipsisPosition,
   TextOptions,
   TextOverflowMode,
+  TextOverflowWrapMode,
 } from "../src/index";
 
 type C = CanvasRenderingContext2D;
@@ -35,6 +36,7 @@ const nodeWithMinContentTypecheck: Node<C> = {
 };
 
 const overflowModeTypecheck: TextOverflowMode = "ellipsis";
+const overflowWrapModeTypecheck: TextOverflowWrapMode = "anywhere";
 const ellipsisPositionTypecheck: TextEllipsisPosition = "middle";
 
 const textOptionsTypecheck: TextOptions<C> = {
@@ -42,6 +44,7 @@ const textOptionsTypecheck: TextOptions<C> = {
   font: "16px sans-serif",
   style: "#000",
   overflow: overflowModeTypecheck,
+  overflowWrap: overflowWrapModeTypecheck,
   ellipsisPosition: ellipsisPositionTypecheck,
 };
 
@@ -51,12 +54,14 @@ const multilineTextOptionsTypecheck: MultilineTextOptions<C> = {
   style: "#000",
   align: "start",
   overflow: overflowModeTypecheck,
+  overflowWrap: overflowWrapModeTypecheck,
   maxLines: 2,
 };
 
 void flexItemOptionsTypecheck;
 void nodeWithMinContentTypecheck;
 void overflowModeTypecheck;
+void overflowWrapModeTypecheck;
 void ellipsisPositionTypecheck;
 void textOptionsTypecheck;
 void multilineTextOptionsTypecheck;

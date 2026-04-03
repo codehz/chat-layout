@@ -195,6 +195,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
       font: "16px system-ui",
       style: "black",
       align: "start",
+      overflowWrap: "anywhere",
     }),
     { alignSelf: "start" },
   );
@@ -216,6 +217,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
               style: () => (currentHover === item ? "#222" : "#444"),
               align: "start",
               overflow: "ellipsis",
+              overflowWrap: "anywhere",
               maxLines: 2,
             }),
           ],
@@ -308,6 +310,11 @@ const list = new ListState<ChatItem>([
   },
   { sender: "B", content: "aaaabbb" },
   { sender: "B", content: "测试中文" },
+  {
+    sender: "A",
+    content:
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  },
   { sender: "B", content: "测试aa中文aaa" },
   {
     sender: "A",

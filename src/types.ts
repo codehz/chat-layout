@@ -71,6 +71,11 @@ export type TextWhitespaceMode = "preserve" | "trim-and-collapse";
 export type TextOverflowMode = "clip" | "ellipsis";
 
 /**
+ * Controls whether soft wrap opportunities affect min-content sizing.
+ */
+export type TextOverflowWrapMode = "break-word" | "anywhere";
+
+/**
  * Placement of the ellipsis glyph for single-line text.
  */
 export type TextEllipsisPosition = "start" | "end" | "middle";
@@ -87,6 +92,8 @@ export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
   style: DynValue<C, string>;
   /** Default: preserve input whitespace, including blank lines and edge spaces. */
   whitespace?: TextWhitespaceMode;
+  /** Default: break-word; use anywhere when min-content should honor grapheme break opportunities. */
+  overflowWrap?: TextOverflowWrapMode;
 }
 
 /**

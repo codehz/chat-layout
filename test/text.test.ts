@@ -159,6 +159,46 @@ describe("text metrics", () => {
     });
   });
 
+  test("min-content defaults to break-word semantics for unspaced strings", () => {
+    const ctx = {
+      graphics: {
+        font: "16px text-min-content-break-word",
+        measureText(text: string) {
+          return {
+            width: text.length * 8,
+            fontBoundingBoxAscent: 8,
+            fontBoundingBoxDescent: 2,
+          } as TextMetrics;
+        },
+      },
+    } as Context<C>;
+
+    expect(measureTextMinContent(ctx, "abcdefghij")).toEqual({
+      width: 80,
+      lineCount: 1,
+    });
+  });
+
+  test("min-content anywhere semantics shrink unspaced strings to the widest grapheme", () => {
+    const ctx = {
+      graphics: {
+        font: "16px text-min-content-anywhere",
+        measureText(text: string) {
+          return {
+            width: text.length * 8,
+            fontBoundingBoxAscent: 8,
+            fontBoundingBoxDescent: 2,
+          } as TextMetrics;
+        },
+      },
+    } as Context<C>;
+
+    expect(measureTextMinContent(ctx, "abcdefghij", "preserve", "anywhere")).toEqual({
+      width: 8,
+      lineCount: 10,
+    });
+  });
+
   test("min-content trim-and-collapse drops empty lines before tokenizing", () => {
     const ctx = {
       graphics: {
@@ -315,6 +355,18 @@ describe("text metrics", () => {
     expect(recordedTexts).toEqual(["al…et"]);
   });
 
+  test("Text nodes honor anywhere min-content sizing for continuous strings", () => {
+    const renderer = new ConstraintTestRenderer(createRecordingGraphics([]), {});
+    const node = new Text<C>("abcdefghij", {
+      lineHeight: 20,
+      font: "16px text-node-anywhere",
+      style: "#000",
+      overflowWrap: "anywhere",
+    });
+
+    expect(renderer.measureMinContentNode(node)).toEqual({ width: 8, height: 20 });
+  });
+
   test("MultilineText nodes measure and draw the same truncated layout", () => {
     const recordedTexts: string[] = [];
     const renderer = new ConstraintTestRenderer(createRecordingGraphics(recordedTexts), {});
@@ -331,5 +383,18 @@ describe("text metrics", () => {
     renderer.drawNode(node, { maxWidth: 40 });
 
     expect(recordedTexts).toEqual(["abcde", "fghi…"]);
+  });
+
+  test("MultilineText nodes honor anywhere min-content sizing for continuous strings", () => {
+    const renderer = new ConstraintTestRenderer(createRecordingGraphics([]), {});
+    const node = new MultilineText<C>("abcdefghij", {
+      lineHeight: 20,
+      font: "16px multiline-node-anywhere",
+      style: "#000",
+      align: "start",
+      overflowWrap: "anywhere",
+    });
+
+    expect(renderer.measureMinContentNode(node)).toEqual({ width: 8, height: 200 });
   });
 });

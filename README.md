@@ -50,6 +50,8 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 - `MultilineText.align` uses logical values: `start`, `center`, `end`.
 - `MultilineText.physicalAlign` uses physical values: `left`, `center`, `right`.
 - `Text` and `MultilineText` preserve blank lines and edge whitespace by default. Use `whitespace: "trim-and-collapse"` if you want cleanup.
+- `Text` and `MultilineText` default to `overflowWrap: "break-word"`, which preserves compatibility-first min-content sizing for shrink layouts.
+- Use `overflowWrap: "anywhere"` when long unspaced strings should contribute grapheme-level breakpoints to min-content sizing.
 - `Text` supports `overflow: "ellipsis"` with `ellipsisPosition: "start" | "end" | "middle"` when measured under a finite `maxWidth`.
 - `MultilineText` supports `overflow: "ellipsis"` together with `maxLines`; values below `1` are treated as `1`.
 
@@ -75,6 +77,7 @@ const preview = new MultilineText(reply.content, {
   font: "13px system-ui",
   style: "#444",
   align: "start",
+  overflowWrap: "anywhere",
   overflow: "ellipsis",
   maxLines: 2,
 });
@@ -85,6 +88,7 @@ Notes:
 - Ellipsis is only inserted when the node is measured under a finite `maxWidth` and content actually overflows that constraint.
 - `MultilineText` only supports end ellipsis on the last visible line; start/middle ellipsis are intentionally single-line only.
 - `maxLines` defaults to unlimited, and values below `1` are clamped to `1`.
+- `overflowWrap: "break-word"` keeps the current min-content behavior; `overflowWrap: "anywhere"` lets long unspaced strings shrink inside flex layouts such as chat bubbles.
 - Current `measureMinContent()` behavior stays compatibility-first: ellipsis affects constrained measurement/drawing, but does not lower the min-content shrink floor by itself.
 
 ## Shrink behavior

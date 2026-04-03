@@ -5,7 +5,13 @@ import {
   walkLineRanges,
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
-import type { Context, TextEllipsisPosition, TextOverflowMode, TextWhitespaceMode } from "./types";
+import type {
+  Context,
+  TextEllipsisPosition,
+  TextOverflowMode,
+  TextOverflowWrapMode,
+  TextWhitespaceMode,
+} from "./types";
 
 export interface TextLayout {
   width: number;
@@ -108,7 +114,10 @@ function measureFontShift<C extends CanvasRenderingContext2D>(ctx: Context<C>): 
   return writeLruValue(fontShiftCache, font, ascent - descent, FONT_SHIFT_CACHE_CAPACITY);
 }
 
-function measurePreparedMinContentWidth(prepared: PreparedTextWithSegments): number {
+function measurePreparedMinContentWidth(
+  prepared: PreparedTextWithSegments,
+  overflowWrap: TextOverflowWrapMode = "break-word",
+): number {
   let maxWidth = 0;
   let maxAnyWidth = 0;
   for (let i = 0; i < prepared.widths.length; i += 1) {
@@ -116,7 +125,11 @@ function measurePreparedMinContentWidth(prepared: PreparedTextWithSegments): num
     maxAnyWidth = Math.max(maxAnyWidth, segmentWidth);
     const segment = prepared.segments[i];
     if (segment != null && segment.trim().length > 0) {
-      maxWidth = Math.max(maxWidth, segmentWidth);
+      const breakableWidths = prepared.breakableWidths[i];
+      const minContentWidth = overflowWrap === "anywhere" && breakableWidths != null && breakableWidths.length > 0
+        ? breakableWidths.reduce((widest, width) => Math.max(widest, width), 0)
+        : segmentWidth;
+      maxWidth = Math.max(maxWidth, minContentWidth);
     }
   }
   return maxWidth > 0 ? maxWidth : maxAnyWidth;
@@ -498,6 +511,7 @@ export function measureTextMinContent<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
   whitespace: TextWhitespaceMode = "preserve",
+  overflowWrap: TextOverflowWrapMode = "break-word",
 ): TextMeasurement {
   const segments = preprocessSegments(text, whitespace);
   if (segments.length === 0) {
@@ -512,7 +526,7 @@ export function measureTextMinContent<C extends CanvasRenderingContext2D>(
       continue;
     }
     const prepared = readPreparedSegment(segment, font);
-    width = Math.max(width, measurePreparedMinContentWidth(prepared));
+    width = Math.max(width, measurePreparedMinContentWidth(prepared, overflowWrap));
   }
 
   let lineCount = 0;

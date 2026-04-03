@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, Text } from "../../src/nodes";
 import { BaseRenderer } from "../../src/renderer";
-import type { Box, Context, HitTest, LayoutConstraints, Node } from "../../src/types";
+import type { Box, Context, HitTest, LayoutConstraints, Node, TextOverflowWrapMode } from "../../src/types";
 import { createTextGraphics as createGraphics, ensureMockOffscreenCanvas } from "../helpers/graphics";
 
 type C = CanvasRenderingContext2D;
@@ -120,6 +120,8 @@ function createChatLikeBubbleTree(
   message: string,
   options: {
     sender?: "A" | "B";
+    messageOverflowWrap?: TextOverflowWrapMode;
+    replyOverflowWrap?: TextOverflowWrapMode;
     reply?: {
       sender: string;
       content: string;
@@ -146,8 +148,9 @@ function createChatLikeBubbleTree(
     new MultilineText(message, {
       lineHeight: 20,
       font: "16px sans-serif",
-        align: "start",
+      align: "start",
       style: "#000",
+      overflowWrap: options.messageOverflowWrap,
     }),
     { alignSelf: "start" },
   );
@@ -168,6 +171,7 @@ function createChatLikeBubbleTree(
             font: "13px sans-serif",
             align: "start",
             style: "#555",
+            overflowWrap: options.replyOverflowWrap,
           }),
         ],
         {
@@ -472,6 +476,39 @@ describe("Place", () => {
 
     expect(bodyRect.x).toBeGreaterThan(0);
     expect(bodyRect.x + bodyRect.width).toBe(constrained.alignedBodyLayout.containerBox.width);
+  });
+
+  test("chat bubbles shrink long unspaced messages when overflowWrap=anywhere", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 200), {});
+    const tree = createChatLikeBubbleTree("A".repeat(80), {
+      sender: "A",
+      messageOverflowWrap: "anywhere",
+    });
+
+    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
+
+    expect(constrained.placeLayout.containerBox.width).toBe(320);
+    expect(constrained.bodyLayout.children[1]!.rect.width).toBeLessThan(320);
+    expect(constrained.bubbleColumnLayout.children[0]!.rect.height).toBeGreaterThan(20);
+  });
+
+  test("reply previews shrink long unspaced strings when overflowWrap=anywhere", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 200), {});
+    const tree = createChatLikeBubbleTree(
+      "short message",
+      {
+        reply: {
+          sender: "B",
+          content: "Z".repeat(120),
+        },
+        replyOverflowWrap: "anywhere",
+      },
+    );
+
+    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
+
+    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBeLessThan(320);
+    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBe(constrained.bubbleColumnLayout.containerBox.width);
   });
 
   test("does not synthesize child maxWidth constraints when expand=false", () => {
