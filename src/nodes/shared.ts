@@ -57,11 +57,12 @@ export function drawLayoutChildren<C extends CanvasRenderingContext2D>(
 
   let result = false;
   for (const childResult of layoutResult.children) {
-    result ||= childResult.node.draw(
+    const childDrawn = childResult.node.draw(
       withConstraints(ctx, childResult.constraints),
       x + childResult.contentBox.x,
       y + childResult.contentBox.y,
     );
+    result = childDrawn || result;
   }
   return result;
 }

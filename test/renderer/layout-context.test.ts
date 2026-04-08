@@ -179,6 +179,44 @@ describe("layout context", () => {
     expect(hitXs.at(-1)).toBe(10);
   });
 
+  test("draw walks all siblings even when an earlier child requests redraw", () => {
+    const drawOrder: string[] = [];
+    const root = new Flex<C>([
+      {
+        measure() {
+          return { width: 20, height: 20 };
+        },
+        draw() {
+          drawOrder.push("first");
+          return true;
+        },
+        hittest() {
+          return false;
+        },
+      },
+      {
+        measure() {
+          return { width: 20, height: 20 };
+        },
+        draw() {
+          drawOrder.push("second");
+          return false;
+        },
+        hittest() {
+          return false;
+        },
+      },
+    ], {
+      direction: "row",
+    });
+    const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
+
+    renderer.measureNode(root, { maxWidth: 200 });
+
+    expect(renderer.drawNode(root, { maxWidth: 200 })).toBe(true);
+    expect(drawOrder).toEqual(["first", "second"]);
+  });
+
   test("shrink layouts reuse final child constraints for draw and hittest", () => {
     const seenMeasureWidths: Array<number | undefined> = [];
     const seenDrawWidths: Array<number | undefined> = [];
