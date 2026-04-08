@@ -1,5 +1,4 @@
 import type { Node, RenderFeedback } from "../../types";
-import { shallowMerge } from "../../utils";
 import { BaseRenderer } from "../base";
 import { ListState } from "../list-state";
 import type { NormalizedListState, VisibleListState, VisibleWindow } from "./solver";
@@ -231,9 +230,10 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       }
       return node.hittest(
         this.getRootContext(),
-        shallowMerge(test, {
+        {
+          ...test,
           y: test.y - y,
-        }),
+        },
       );
     }
     return false;

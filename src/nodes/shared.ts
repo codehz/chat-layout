@@ -1,6 +1,6 @@
 import { findChildAtPoint } from "../layout";
 import type { Context, FlexLayoutResult, HitTest, LayoutConstraints, Node } from "../types";
-import { shallow, shallowMerge } from "../utils";
+import { shallow } from "../utils";
 
 type LayoutCacheAccess<C extends CanvasRenderingContext2D> = {
   getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined;
@@ -85,9 +85,10 @@ export function hittestLayoutChildren<C extends CanvasRenderingContext2D>(
 
   return hit.child.node.hittest(
     withConstraints(ctx, hit.child.constraints),
-    shallowMerge(test, {
+    {
+      ...test,
       x: hit.localX,
       y: hit.localY,
-    }),
+    },
   );
 }

@@ -1,7 +1,6 @@
 import { createRect, findChildAtPoint, getSingleChildLayout } from "../layout";
 import type { Box, Context, HitTest, Node } from "../types";
 import { measureNodeMinContent } from "./base";
-import { shallowMerge } from "../utils";
 import { Wrapper } from "./base";
 import { readLayoutResult, withConstraints, writeLayoutResult } from "./shared";
 
@@ -156,10 +155,11 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
 
     return hit.child.node.hittest(
       withConstraints(ctx, hit.child.constraints),
-      shallowMerge(test, {
+      {
+        ...test,
         x: hit.localX,
         y: hit.localY,
-      }),
+      },
     );
   }
 }

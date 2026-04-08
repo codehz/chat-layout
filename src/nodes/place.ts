@@ -1,6 +1,5 @@
 import { createRect, findChildAtPoint, getSingleChildLayout } from "../layout";
 import type { Box, Context, HitTest, Node, TextAlign } from "../types";
-import { shallowMerge } from "../utils";
 import { measureNodeMinContent, Wrapper } from "./base";
 import { readLayoutResult, withConstraints, writeLayoutResult } from "./shared";
 
@@ -104,10 +103,11 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
 
     return hit.child.node.hittest(
       withConstraints(ctx, hit.child.constraints),
-      shallowMerge(test, {
+      {
+        ...test,
         x: hit.localX,
         y: hit.localY,
-      }),
+      },
     );
   }
 }
