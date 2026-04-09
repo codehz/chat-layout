@@ -19,9 +19,10 @@ import {
   selectEllipsisUnitCounts,
 } from "./core";
 import {
+  collectAtomsInRange,
   collectAtomsFromCursorToEnd,
   createRichSourceItems,
-  flattenPreparedLineAtoms,
+  forEachAtomInRange,
   getPreparedLineStart,
   getRichPreparedKey,
   layoutNextPreparedLine,
@@ -131,6 +132,57 @@ function materializeRichFragments<C extends CanvasRenderingContext2D>(
   return fragments;
 }
 
+function appendRichFragment<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultColor: DynValue<C, string>,
+  fragments: RichFragmentLayout[],
+  atom: InlineAtom,
+  pendingGapBefore: number,
+): number {
+  const occupiedWidth = atom.width + atom.extraWidthAfter;
+  if (atom.kind === "space" && !atom.preservesLineEnd && atom.atomicGroupId == null) {
+    return pendingGapBefore + occupiedWidth;
+  }
+
+  const span = spans[atom.itemIndex];
+  const font = span?.font ?? atom.font;
+  const color = span?.color ?? defaultColor;
+  const previous = fragments[fragments.length - 1];
+  if (previous != null && previous.itemIndex === atom.itemIndex && previous.font === font && pendingGapBefore === 0) {
+    previous.text += atom.text;
+    previous.occupiedWidth += occupiedWidth;
+    return 0;
+  }
+
+  fragments.push({
+    itemIndex: atom.itemIndex,
+    text: atom.text,
+    font,
+    color: color as DynValue<any, string>,
+    gapBefore: pendingGapBefore,
+    occupiedWidth,
+    shift: measureRichFragmentShift(ctx, font),
+  });
+  return 0;
+}
+
+function materializeRichFragmentsInRange<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultColor: DynValue<C, string>,
+  prepared: PreparedInlineLayout,
+  start: PreparedInlineLineRange["start"],
+  end: PreparedInlineLineRange["end"],
+): RichFragmentLayout[] {
+  const fragments: RichFragmentLayout[] = [];
+  let pendingGapBefore = 0;
+  forEachAtomInRange(prepared, start, end, (atom) => {
+    pendingGapBefore = appendRichFragment(ctx, spans, defaultColor, fragments, atom, pendingGapBefore);
+  });
+  return fragments;
+}
+
 function materializeRichLine<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   spans: InlineSpan<C>[],
@@ -139,10 +191,9 @@ function materializeRichLine<C extends CanvasRenderingContext2D>(
   line: PreparedInlineLineRange,
   overflowed: boolean,
 ): RichLineLayout {
-  const atoms = flattenPreparedLineAtoms(prepared, line);
   return {
     width: line.width,
-    fragments: materializeRichFragments(ctx, spans, defaultColor, atoms),
+    fragments: materializeRichFragmentsInRange(ctx, spans, defaultColor, prepared, line.start, line.end),
     overflowed,
   };
 }
@@ -327,7 +378,7 @@ export function layoutRichEllipsizedFirstLine<C extends CanvasRenderingContext2D
     spans,
     defaultFont,
     defaultColor,
-    flattenPreparedLineAtoms(prepared, intrinsicLine),
+    collectAtomsInRange(prepared, intrinsicLine.start, intrinsicLine.end),
     clampedMaxWidth,
     ellipsisPosition,
   );

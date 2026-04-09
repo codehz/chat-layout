@@ -1043,7 +1043,7 @@ export function measurePreparedNaturalWidth(prepared: PreparedInlineLayout): num
   return measurePreparedLineStats(prepared, Number.POSITIVE_INFINITY).maxLineWidth;
 }
 
-function forEachAtomInRange(
+export function forEachAtomInRange(
   prepared: PreparedInlineLayout,
   start: PreparedInlineCursor,
   end: PreparedInlineCursor,
