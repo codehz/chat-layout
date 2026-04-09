@@ -139,3 +139,5 @@ Build the chat example:
 ```bash
 bun run example
 ```
+
+文本性能观测基线见 `docs/text-performance.md`。
