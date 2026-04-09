@@ -17,7 +17,7 @@ import {
   selectEllipsisUnitCounts,
 } from "./core";
 import {
-  collectAtomsFromCursorToEnd,
+  forEachAtomFromCursorToEnd,
   flattenPreparedLineAtoms,
   getPreparedLineStart,
   layoutNextPreparedLine,
@@ -155,8 +155,75 @@ function getFirstLineRange(prepared: PreparedTextWithSegments): PreparedInlineLi
 
 function walkLines(prepared: PreparedTextWithSegments, maxWidth: number): PreparedInlineLineRange[] {
   const lines: PreparedInlineLineRange[] = [];
-  walkPreparedLineRanges(prepared, maxWidth, (line) => lines.push(line));
+  walkPreparedLineRanges(prepared, maxWidth, (line) => {
+    lines.push(line);
+  });
   return lines;
+}
+
+function collectVisibleLines(
+  prepared: PreparedTextWithSegments,
+  maxWidth: number,
+  maxLines: number,
+): { lines: PreparedInlineLineRange[]; overflowed: boolean } {
+  const lines: PreparedInlineLineRange[] = [];
+  let overflowed = false;
+  walkPreparedLineRanges(prepared, maxWidth, (line) => {
+    if (lines.length < maxLines) {
+      lines.push(line);
+      return true;
+    }
+    overflowed = true;
+    return false;
+  });
+  return { lines, overflowed };
+}
+
+function collectEndEllipsisLayoutFromCursor<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  prepared: PreparedTextWithSegments,
+  start: PreparedInlineLineRange["start"],
+  maxWidth: number,
+  shift: number,
+): OverflowTextLayout {
+  const ellipsisWidth = measureEllipsisWidth(ctx);
+  if (ellipsisWidth > maxWidth) {
+    return { width: 0, text: "", shift, overflowed: true };
+  }
+
+  const widths: number[] = [];
+  forEachAtomFromCursorToEnd(prepared, start, (atom) => {
+    widths.push(atom.width + atom.extraWidthAfter);
+  });
+
+  if (widths.length === 0) {
+    return createEllipsisOnlyLayout(ctx, maxWidth, shift);
+  }
+
+  const prefixWidths = buildPrefixWidths(widths);
+  const { prefixCount } = selectEllipsisUnitCounts({
+    position: "end",
+    prefixWidths,
+    suffixWidths: [0],
+    unitCount: widths.length,
+    availableWidth: Math.max(0, maxWidth - ellipsisWidth),
+  });
+
+  let text = "";
+  let atomIndex = 0;
+  forEachAtomFromCursorToEnd(prepared, start, (atom) => {
+    if (atomIndex < prefixCount) {
+      text += atom.text;
+    }
+    atomIndex += 1;
+  });
+
+  return {
+    width: (prefixWidths[prefixCount] ?? 0) + ellipsisWidth,
+    text: `${text}${ELLIPSIS_GLYPH}`,
+    shift,
+    overflowed: true,
+  };
 }
 
 function layoutForcedEllipsizedLine<C extends CanvasRenderingContext2D>(
@@ -331,9 +398,9 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
   const normalizedMaxLines = normalizeMaxLines(options.maxLines);
 
   const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
-  const lines = walkLines(prepared, clampedMaxWidth);
   const shift = measureFontShift(ctx);
-  if (normalizedMaxLines == null || lines.length <= normalizedMaxLines) {
+  if (normalizedMaxLines == null) {
+    const lines = walkLines(prepared, clampedMaxWidth);
     const layout = toTextBlockLayout(lines, prepared, shift);
     return {
       width: layout.width,
@@ -342,7 +409,15 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
     };
   }
 
-  const visibleRanges = lines.slice(0, normalizedMaxLines);
+  const { lines: visibleRanges, overflowed } = collectVisibleLines(prepared, clampedMaxWidth, normalizedMaxLines);
+  if (!overflowed) {
+    const layout = toTextBlockLayout(visibleRanges, prepared, shift);
+    return {
+      width: layout.width,
+      lines: layout.lines.map((line) => ({ ...line, overflowed: false })),
+      overflowed: false,
+    };
+  }
   const visibleLines = visibleRanges.map((line) => ({
     width: line.width,
     text: materializePreparedLineText(prepared, line),
@@ -361,14 +436,7 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
   const lastVisibleRange = visibleRanges[visibleRanges.length - 1];
   const ellipsizedLastLine = lastVisibleRange == null
     ? createEllipsisOnlyLayout(ctx, clampedMaxWidth, shift)
-    : collectEllipsisLayout(
-        ctx,
-        collectAtomsFromCursorToEnd(prepared, lastVisibleRange.start),
-        clampedMaxWidth,
-        shift,
-        "end",
-        true,
-      );
+    : collectEndEllipsisLayoutFromCursor(ctx, prepared, lastVisibleRange.start, clampedMaxWidth, shift);
 
   const mergedLines = [
     ...visibleLines.slice(0, -1),

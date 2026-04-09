@@ -20,8 +20,8 @@ import {
 } from "./core";
 import {
   collectAtomsInRange,
-  collectAtomsFromCursorToEnd,
   createRichSourceItems,
+  forEachAtomFromCursorToEnd,
   forEachAtomInRange,
   getPreparedLineStart,
   getRichPreparedKey,
@@ -208,8 +208,28 @@ function getFirstLineRange(prepared: PreparedInlineLayout): PreparedInlineLineRa
 
 function walkLines(prepared: PreparedInlineLayout, maxWidth: number): PreparedInlineLineRange[] {
   const lines: PreparedInlineLineRange[] = [];
-  walkPreparedLineRanges(prepared, maxWidth, (line) => lines.push(line));
+  walkPreparedLineRanges(prepared, maxWidth, (line) => {
+    lines.push(line);
+  });
   return lines;
+}
+
+function collectVisibleLines(
+  prepared: PreparedInlineLayout,
+  maxWidth: number,
+  maxLines: number,
+): { lines: PreparedInlineLineRange[]; overflowed: boolean } {
+  const lines: PreparedInlineLineRange[] = [];
+  let overflowed = false;
+  walkPreparedLineRanges(prepared, maxWidth, (line) => {
+    if (lines.length < maxLines) {
+      lines.push(line);
+      return true;
+    }
+    overflowed = true;
+    return false;
+  });
+  return { lines, overflowed };
 }
 
 function createRichEllipsisFragment<C extends CanvasRenderingContext2D>(
@@ -309,6 +329,67 @@ function layoutRichEllipsisFromAtoms<C extends CanvasRenderingContext2D>(
         : position === "middle"
           ? [...prefixFragments, ellipsisFragment, ...suffixFragments]
           : [...prefixFragments, ellipsisFragment],
+    overflowed: true,
+  };
+}
+
+function layoutRichEndEllipsisFromCursor<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+  defaultColor: DynValue<C, string>,
+  prepared: PreparedInlineLayout,
+  start: PreparedInlineLineRange["start"],
+  maxWidth: number,
+): RichLineLayout {
+  const ellipsisWidth = measureEllipsisWidth(ctx);
+  if (ellipsisWidth > maxWidth) {
+    return { width: 0, fragments: [], overflowed: true };
+  }
+
+  const widths: number[] = [];
+  forEachAtomFromCursorToEnd(prepared, start, (atom) => {
+    widths.push(atom.width + atom.extraWidthAfter);
+  });
+
+  if (widths.length === 0) {
+    return createRichEllipsisOnlyLayout(ctx, maxWidth, defaultFont, defaultColor);
+  }
+
+  const prefixWidths = buildPrefixWidths(widths);
+  const { prefixCount } = selectEllipsisUnitCounts({
+    position: "end",
+    prefixWidths,
+    suffixWidths: [0],
+    unitCount: widths.length,
+    availableWidth: Math.max(0, maxWidth - ellipsisWidth),
+  });
+
+  const fragments: RichFragmentLayout[] = [];
+  let atomIndex = 0;
+  let pendingGapBefore = 0;
+  let lastVisibleAtom: InlineAtom | undefined;
+  let lastAtom: InlineAtom | undefined;
+  forEachAtomFromCursorToEnd(prepared, start, (atom) => {
+    lastAtom = atom;
+    if (atomIndex < prefixCount) {
+      pendingGapBefore = appendRichFragment(ctx, spans, defaultColor, fragments, atom, pendingGapBefore);
+      lastVisibleAtom = atom;
+    }
+    atomIndex += 1;
+  });
+
+  const ellipsisSource = lastVisibleAtom ?? lastAtom;
+  const ellipsisSpan = ellipsisSource == null ? undefined : spans[ellipsisSource.itemIndex];
+  fragments.push(createRichEllipsisFragment(
+    ctx,
+    ellipsisSpan?.font ?? ellipsisSource?.font ?? defaultFont,
+    (ellipsisSpan?.color ?? defaultColor) as DynValue<C, string>,
+  ));
+
+  return {
+    width: (prefixWidths[prefixCount] ?? 0) + ellipsisWidth,
+    fragments,
     overflowed: true,
   };
 }
@@ -491,8 +572,8 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
   }
   const normalizedMaxLines = normalizeMaxLines(maxLines);
   const prepared = readRichPrepared(spans, defaultFont, whiteSpace, wordBreak);
-  const lineRanges = walkLines(prepared, maxWidth);
-  if (normalizedMaxLines == null || lineRanges.length <= normalizedMaxLines) {
+  if (normalizedMaxLines == null) {
+    const lineRanges = walkLines(prepared, maxWidth);
     const lines = lineRanges.map((line) => materializeRichLine(ctx, spans, defaultColor, prepared, line, false));
     return {
       width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
@@ -500,8 +581,15 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
       overflowed: false,
     };
   }
-
-  const visibleRanges = lineRanges.slice(0, normalizedMaxLines);
+  const { lines: visibleRanges, overflowed } = collectVisibleLines(prepared, maxWidth, normalizedMaxLines);
+  if (!overflowed) {
+    const lines = visibleRanges.map((line) => materializeRichLine(ctx, spans, defaultColor, prepared, line, false));
+    return {
+      width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+      lines,
+      overflowed: false,
+    };
+  }
   const visibleLines = visibleRanges.map((line) => materializeRichLine(ctx, spans, defaultColor, prepared, line, false));
   if (overflow !== "ellipsis") {
     return {
@@ -514,16 +602,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
   const lastVisibleRange = visibleRanges[visibleRanges.length - 1];
   const ellipsizedLastLine = lastVisibleRange == null
     ? { width: 0, fragments: [], overflowed: true }
-    : layoutRichEllipsisFromAtoms(
-        ctx,
-        spans,
-        defaultFont,
-        defaultColor,
-        collectAtomsFromCursorToEnd(prepared, lastVisibleRange.start),
-        maxWidth,
-        "end",
-        true,
-      );
+    : layoutRichEndEllipsisFromCursor(ctx, spans, defaultFont, defaultColor, prepared, lastVisibleRange.start, maxWidth);
   const lines = [...visibleLines.slice(0, -1), ellipsizedLastLine];
   return {
     width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),

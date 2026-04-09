@@ -992,14 +992,17 @@ export function layoutNextPreparedLine(
 export function walkPreparedLineRanges(
   prepared: PreparedInlineLayout,
   maxWidth: number,
-  onLine: (line: PreparedInlineLineRange) => void,
+  onLine: (line: PreparedInlineLineRange) => boolean | void,
 ): number {
   let lineCount = 0;
   for (let chunkIndex = 0; chunkIndex < prepared.chunks.length; chunkIndex += 1) {
     const chunk = prepared.chunks[chunkIndex]!;
     if (chunk.startUnit === chunk.endUnit) {
       const cursor = { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
-      onLine({ width: 0, start: cursor, end: cursor, next: cursor });
+      if (onLine({ width: 0, start: cursor, end: cursor, next: cursor }) === false) {
+        lineCount += 1;
+        return lineCount;
+      }
       lineCount += 1;
       continue;
     }
@@ -1013,7 +1016,10 @@ export function walkPreparedLineRanges(
       if (line == null) {
         break;
       }
-      onLine(line);
+      if (onLine(line) === false) {
+        lineCount += 1;
+        return lineCount;
+      }
       lineCount += 1;
       if (cursorEquals(line.next, cursor)) {
         break;
@@ -1025,6 +1031,24 @@ export function walkPreparedLineRanges(
     }
   }
   return lineCount;
+}
+
+export function forEachAtomFromCursorToEnd(
+  prepared: PreparedInlineLayout,
+  start: PreparedInlineCursor,
+  cb: (atom: InlineAtom) => void,
+): void {
+  for (let chunkIndex = start.chunkIndex; chunkIndex < prepared.chunks.length; chunkIndex += 1) {
+    const chunk = prepared.chunks[chunkIndex];
+    if (chunk == null) {
+      continue;
+    }
+    const chunkStart = chunkIndex === start.chunkIndex
+      ? start
+      : { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
+    const chunkEnd = { chunkIndex, unitIndex: chunk.endUnit, atomIndex: 0 };
+    forEachAtomInRange(prepared, chunkStart, chunkEnd, cb);
+  }
 }
 
 export function measurePreparedLineStats(prepared: PreparedInlineLayout, maxWidth: number): PreparedInlineStats {
