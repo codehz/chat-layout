@@ -108,6 +108,7 @@ Notes:
 ## Migration notes
 
 - Use `memoRenderItemBy(keyOf, renderItem)` when list items are primitives.
+- `memoRenderItemBy()` now uses a bounded LRU cache by default; pass `{ maxEntries: Infinity }` to keep the old unbounded behavior explicitly.
 - `FlexItem` exposes `grow`, `shrink`, and `alignSelf`; `basis` is no longer public.
 - `MultilineText` now uses `align` / `physicalAlign` instead of `alignment`.
 - `ListState.position` uses `undefined` for the renderer default anchor.

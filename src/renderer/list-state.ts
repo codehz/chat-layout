@@ -1,3 +1,5 @@
+import { emitWeakListeners, pruneWeakListenerMap, type WeakListenerRecord } from "./weak-listeners";
+
 /**
  * Mutable list state shared with virtualized renderers.
  */
@@ -41,36 +43,64 @@ export type ListStateChange<T extends {}> =
 
 export type ListStateChangeListener<T extends {}> = (change: ListStateChange<T>) => void;
 
-const listStateListeners = new WeakMap<ListState<{}>, Set<ListStateChangeListener<{}>>>();
+type WeakListStateListenerRecord = WeakListenerRecord<object, ListStateChange<{}>>;
 
-function emitListStateChange<T extends {}>(list: ListState<T>, change: ListStateChange<T>): void {
-  const listeners = listStateListeners.get(list as unknown as ListState<{}>);
-  if (listeners == null || listeners.size === 0) {
+const listStateListeners = new WeakMap<ListState<{}>, Map<symbol, WeakListStateListenerRecord>>();
+const listStateListenerRegistry =
+  typeof FinalizationRegistry === "function"
+    ? new FinalizationRegistry<{ listRef: WeakRef<ListState<{}>>; token: symbol }>(({ listRef, token }) => {
+        const list = listRef.deref();
+        if (list == null) {
+          return;
+        }
+        deleteListStateListener(list, token);
+      })
+    : null;
+
+function deleteListStateListener(list: ListState<{}>, token: symbol): void {
+  const listeners = listStateListeners.get(list);
+  if (listeners == null) {
     return;
   }
-  for (const listener of [...listeners]) {
-    (listener as ListStateChangeListener<T>)(change);
+  listeners.delete(token);
+  if (listeners.size === 0) {
+    listStateListeners.delete(list);
   }
 }
 
-export function subscribeListState<T extends {}>(list: ListState<T>, listener: ListStateChangeListener<T>): () => void {
+function emitListStateChange<T extends {}>(list: ListState<T>, change: ListStateChange<T>): void {
+  const listeners = listStateListeners.get(list as unknown as ListState<{}>);
+  if (listeners == null) {
+    return;
+  }
+  emitWeakListeners(listeners, change as ListStateChange<{}>);
+  if (listeners.size === 0) {
+    listStateListeners.delete(list as unknown as ListState<{}>);
+  }
+}
+
+export function subscribeListState<T extends {}, O extends object>(
+  list: ListState<T>,
+  owner: O,
+  listener: (owner: O, change: ListStateChange<T>) => void,
+): void {
   const key = list as unknown as ListState<{}>;
   let listeners = listStateListeners.get(key);
   if (listeners == null) {
-    listeners = new Set();
+    listeners = new Map();
     listStateListeners.set(key, listeners);
+  } else {
+    pruneWeakListenerMap(listeners);
   }
-  listeners.add(listener as ListStateChangeListener<{}>);
-  return () => {
-    const current = listStateListeners.get(key);
-    if (current == null) {
-      return;
-    }
-    current.delete(listener as ListStateChangeListener<{}>);
-    if (current.size === 0) {
-      listStateListeners.delete(key);
-    }
-  };
+  const token = Symbol();
+  listeners.set(token, {
+    ownerRef: new WeakRef(owner),
+    notify: listener as (owner: object, change: ListStateChange<{}>) => void,
+  });
+  listStateListenerRegistry?.register(owner, {
+    listRef: new WeakRef(key),
+    token,
+  });
 }
 
 export class ListState<T extends {}> {

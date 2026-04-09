@@ -107,7 +107,6 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   #jumpAnimation: JumpAnimation | undefined;
   #replacementAnimations = new Map<number, ReplacementAnimation<C>>();
   #nextReplacementLayerKey = 0;
-  #unsubscribeListState: () => void;
 
   constructor(
     graphics: C,
@@ -117,8 +116,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     },
   ) {
     super(graphics, options);
-    this.#unsubscribeListState = subscribeListState(options.list, (change) => {
-      this.#handleListStateChange(change);
+    subscribeListState(options.list, this, (owner, change) => {
+      owner.#handleListStateChange(change);
     });
   }
 
