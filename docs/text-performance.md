@@ -118,8 +118,9 @@ bun run typecheck
 现有自动化测试已经覆盖：
 
 - plain intrinsic / constrained / ellipsis / multiline / maxLines
-- rich constrained / ellipsis / CJK / keep-all / pre-wrap / break-never
+- rich constrained / clip / ellipsis / CJK / keep-all / pre-wrap / break-never
 - 节点级 text layout cache 的跨节点、跨宽度、跨 whiteSpace 复用
+- ultra-narrow 约束下 plain / rich ellipsis 不超界
 
 仍需在后续优化阶段重点留意：
 
@@ -127,3 +128,9 @@ bun run typecheck
 - `maxLines` 提前停止后的 overflow 判定边界
 - ultra-narrow 宽度下 ellipsis 行宽不能超界
 - 相同 font 的 shift / ellipsis 宽度缓存是否串值
+
+## 本轮验证结果
+
+- 全量测试：`bun test` → `164 pass`
+- 类型检查：`bun run typecheck` → 通过
+- 重点确认：plain/rich 的 multiline overflow、keep-all、pre-wrap、min-content、节点级文本缓存均未回退

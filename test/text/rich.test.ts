@@ -44,6 +44,34 @@ describe("rich text metrics", () => {
     expect(layout.lines[1]?.fragments.map((frag) => frag.text).join("")).toBe("fghi…");
   });
 
+  test("rich text maxLines clip keeps visible lines without injecting ellipsis", () => {
+    const ctx = createMeasuredContext("16px rich-overflow-clip");
+    const spans: InlineSpan<C>[] = [
+      { text: "abcdefghij", color: "#111" },
+      { text: "klmno", font: "600 16px rich-overflow-clip-bold", color: "#f00" },
+    ];
+
+    expect(layoutRichTextWithOverflow(ctx, spans, 40, "16px rich-overflow-clip", "#000", 1, "clip")).toEqual({
+      width: 40,
+      lines: [
+        {
+          width: 40,
+          fragments: [{
+            itemIndex: 0,
+            text: "abcde",
+            font: "16px rich-overflow-clip",
+            color: "#111",
+            gapBefore: 0,
+            occupiedWidth: 40,
+            shift: 6,
+          }],
+          overflowed: false,
+        },
+      ],
+      overflowed: true,
+    });
+  });
+
   test("rich text min-content uses widest span fragment", () => {
     const ctx = createMeasuredContext("16px rich-min");
     const spans: InlineSpan<C>[] = [
@@ -166,6 +194,19 @@ describe("rich text metrics", () => {
     const layout = layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-ellipsis-cross-span", "#000");
     expect(layout.width).toBe(64);
     expect(layout.fragments.map((frag) => frag.text)).toEqual(["alpha", "b", "…"]);
+  });
+
+  test("rich text multiline ellipsis never returns an over-wide line in ultra-narrow constraints", () => {
+    const ctx = createMeasuredContext("16px rich-overflow-tight");
+    const spans: InlineSpan<C>[] = [
+      { text: "alphabet", color: "#111" },
+    ];
+
+    expect(layoutRichTextWithOverflow(ctx, spans, 4, "16px rich-overflow-tight", "#000", 1, "ellipsis")).toEqual({
+      width: 0,
+      lines: [{ width: 0, fragments: [], overflowed: true }],
+      overflowed: true,
+    });
   });
 
   test("font metrics are cached per font for rich layout and ellipsis", () => {
