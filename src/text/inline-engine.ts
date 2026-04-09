@@ -336,6 +336,17 @@ function sumAtomWidths(atoms: readonly InlineAtom[], start = 0, end = atoms.leng
   return width;
 }
 
+function joinAtomText(atoms: readonly InlineAtom[], start = 0, end = atoms.length): string {
+  let text = "";
+  for (let index = start; index < end; index += 1) {
+    const atom = atoms[index];
+    if (atom != null) {
+      text += atom.text;
+    }
+  }
+  return text;
+}
+
 function measureAtomSequenceWidth(atoms: readonly InlineAtom[]): number {
   if (atoms.length === 0) {
     return 0;
@@ -549,7 +560,7 @@ function mergeKeepAllUnits(units: readonly InlineAtom[][]): InlineAtom[][] {
 
   const merged: InlineAtom[][] = [];
   let current = units[0]!.slice();
-  let currentText = current.map((atom) => atom.text).join("");
+  let currentText = joinAtomText(current);
   let currentContainsCJK = isCJK(currentText);
   let currentCanContinue = canContinueKeepAllTextRun(currentText);
 
@@ -559,7 +570,7 @@ function mergeKeepAllUnits(units: readonly InlineAtom[][]): InlineAtom[][] {
 
   for (let index = 1; index < units.length; index += 1) {
     const next = units[index]!;
-    const nextText = next.map((atom) => atom.text).join("");
+    const nextText = joinAtomText(next);
     const nextContainsCJK = isCJK(nextText);
     const nextCanContinue = canContinueKeepAllTextRun(nextText);
 
@@ -591,7 +602,7 @@ function splitAtomsByWordSegments(atoms: readonly InlineAtom[]): InlineAtom[][] 
     return [atoms.slice()];
   }
 
-  const text = atoms.map((atom) => atom.text).join("");
+  const text = joinAtomText(atoms);
   const offsets = [0];
   for (let index = 0; index < atoms.length; index += 1) {
     offsets.push((offsets[index] ?? 0) + (atoms[index]?.text.length ?? 0));
@@ -681,7 +692,7 @@ function tokenizeChunkAtoms(
       index += 1;
     }
     const textRunAtoms = chunkAtoms.slice(start, index);
-    const runText = textRunAtoms.map((part) => part.text).join("");
+    const runText = joinAtomText(textRunAtoms);
     const rawUnits = isCJK(runText)
       ? buildBaseCjkUnits(textRunAtoms)
       : splitAtomsByWordSegments(textRunAtoms);
@@ -1213,7 +1224,7 @@ export function collectAtomsFromCursorToEnd(
 }
 
 export function materializePreparedLineText(prepared: PreparedInlineLayout, line: PreparedInlineLineRange): string {
-  return collectLineAtoms(prepared, line).atoms.map((atom) => atom.text).join("");
+  return joinAtomText(collectLineAtoms(prepared, line).atoms);
 }
 
 export function flattenPreparedLineAtoms(prepared: PreparedInlineLayout, line: PreparedInlineLineRange): InlineAtom[] {
@@ -1250,16 +1261,26 @@ export function measurePreparedMinContentWidth(
 }
 
 export function getPreparedUnits(prepared: PreparedInlineLayout): Array<{ text: string; width: number }> {
-  return prepared.units.flatMap((unit) => {
+  const resolvedUnits: Array<{ text: string; width: number }> = [];
+  for (let unitIndex = 0; unitIndex < prepared.units.length; unitIndex += 1) {
+    const unit = prepared.units[unitIndex]!;
     if (unit.kind === "text" && unit.breakable) {
-      return unit.atoms.map((atom) => ({
-        text: atom.text,
-        width: atom.width + atom.extraWidthAfter,
-      }));
+      for (let atomIndex = 0; atomIndex < unit.atoms.length; atomIndex += 1) {
+        const atom = unit.atoms[atomIndex]!;
+        resolvedUnits.push({
+          text: atom.text,
+          width: atom.width + atom.extraWidthAfter,
+        });
+      }
+      continue;
     }
-    const text = unit.atoms.map((atom) => atom.text).join("");
-    return text.length === 0 && unit.width === 0 ? [] : [{ text, width: unit.width }];
-  });
+    const text = joinAtomText(unit.atoms);
+    if (text.length === 0 && unit.width === 0) {
+      continue;
+    }
+    resolvedUnits.push({ text, width: unit.width });
+  }
+  return resolvedUnits;
 }
 
 export function joinPreparedUnitText(
@@ -1270,11 +1291,22 @@ export function joinPreparedUnitText(
   if (start >= end) {
     return "";
   }
-  return units.slice(start, end).map((unit) => unit.text).join("");
+  let text = "";
+  for (let index = start; index < end; index += 1) {
+    text += units[index]?.text ?? "";
+  }
+  return text;
 }
 
 export function measureAtomsWidth(atoms: readonly InlineAtom[]): number {
-  return atoms.reduce((total, atom) => total + atom.width + atom.extraWidthAfter, 0);
+  let total = 0;
+  for (let index = 0; index < atoms.length; index += 1) {
+    const atom = atoms[index];
+    if (atom != null) {
+      total += atom.width + atom.extraWidthAfter;
+    }
+  }
+  return total;
 }
 
 export function readPreparedInlineLayout(

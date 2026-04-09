@@ -60,6 +60,17 @@ type TextBlockLayout = {
   lines: TextLayout[];
 };
 
+function measureTextLayoutWidth(lines: ArrayLike<{ width: number }>): number {
+  let width = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line != null && line.width > width) {
+      width = line.width;
+    }
+  }
+  return width;
+}
+
 function clampMaxWidth(maxWidth: number): number {
   return Math.max(0, maxWidth);
 }
@@ -77,12 +88,16 @@ function createEllipsisOnlyLayout<C extends CanvasRenderingContext2D>(
 }
 
 function toTextBlockLayout(lines: PreparedInlineLineRange[], prepared: PreparedTextWithSegments, shift: number): TextBlockLayout {
-  const mappedLines = lines.map((line) => ({
-    width: line.width,
-    text: materializePreparedLineText(prepared, line),
-    shift,
-  }));
-  const width = mappedLines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0);
+  const mappedLines: TextLayout[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    mappedLines.push({
+      width: line.width,
+      text: materializePreparedLineText(prepared, line),
+      shift,
+    });
+  }
+  const width = measureTextLayoutWidth(mappedLines);
   return { width, lines: mappedLines };
 }
 
@@ -94,8 +109,14 @@ function collectEllipsisLayout<C extends CanvasRenderingContext2D>(
   position: TextEllipsisPosition,
   forceEllipsis = false,
 ): OverflowTextLayout {
-  const widths = atoms.map((atom) => atom.width + atom.extraWidthAfter);
-  const intrinsicWidth = widths.reduce((total, width) => total + width, 0);
+  const widths: number[] = [];
+  let intrinsicWidth = 0;
+  for (let index = 0; index < atoms.length; index += 1) {
+    const atom = atoms[index]!;
+    const width = atom.width + atom.extraWidthAfter;
+    widths.push(width);
+    intrinsicWidth += width;
+  }
   if (!forceEllipsis && intrinsicWidth <= maxWidth) {
     return {
       width: intrinsicWidth,
@@ -427,7 +448,7 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
 
   if (overflow !== "ellipsis") {
     return {
-      width: visibleLines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+      width: measureTextLayoutWidth(visibleLines),
       lines: visibleLines,
       overflowed: true,
     };
@@ -443,7 +464,7 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
     ellipsizedLastLine,
   ];
   return {
-    width: mergedLines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+    width: measureTextLayoutWidth(mergedLines),
     lines: mergedLines,
     overflowed: true,
   };

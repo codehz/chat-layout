@@ -63,6 +63,17 @@ export interface RichMeasurement {
   lineCount: number;
 }
 
+function measureRichBlockWidth(lines: ArrayLike<{ width: number }>): number {
+  let width = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line != null && line.width > width) {
+      width = line.width;
+    }
+  }
+  return width;
+}
+
 function withFont<C extends CanvasRenderingContext2D, T>(ctx: Context<C>, font: string, cb: () => T): T {
   const previousFont = ctx.graphics.font;
   ctx.graphics.font = font;
@@ -531,7 +542,7 @@ export function layoutRichText<C extends CanvasRenderingContext2D>(
   const prepared = readRichPrepared(spans, defaultFont, whiteSpace, wordBreak);
   const lines = walkLines(prepared, maxWidth).map((line) => materializeRichLine(ctx, spans, defaultColor, prepared, line, false));
   return {
-    width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+    width: measureRichBlockWidth(lines),
     lines,
     overflowed: false,
   };
@@ -550,7 +561,7 @@ export function layoutRichTextIntrinsic<C extends CanvasRenderingContext2D>(
     materializeRichLine(ctx, spans, defaultColor, prepared, line, false)
   );
   return {
-    width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+    width: measureRichBlockWidth(lines),
     lines,
     overflowed: false,
   };
@@ -576,7 +587,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
     const lineRanges = walkLines(prepared, maxWidth);
     const lines = lineRanges.map((line) => materializeRichLine(ctx, spans, defaultColor, prepared, line, false));
     return {
-      width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+      width: measureRichBlockWidth(lines),
       lines,
       overflowed: false,
     };
@@ -585,7 +596,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
   if (!overflowed) {
     const lines = visibleRanges.map((line) => materializeRichLine(ctx, spans, defaultColor, prepared, line, false));
     return {
-      width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+      width: measureRichBlockWidth(lines),
       lines,
       overflowed: false,
     };
@@ -593,7 +604,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
   const visibleLines = visibleRanges.map((line) => materializeRichLine(ctx, spans, defaultColor, prepared, line, false));
   if (overflow !== "ellipsis") {
     return {
-      width: visibleLines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+      width: measureRichBlockWidth(visibleLines),
       lines: visibleLines,
       overflowed: true,
     };
@@ -605,7 +616,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
     : layoutRichEndEllipsisFromCursor(ctx, spans, defaultFont, defaultColor, prepared, lastVisibleRange.start, maxWidth);
   const lines = [...visibleLines.slice(0, -1), ellipsizedLastLine];
   return {
-    width: lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0),
+    width: measureRichBlockWidth(lines),
     lines,
     overflowed: true,
   };
