@@ -13,6 +13,7 @@ import {
   type Context,
   type DynValue,
   type HitTest,
+  type InlineSpan,
   type Node,
   type RenderFeedback,
 } from "..";
@@ -133,7 +134,7 @@ ctx.scale(devicePixelRatio, devicePixelRatio);
 
 type ReplyPreview = {
   sender: string;
-  content: string;
+  content: string | InlineSpan<C>[];
 };
 
 type BaseChatItem = {
@@ -143,7 +144,7 @@ type BaseChatItem = {
 
 type MessageItem = BaseChatItem & {
   kind: "message";
-  content: string;
+  content: string | InlineSpan<C>[];
   reply?: ReplyPreview;
 };
 
@@ -153,6 +154,30 @@ type RevokedItem = BaseChatItem & {
 };
 
 type ChatItem = MessageItem | RevokedItem;
+
+const richTextMessage: InlineSpan<C>[] = [
+  { text: "现在这个 chat example 可以直接展示 " },
+  { text: "rich text", font: "700 16px system-ui", style: "#0f766e" },
+  { text: " 了，支持 " },
+  { text: "颜色", style: "#2563eb" },
+  { text: "、" },
+  { text: "粗体", font: "700 16px system-ui", style: "#b91c1c" },
+  { text: "，以及 " },
+  { text: "inline code", font: "15px ui-monospace, SFMono-Regular, Consolas, monospace", style: "#7c3aed" },
+  { text: " 这样的片段混排。" },
+];
+
+const richReplyPreview: InlineSpan<C>[] = [
+  { text: "回复预览里也能用 " },
+  { text: "rich text", font: "700 13px system-ui", style: "#0f766e" },
+  { text: "，比如 " },
+  { text: "关键词高亮", style: "#2563eb" },
+  { text: " 和 " },
+  { text: "code()", font: "12px ui-monospace, SFMono-Regular, Consolas, monospace", style: "#7c3aed" },
+  {
+    text: "，超长内容仍然会按原来的两行省略规则收起，不需要额外处理。",
+  },
+];
 
 let currentHover: ChatItem | undefined;
 const REPLACE_ANIMATION_DURATION = 320;
@@ -377,7 +402,7 @@ const list = new ListState<ChatItem>([
     id: 2,
     kind: "message",
     sender: "B",
-    content: "aaaa",
+    content: richTextMessage,
     reply: {
       sender: "A",
       content: "hello world chat layout message render",
@@ -411,8 +436,7 @@ const list = new ListState<ChatItem>([
     content: "这里是一条会展示回复预览省略效果的消息。",
     reply: {
       sender: "A",
-      content:
-        "这是一条非常长的回复预览，用来演示 MultilineText 在 chat example 里的末尾 ellipsis 能力。它应该被限制在两行之内，而不是把整个气泡一路撑到天花板。",
+      content: richReplyPreview,
     },
   },
   { id: 9, kind: "message", sender: "B", content: randomText(5) },
