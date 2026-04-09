@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, Text } from "../../src/nodes";
+import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, ShrinkWrap, Text } from "../../src/nodes";
 import { BaseRenderer } from "../../src/renderer";
 import type { Box, Context, HitTest, InlineSpan, LayoutConstraints, Node, TextOverflowWrapMode } from "../../src/types";
 import { createTextGraphics as createGraphics, ensureMockOffscreenCanvas } from "../helpers/graphics";
@@ -111,6 +111,65 @@ function createConstraintProbeNode(size: Box): {
       },
       hittest() {
         return false;
+      },
+    },
+  };
+}
+
+function createResponsiveProbeNode(options?: {
+  naturalWidth?: number;
+  minContentWidth?: number;
+  stableHeight?: number;
+  wrappedHeight?: number;
+  stableThreshold?: number;
+}): {
+  node: Node<C>;
+  measureConstraints: Array<LayoutConstraints | undefined>;
+  draws: ProbeCall[];
+  hits: ProbeCall[];
+  drawConstraints: Array<LayoutConstraints | undefined>;
+  hitConstraints: Array<LayoutConstraints | undefined>;
+} {
+  const naturalWidth = options?.naturalWidth ?? 80;
+  const minContentWidth = options?.minContentWidth ?? naturalWidth;
+  const stableHeight = options?.stableHeight ?? 10;
+  const wrappedHeight = options?.wrappedHeight ?? 20;
+  const stableThreshold = options?.stableThreshold ?? 120;
+  const measureConstraints: Array<LayoutConstraints | undefined> = [];
+  const drawConstraints: Array<LayoutConstraints | undefined> = [];
+  const hitConstraints: Array<LayoutConstraints | undefined> = [];
+  const draws: ProbeCall[] = [];
+  const hits: ProbeCall[] = [];
+  return {
+    measureConstraints,
+    drawConstraints,
+    hitConstraints,
+    draws,
+    hits,
+    node: {
+      measure(ctx) {
+        measureConstraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        const maxWidth = ctx.constraints?.maxWidth;
+        return {
+          width: Math.min(naturalWidth, maxWidth ?? naturalWidth),
+          height: maxWidth != null && maxWidth < stableThreshold ? wrappedHeight : stableHeight,
+        };
+      },
+      measureMinContent() {
+        return {
+          width: minContentWidth,
+          height: stableHeight,
+        };
+      },
+      draw(ctx, x, y) {
+        drawConstraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        draws.push({ x, y });
+        return false;
+      },
+      hittest(ctx, test) {
+        hitConstraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        hits.push({ x: test.x, y: test.y });
+        return true;
       },
     },
   };
@@ -741,5 +800,126 @@ describe("Place", () => {
     expect(() => new PaddingBox<C>(second, { top: 1 })).toThrow(
       "A node can only be attached to one parent. Shared nodes are not supported.",
     );
+  });
+
+  test("ShrinkWrap finds a narrower width without increasing height", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 160), {});
+    const inner = new PaddingBox<C>(
+      new MultilineText("alpha beta gamma delta epsilon zeta eta theta iota kappa lambda", {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        align: "start",
+        color: "#000",
+      }),
+      {
+        top: 4,
+        bottom: 4,
+        left: 8,
+        right: 8,
+      },
+    );
+    const node = new ShrinkWrap<C>(inner);
+    const constraints = { maxWidth: 180 };
+
+    const referenceBox = renderer.measureNode(inner, constraints);
+    const box = renderer.measureNode(node, constraints);
+    const layout = renderer.getLayoutResult(node, constraints);
+
+    expect(box.width).toBeLessThan(180);
+    expect(box.height).toBe(referenceBox.height);
+    expect(layout?.children[0]?.constraints?.maxWidth).toBeLessThan(180);
+  });
+
+  test("ShrinkWrap passes through directly when no maxWidth is available", () => {
+    const renderer = new BaseRenderer(createGraphics(), {});
+    const { node: probe, constraints: seenConstraints } = createConstraintProbeNode({ width: 20, height: 10 });
+    const wrapped = new ShrinkWrap<C>(probe);
+
+    const box = renderer.measureNode(wrapped);
+    const layout = renderer.getLayoutResult(wrapped);
+
+    expect(box).toEqual({ width: 20, height: 10 });
+    expect(seenConstraints).toEqual([undefined]);
+    expect(layout?.children[0]?.constraints).toBeUndefined();
+  });
+
+  test("ShrinkWrap narrows Place(expand=true) while preserving end alignment", () => {
+    const renderer = new BaseRenderer(createGraphics(240, 100), {});
+    const probe = createResponsiveProbeNode();
+    const place = new Place<C>(probe.node, { align: "end", expand: true });
+    const wrapped = new ShrinkWrap<C>(place);
+    const constraints = { maxWidth: 200 };
+
+    const box = renderer.measureNode(wrapped, constraints);
+    const shrinkLayout = renderer.getLayoutResult(wrapped, constraints)!;
+    const placeLayout = renderer.getLayoutResult(place, shrinkLayout.children[0]!.constraints)!;
+
+    expect(box.width).toBeGreaterThanOrEqual(120);
+    expect(box.width).toBeLessThan(120.5);
+    expect(box.height).toBe(10);
+    expect(placeLayout.containerBox.width).toBe(box.width);
+    expect(placeLayout.children[0]!.rect.x).toBe(box.width - 80);
+  });
+
+  test("ShrinkWrap draw and hittest reuse the final child layout and constraints", () => {
+    const renderer = new ConstraintTestRenderer(createGraphics(240, 100), {});
+    const probe = createResponsiveProbeNode();
+    const place = new Place<C>(probe.node, { align: "end", expand: true });
+    const wrapped = new ShrinkWrap<C>(place);
+    const constraints = { maxWidth: 200 };
+
+    const box = renderer.measureNode(wrapped, constraints);
+    renderer.drawNode(wrapped, constraints);
+    expect(probe.draws).toHaveLength(1);
+    expect(probe.draws[0]).toEqual({ x: box.width - 80, y: 0 });
+    expect(probe.drawConstraints[0]?.maxWidth).toBe(box.width);
+
+    expect(renderer.hittestNode(wrapped, { x: box.width - 10, y: 5, type: "click" }, constraints)).toBe(true);
+    expect(probe.hits[0]).toEqual({ x: 70, y: 5 });
+    expect(probe.hitConstraints[0]?.maxWidth).toBe(box.width);
+  });
+
+  test("ShrinkWrap respects minWidth as the lower bound", () => {
+    const renderer = new BaseRenderer(createGraphics(240, 100), {});
+    const place = new Place<C>(createResponsiveProbeNode().node, { align: "end", expand: true });
+    const wrapped = new ShrinkWrap<C>(place);
+    const constraints = { minWidth: 140, maxWidth: 200 };
+
+    const box = renderer.measureNode(wrapped, constraints);
+    const layout = renderer.getLayoutResult(wrapped, constraints);
+
+    expect(box).toEqual({ width: 140, height: 10 });
+    expect(layout?.children[0]?.constraints).toEqual({
+      minWidth: 140,
+      maxWidth: 140,
+    });
+  });
+
+  test("ShrinkWrap lets reply previews widen a chat bubble only as much as needed", () => {
+    const renderer = new BaseRenderer(createGraphics(320, 200), {});
+    const noReply = new ShrinkWrap<C>(
+      createChatLikeBubbleTree("short message", {}).node,
+    );
+    const withReply = new ShrinkWrap<C>(
+      createChatLikeBubbleTree(
+        "short message",
+        {
+          reply: {
+            sender: "A",
+            content: "reply preview content that is noticeably wider than the short message body alone",
+          },
+        },
+      ).node,
+    );
+    const constraints = { maxWidth: 320 };
+
+    const noReplyBox = renderer.measureNode(noReply, constraints);
+    const replyReference = renderer.measureNode(withReply.inner, constraints);
+    const withReplyBox = renderer.measureNode(withReply, constraints);
+
+    expect(noReplyBox.width).toBeLessThan(320);
+    expect(withReplyBox.width).toBeLessThan(320);
+    expect(withReplyBox.width).toBeGreaterThan(noReplyBox.width);
+    expect(withReplyBox.height).toBe(replyReference.height);
   });
 });
