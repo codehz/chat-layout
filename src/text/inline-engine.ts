@@ -18,6 +18,7 @@ import {
 
 const LINE_FIT_EPSILON = 0.005;
 const PREPARED_INLINE_CACHE_CAPACITY = 512;
+const PREPARED_LINE_STATS_CACHE_CAPACITY = 16;
 
 type MeasureContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -61,6 +62,8 @@ export type PreparedInlineLayout = {
   chunks: PreparedInlineChunk[];
   whiteSpace: TextWhiteSpaceMode;
   wordBreak: TextWordBreakMode;
+  lineStatsCache: Map<number, PreparedInlineStats>;
+  minContentWidthCache: Map<TextOverflowWrapMode, number>;
 };
 
 export type PreparedInlineCursor = {
@@ -714,7 +717,37 @@ function buildPreparedInlineLayout(
     });
   }
 
-  return { units, chunks, whiteSpace, wordBreak };
+  return {
+    units,
+    chunks,
+    whiteSpace,
+    wordBreak,
+    lineStatsCache: new Map<number, PreparedInlineStats>(),
+    minContentWidthCache: new Map<TextOverflowWrapMode, number>(),
+  };
+}
+
+function readNumberLruValue<T>(cache: Map<number, T>, key: number): T | undefined {
+  const cached = cache.get(key);
+  if (cached == null) {
+    return undefined;
+  }
+  cache.delete(key);
+  cache.set(key, cached);
+  return cached;
+}
+
+function writeNumberLruValue<T>(cache: Map<number, T>, key: number, value: T, capacity: number): T {
+  if (cache.has(key)) {
+    cache.delete(key);
+  } else if (cache.size >= capacity) {
+    const firstKey = cache.keys().next().value;
+    if (firstKey != null) {
+      cache.delete(firstKey);
+    }
+  }
+  cache.set(key, value);
+  return value;
 }
 
 function cloneCursor(cursor: PreparedInlineCursor): PreparedInlineCursor {
@@ -1052,6 +1085,10 @@ export function forEachAtomFromCursorToEnd(
 }
 
 export function measurePreparedLineStats(prepared: PreparedInlineLayout, maxWidth: number): PreparedInlineStats {
+  const cached = readNumberLruValue(prepared.lineStatsCache, maxWidth);
+  if (cached != null) {
+    return cached;
+  }
   let lineCount = 0;
   let maxLineWidth = 0;
   walkPreparedLineRanges(prepared, maxWidth, (line) => {
@@ -1060,7 +1097,12 @@ export function measurePreparedLineStats(prepared: PreparedInlineLayout, maxWidt
       maxLineWidth = line.width;
     }
   });
-  return { lineCount, maxLineWidth };
+  return writeNumberLruValue(
+    prepared.lineStatsCache,
+    maxWidth,
+    { lineCount, maxLineWidth },
+    PREPARED_LINE_STATS_CACHE_CAPACITY,
+  );
 }
 
 export function measurePreparedNaturalWidth(prepared: PreparedInlineLayout): number {
@@ -1182,6 +1224,10 @@ export function measurePreparedMinContentWidth(
   prepared: PreparedInlineLayout,
   overflowWrap: TextOverflowWrapMode = "break-word",
 ): number {
+  const cached = prepared.minContentWidthCache.get(overflowWrap);
+  if (cached != null) {
+    return cached;
+  }
   let maxWidth = 0;
   let maxAnyWidth = 0;
   for (const unit of prepared.units) {
@@ -1198,7 +1244,9 @@ export function measurePreparedMinContentWidth(
       maxWidth = candidateWidth;
     }
   }
-  return maxWidth > 0 ? maxWidth : maxAnyWidth;
+  const resolvedWidth = maxWidth > 0 ? maxWidth : maxAnyWidth;
+  prepared.minContentWidthCache.set(overflowWrap, resolvedWidth);
+  return resolvedWidth;
 }
 
 export function getPreparedUnits(prepared: PreparedInlineLayout): Array<{ text: string; width: number }> {
@@ -1262,11 +1310,25 @@ export function getRichPreparedKey<C extends CanvasRenderingContext2D>(
   whiteSpace: TextWhiteSpaceMode,
   wordBreak: TextWordBreakMode,
 ): string {
-  return spans
-    .map((span) =>
-      `${span.font ?? defaultFont}\u0000${span.text}\u0000${span.break ?? ""}\u0000${span.extraWidth ?? 0}`
-    )
-    .join("\u0001") + `\u0002${whiteSpace}\u0002${wordBreak}`;
+  let key = "";
+  for (let index = 0; index < spans.length; index += 1) {
+    const span = spans[index]!;
+    if (index > 0) {
+      key += "\u0001";
+    }
+    key += span.font ?? defaultFont;
+    key += "\u0000";
+    key += span.text;
+    key += "\u0000";
+    key += span.break ?? "";
+    key += "\u0000";
+    key += span.extraWidth ?? 0;
+  }
+  key += "\u0002";
+  key += whiteSpace;
+  key += "\u0002";
+  key += wordBreak;
+  return key;
 }
 
 export function createPlainSourceItems(text: string, font: string): SourceItem[] {
