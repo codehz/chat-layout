@@ -179,3 +179,37 @@ export function selectEllipsisUnitCounts({
 
   return { prefixCount, suffixCount };
 }
+
+export function resolveEllipsisSelection({
+  widths,
+  ellipsisWidth,
+  maxWidth,
+  position,
+}: {
+  widths: readonly number[];
+  ellipsisWidth: number;
+  maxWidth: number;
+  position: TextEllipsisPosition;
+}): { prefixCount: number; suffixCount: number; width: number } | undefined {
+  if (ellipsisWidth > maxWidth) {
+    return undefined;
+  }
+
+  const prefixWidths = buildPrefixWidths(widths);
+  const suffixWidths = buildSuffixWidths(widths);
+  const { prefixCount, suffixCount } = selectEllipsisUnitCounts({
+    position,
+    prefixWidths,
+    suffixWidths,
+    unitCount: widths.length,
+    availableWidth: Math.max(0, maxWidth - ellipsisWidth),
+  });
+
+  const width = position === "start"
+    ? ellipsisWidth + (suffixWidths[suffixCount] ?? 0)
+    : position === "middle"
+      ? (prefixWidths[prefixCount] ?? 0) + ellipsisWidth + (suffixWidths[suffixCount] ?? 0)
+      : (prefixWidths[prefixCount] ?? 0) + ellipsisWidth;
+
+  return { prefixCount, suffixCount, width };
+}

@@ -9,11 +9,10 @@ import type {
 import {
   ELLIPSIS_GLYPH,
   MIN_CONTENT_WIDTH_EPSILON,
-  buildPrefixWidths,
-  buildSuffixWidths,
   measureEllipsisWidth,
   measureFontShift,
   normalizeMaxLines,
+  resolveEllipsisSelection,
   selectEllipsisUnitCounts,
 } from "./core";
 import {
@@ -134,24 +133,19 @@ function collectEllipsisLayout<C extends CanvasRenderingContext2D>(
     return createEllipsisOnlyLayout(ctx, maxWidth, shift);
   }
 
-  const prefixWidths = buildPrefixWidths(widths);
-  const suffixWidths = buildSuffixWidths(widths);
-  const { prefixCount, suffixCount } = selectEllipsisUnitCounts({
+  const selection = resolveEllipsisSelection({
+    widths,
+    ellipsisWidth,
+    maxWidth,
     position,
-    prefixWidths,
-    suffixWidths,
-    unitCount: atoms.length,
-    availableWidth: Math.max(0, maxWidth - ellipsisWidth),
   });
+  if (selection == null) {
+    return { width: 0, text: "", shift, overflowed: true };
+  }
+  const { prefixCount, suffixCount, width } = selection;
 
   const prefixText = atoms.slice(0, prefixCount).map((atom) => atom.text).join("");
   const suffixText = atoms.slice(atoms.length - suffixCount).map((atom) => atom.text).join("");
-  const width =
-    position === "start"
-      ? ellipsisWidth + (suffixWidths[suffixCount] ?? 0)
-      : position === "middle"
-        ? (prefixWidths[prefixCount] ?? 0) + ellipsisWidth + (suffixWidths[suffixCount] ?? 0)
-        : (prefixWidths[prefixCount] ?? 0) + ellipsisWidth;
 
   return {
     width,
@@ -221,14 +215,16 @@ function collectEndEllipsisLayoutFromCursor<C extends CanvasRenderingContext2D>(
     return createEllipsisOnlyLayout(ctx, maxWidth, shift);
   }
 
-  const prefixWidths = buildPrefixWidths(widths);
-  const { prefixCount } = selectEllipsisUnitCounts({
+  const selection = resolveEllipsisSelection({
+    widths,
+    ellipsisWidth,
+    maxWidth,
     position: "end",
-    prefixWidths,
-    suffixWidths: [0],
-    unitCount: widths.length,
-    availableWidth: Math.max(0, maxWidth - ellipsisWidth),
   });
+  if (selection == null) {
+    return { width: 0, text: "", shift, overflowed: true };
+  }
+  const { prefixCount, width } = selection;
 
   let text = "";
   let atomIndex = 0;
@@ -240,7 +236,7 @@ function collectEndEllipsisLayoutFromCursor<C extends CanvasRenderingContext2D>(
   });
 
   return {
-    width: (prefixWidths[prefixCount] ?? 0) + ellipsisWidth,
+    width,
     text: `${text}${ELLIPSIS_GLYPH}`,
     shift,
     overflowed: true,

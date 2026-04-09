@@ -11,11 +11,10 @@ import type {
 import {
   ELLIPSIS_GLYPH,
   MIN_CONTENT_WIDTH_EPSILON,
-  buildPrefixWidths,
-  buildSuffixWidths,
   measureEllipsisWidth,
   measureFontShift,
   normalizeMaxLines,
+  resolveEllipsisSelection,
   selectEllipsisUnitCounts,
 } from "./core";
 import {
@@ -300,15 +299,16 @@ function layoutRichEllipsisFromAtoms<C extends CanvasRenderingContext2D>(
   }
 
   const widths = atoms.map((atom) => atom.width + atom.extraWidthAfter);
-  const prefixWidths = buildPrefixWidths(widths);
-  const suffixWidths = buildSuffixWidths(widths);
-  const { prefixCount, suffixCount } = selectEllipsisUnitCounts({
+  const selection = resolveEllipsisSelection({
+    widths,
+    ellipsisWidth,
+    maxWidth,
     position,
-    prefixWidths,
-    suffixWidths,
-    unitCount: atoms.length,
-    availableWidth: Math.max(0, maxWidth - ellipsisWidth),
   });
+  if (selection == null) {
+    return { width: 0, fragments: [], overflowed: true };
+  }
+  const { prefixCount, suffixCount, width } = selection;
 
   const prefixAtoms = atoms.slice(0, prefixCount);
   const suffixAtoms = atoms.slice(atoms.length - suffixCount);
@@ -328,12 +328,7 @@ function layoutRichEllipsisFromAtoms<C extends CanvasRenderingContext2D>(
   const suffixFragments = materializeRichFragments(ctx, spans, defaultColor, suffixAtoms);
 
   return {
-    width:
-      position === "start"
-        ? ellipsisFragment.occupiedWidth + (suffixWidths[suffixCount] ?? 0)
-        : position === "middle"
-          ? (prefixWidths[prefixCount] ?? 0) + ellipsisFragment.occupiedWidth + (suffixWidths[suffixCount] ?? 0)
-          : (prefixWidths[prefixCount] ?? 0) + ellipsisFragment.occupiedWidth,
+    width,
     fragments:
       position === "start"
         ? [ellipsisFragment, ...suffixFragments]
@@ -367,14 +362,16 @@ function layoutRichEndEllipsisFromCursor<C extends CanvasRenderingContext2D>(
     return createRichEllipsisOnlyLayout(ctx, maxWidth, defaultFont, defaultColor);
   }
 
-  const prefixWidths = buildPrefixWidths(widths);
-  const { prefixCount } = selectEllipsisUnitCounts({
+  const selection = resolveEllipsisSelection({
+    widths,
+    ellipsisWidth,
+    maxWidth,
     position: "end",
-    prefixWidths,
-    suffixWidths: [0],
-    unitCount: widths.length,
-    availableWidth: Math.max(0, maxWidth - ellipsisWidth),
   });
+  if (selection == null) {
+    return { width: 0, fragments: [], overflowed: true };
+  }
+  const { prefixCount, width } = selection;
 
   const fragments: RichFragmentLayout[] = [];
   let atomIndex = 0;
@@ -399,7 +396,7 @@ function layoutRichEndEllipsisFromCursor<C extends CanvasRenderingContext2D>(
   ));
 
   return {
-    width: (prefixWidths[prefixCount] ?? 0) + ellipsisWidth,
+    width,
     fragments,
     overflowed: true,
   };
