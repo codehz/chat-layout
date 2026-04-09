@@ -115,6 +115,17 @@ function shouldUseMultilineOverflowLayout(options: Pick<MultilineTextOptions<any
   return options.maxLines != null;
 }
 
+function shouldReadConstrainedOverflowLayout(
+  maxWidth: number | undefined,
+  options: Pick<MultilineTextOptions<any>, "maxLines">,
+): maxWidth is number {
+  return maxWidth != null && shouldUseMultilineOverflowLayout(options);
+}
+
+function measureBlockLayout<T extends { width: number; lines: ArrayLike<unknown> }>(layout: T): MultiLineMeasureLayout {
+  return { width: layout.width, lineCount: layout.lines.length };
+}
+
 function getSingleLineMinContentLayoutKey(): string {
   return "single:min-content";
 }
@@ -190,9 +201,8 @@ function getMultiLineMeasureLayout<C extends CanvasRenderingContext2D>(
   options: MultilineTextOptions<C>,
 ): MultiLineMeasureLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  if (maxWidth != null && shouldUseMultilineOverflowLayout(options)) {
-    const layout = getMultiLineOverflowLayout(node, ctx, text, options);
-    return { width: layout.width, lineCount: layout.lines.length };
+  if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
+    return measureBlockLayout(getMultiLineOverflowLayout(node, ctx, text, options));
   }
   return readCachedTextLayout(node, ctx, getMultiLineMeasureLayoutKey(maxWidth), () =>
     maxWidth == null
@@ -208,7 +218,7 @@ function getMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
   options: MultilineTextOptions<C>,
 ): MultiLineDrawLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  if (maxWidth != null && shouldUseMultilineOverflowLayout(options)) {
+  if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
     return getMultiLineOverflowLayout(node, ctx, text, options);
   }
   return readCachedTextLayout(node, ctx, getMultiLineDrawLayoutKey(maxWidth), () =>
@@ -288,9 +298,8 @@ function getRichMultiLineMeasureLayout<C extends CanvasRenderingContext2D>(
   options: MultilineTextOptions<C>,
 ): RichMeasurement {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  if (maxWidth != null && shouldUseMultilineOverflowLayout(options)) {
-    const layout = getRichMultiLineOverflowLayout(node, ctx, spans, options);
-    return { width: layout.width, lineCount: layout.lines.length };
+  if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
+    return measureBlockLayout(getRichMultiLineOverflowLayout(node, ctx, spans, options));
   }
   return readCachedTextLayout(node, ctx, getRichMultiLineMeasureLayoutKey(maxWidth), () =>
     maxWidth == null
@@ -318,7 +327,7 @@ function getRichMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
   options: MultilineTextOptions<C>,
 ): RichBlockLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  if (maxWidth != null && shouldUseMultilineOverflowLayout(options)) {
+  if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
     return getRichMultiLineOverflowLayout(node, ctx, spans, options);
   }
   return readCachedTextLayout(node, ctx, getRichMultiLineDrawLayoutKey(maxWidth), () =>
