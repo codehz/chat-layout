@@ -71,7 +71,7 @@ export type TextWhiteSpaceMode = "normal" | "pre-wrap";
 export type TextOverflowMode = "clip" | "ellipsis";
 
 /**
- * Word breaking mode used by pretext during segmentation and line breaking.
+ * Word breaking mode used by the internal canvas text layout engine.
  */
 export type TextWordBreakMode = "normal" | "keep-all";
 
@@ -95,9 +95,9 @@ export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
   font: string;
   /** Color or resolver used when drawing the text. */
   color: DynValue<C, string>;
-  /** Default: normal; matches pretext and CSS-style collapsible whitespace behavior. */
+  /** Default: normal; uses canvas-first CSS-style collapsible whitespace behavior. */
   whiteSpace?: TextWhiteSpaceMode;
-  /** Default: normal; use keep-all to match pretext's CJK-friendly line breaking mode. */
+  /** Default: normal; use keep-all for CJK-friendly line breaking. */
   wordBreak?: TextWordBreakMode;
   /** Default: break-word; use anywhere when min-content should honor grapheme break opportunities. */
   overflowWrap?: TextOverflowWrapMode;
@@ -113,9 +113,9 @@ export interface InlineSpan<C extends CanvasRenderingContext2D> {
   font?: string;
   /** Color override for this fragment. Falls back to the node-level color. */
   color?: DynValue<C, string>;
-  /** Optional break hint forwarded to pretext rich-inline layout. */
+  /** Optional break hint for atomic inline spans. */
   break?: "normal" | "never";
-  /** Optional extra occupied width forwarded to pretext rich-inline layout. */
+  /** Optional extra occupied width appended after the span's rendered text. */
   extraWidth?: number;
 }
 

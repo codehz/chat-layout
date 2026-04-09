@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  layoutRichEllipsizedFirstLine,
   layoutRichFirstLine,
   layoutRichText,
   layoutRichTextWithOverflow,
@@ -82,5 +83,87 @@ describe("rich text metrics", () => {
     expect(layout.width).toBe(48);
     expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual(["aaaaa", "《帝bbbb"]);
     expect(layout.lines.every((line) => line.width <= 48)).toBe(true);
+  });
+
+  test("rich text preserves pre-wrap whitespace and hard breaks", () => {
+    const ctx = createMeasuredContext("16px rich-pre-wrap");
+    const spans: InlineSpan<C>[] = [
+      { text: "hello world\n  foo" },
+      { text: " bar baz", font: "600 16px rich-pre-wrap-bold", color: "#f00" },
+    ];
+
+    const layout = layoutRichText(ctx, spans, 40, "16px rich-pre-wrap", "#000", "pre-wrap");
+    expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual([
+      "hello ",
+      "world",
+      "  foo ",
+      "bar ",
+      "baz",
+    ]);
+  });
+
+  test("rich text keep-all honors CJK punctuation across span boundaries", () => {
+    const ctx = createMeasuredContext("16px rich-keep-all");
+    const spans: InlineSpan<C>[] = [
+      { text: "你好", color: "#111" },
+      { text: "，", font: "600 16px rich-keep-all-bold", color: "#f00" },
+      { text: "世界你好", color: "#222" },
+    ];
+
+    const layout = layoutRichText(ctx, spans, 16, "16px rich-keep-all", "#000", "normal", "keep-all");
+    expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual([
+      "你好",
+      "，",
+      "世界",
+      "你好",
+    ]);
+  });
+
+  test("rich text min-content anywhere uses grapheme opportunities across spans", () => {
+    const ctx = createMeasuredContext("16px rich-anywhere");
+    const spans: InlineSpan<C>[] = [
+      { text: "abc", color: "#111" },
+      { text: "def", font: "600 16px rich-anywhere-bold", color: "#f00" },
+    ];
+
+    expect(measureRichTextMinContent(ctx, spans, "16px rich-anywhere", "anywhere")).toEqual({
+      width: 8,
+      lineCount: 6,
+    });
+  });
+
+  test("rich text keeps break-never spans atomic and counts extra width", () => {
+    const ctx = createMeasuredContext("16px rich-break-never");
+    const spans: InlineSpan<C>[] = [
+      { text: "ab", break: "never", extraWidth: 8, color: "#111" },
+      { text: "c", color: "#222" },
+    ];
+
+    const layout = layoutRichText(ctx, spans, 16, "16px rich-break-never", "#000");
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines[0]).toMatchObject({
+      width: 24,
+      fragments: [
+        {
+          itemIndex: 0,
+          text: "ab",
+          occupiedWidth: 24,
+        },
+      ],
+    });
+    expect(layout.lines[1]?.fragments.map((frag) => frag.text).join("")).toBe("c");
+  });
+
+  test("rich text single-line ellipsis can truncate across span boundaries", () => {
+    const ctx = createMeasuredContext("16px rich-ellipsis-cross-span");
+    const spans: InlineSpan<C>[] = [
+      { text: "alpha ", color: "#111" },
+      { text: "beta", font: "600 16px rich-ellipsis-cross-span-bold", color: "#f00" },
+      { text: " gamma", color: "#222" },
+    ];
+
+    const layout = layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-ellipsis-cross-span", "#000");
+    expect(layout.width).toBe(64);
+    expect(layout.fragments.map((frag) => frag.text)).toEqual(["alpha", "b", "…"]);
   });
 });

@@ -49,7 +49,7 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 - `Place` is the simplest way to align a single bubble left, center, or right.
 - `MultilineText.align` uses logical values: `start`, `center`, `end`.
 - `MultilineText.physicalAlign` uses physical values: `left`, `center`, `right`.
-- `Text` and `MultilineText` default to `whiteSpace: "normal"`, matching pretext and CSS-style collapsible whitespace.
+- `Text` and `MultilineText` default to `whiteSpace: "normal"`, using the library's canvas-first collapsible whitespace behavior.
 - Use `whiteSpace: "pre-wrap"` when blank lines, hard breaks, or edge spaces must stay visible.
 - `Text` and `MultilineText` default to `overflowWrap: "break-word"`, which preserves compatibility-first min-content sizing for shrink layouts.
 - Use `overflowWrap: "anywhere"` when long unspaced strings should contribute grapheme-level breakpoints to min-content sizing.

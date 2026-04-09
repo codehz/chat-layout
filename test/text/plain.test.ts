@@ -172,7 +172,7 @@ describe("plain text metrics", () => {
     });
   });
 
-  test("keep-all matches pretext's CJK punctuation grouping during constrained layout", () => {
+  test("keep-all uses the internal engine's CJK punctuation grouping during constrained layout", () => {
     const ctx = createMeasuredContext("16px keep-all-layout");
     const text = "你好，世界你好";
 
@@ -190,7 +190,7 @@ describe("plain text metrics", () => {
     ]);
   });
 
-  test("keep-all affects overflow truncation the same way as pretext line breaking", () => {
+  test("keep-all affects overflow truncation the same way as constrained line breaking", () => {
     const ctx = createMeasuredContext("16px keep-all-overflow");
     const text = "你好，世界你好";
 
