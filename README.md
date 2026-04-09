@@ -7,13 +7,14 @@ The current v2-style APIs are:
 - `Flex`: row/column layout
 - `FlexItem`: explicit `grow` / `shrink` / `alignSelf`
 - `Place`: place a single child at `start` / `center` / `end`
+- `ShrinkWrap`: search the narrowest width that keeps the current height stable
 - `MultilineText`: text layout with logical `align` or physical `physicalAlign`
 - `ChatRenderer` + `ListState`: virtualized chat rendering
 - `memoRenderItem` / `memoRenderItemBy`: item render memoization
 
 ## Quick example
 
-Use `Flex` to build structure, `FlexItem` to control resize behavior, and `Place` to align the final bubble:
+Use `Flex` to build structure, `FlexItem` to control resize behavior, `ShrinkWrap` to keep the bubble as narrow as possible without adding lines, and `Place` to align the final bubble:
 
 ```ts
 const bubble = new RoundedBox(
@@ -26,17 +27,27 @@ const bubble = new RoundedBox(
   { top: 6, bottom: 6, left: 10, right: 10, radii: 8, fill: "#ccc" },
 );
 
+const body = new ShrinkWrap(
+  new Flex(
+    [senderLine, bubble],
+    { direction: "column", gap: 4, alignItems: item.sender === "A" ? "end" : "start" },
+  ),
+);
+
 const row = new Flex(
   [
     avatar,
-    new FlexItem(bubble, { grow: 1, shrink: 1 }),
+    new FlexItem(
+      new Place(body, {
+        align: item.sender === "A" ? "end" : "start",
+      }),
+      { grow: 1, shrink: 1 },
+    ),
   ],
   { direction: "row", gap: 4, reverse: item.sender === "A" },
 );
 
-return new Place(row, {
-  align: item.sender === "A" ? "end" : "start",
-});
+return row;
 ```
 
 See [example/chat.ts](./example/chat.ts) for a full chat example.
@@ -47,6 +58,7 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 - `maxWidth` / `maxHeight` limit measurement, but do not automatically make children fill the cross axis.
 - Use `alignItems: "stretch"` or `alignSelf: "stretch"` when a child should fill the computed cross size.
 - `Place` is the simplest way to align a single bubble left, center, or right.
+- `ShrinkWrap` is useful when a bubble sits inside a growable slot but should still collapse to the narrowest width that preserves its current line count.
 - `MultilineText.align` uses logical values: `start`, `center`, `end`.
 - `MultilineText.physicalAlign` uses physical values: `left`, `center`, `right`.
 - `Text` and `MultilineText` default to `whiteSpace: "normal"`, using the library's canvas-first collapsible whitespace behavior.
@@ -103,6 +115,7 @@ Notes:
 - Shrink only applies when there is a finite main-axis constraint and total content size overflows it.
 - Overflow is redistributed by `shrink * basis`; today `basis` is internal-only and always `"auto"`.
 - Custom nodes can implement `measureMinContent()` for better shrink results.
+- `ShrinkWrap` complements flex shrink: it keeps probing narrower `maxWidth` values until the child would become taller, then uses the last safe width as the final layout.
 - Known limitation: column shrink with `MultilineText` does not clip drawing by itself.
 
 ## Migration notes

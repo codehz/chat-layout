@@ -7,6 +7,7 @@ import {
   MultilineText,
   PaddingBox,
   Place,
+  ShrinkWrap,
   Text,
   Wrapper,
   memoRenderItem,
@@ -357,7 +358,9 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     alignItems: item.sender === "A" ? "end" : "start",
   });
 
-  const alignedBody = new Place<C>(body, {
+  const shrinkWrappedBody = new ShrinkWrap<C>(body);
+
+  const alignedBody = new Place<C>(shrinkWrappedBody, {
     align: item.sender === "A" ? "end" : "start",
   });
 
