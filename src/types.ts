@@ -71,6 +71,11 @@ export type TextWhiteSpaceMode = "normal" | "pre-wrap";
 export type TextOverflowMode = "clip" | "ellipsis";
 
 /**
+ * Word breaking mode used by pretext during segmentation and line breaking.
+ */
+export type TextWordBreakMode = "normal" | "keep-all";
+
+/**
  * Controls whether soft wrap opportunities affect min-content sizing.
  */
 export type TextOverflowWrapMode = "break-word" | "anywhere";
@@ -92,6 +97,8 @@ export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
   style: DynValue<C, string>;
   /** Default: normal; matches pretext and CSS-style collapsible whitespace behavior. */
   whiteSpace?: TextWhiteSpaceMode;
+  /** Default: normal; use keep-all to match pretext's CJK-friendly line breaking mode. */
+  wordBreak?: TextWordBreakMode;
   /** Default: break-word; use anywhere when min-content should honor grapheme break opportunities. */
   overflowWrap?: TextOverflowWrapMode;
 }

@@ -191,7 +191,7 @@ describe("text metrics", () => {
       },
     } as Context<C>;
 
-    expect(measureTextMinContent(ctx, "abcdefghij", "normal", "anywhere")).toEqual({
+    expect(measureTextMinContent(ctx, "abcdefghij", "normal", "normal", "anywhere")).toEqual({
       width: 8,
       lineCount: 10,
     });
@@ -214,6 +214,42 @@ describe("text metrics", () => {
     expect(measureTextMinContent(ctx, "  alpha beta  \n \n  gamma ", "normal")).toEqual({
       width: 40,
       lineCount: 3,
+    });
+  });
+
+  test("keep-all matches pretext's CJK punctuation grouping during constrained layout", () => {
+    const ctx = createMeasuredContext("16px keep-all-layout");
+    const text = "你好，世界你好";
+
+    expect(layoutText(ctx, text, 16, "normal", "normal").lines.map((line) => line.text)).toEqual([
+      "你",
+      "好，",
+      "世界",
+      "你好",
+    ]);
+    expect(layoutText(ctx, text, 16, "normal", "keep-all").lines.map((line) => line.text)).toEqual([
+      "你好",
+      "，",
+      "世界",
+      "你好",
+    ]);
+  });
+
+  test("keep-all affects overflow truncation the same way as pretext line breaking", () => {
+    const ctx = createMeasuredContext("16px keep-all-overflow");
+    const text = "你好，世界你好";
+
+    expect(layoutTextWithOverflow(ctx, text, 16, {
+      overflow: "ellipsis",
+      maxLines: 2,
+      wordBreak: "keep-all",
+    })).toEqual({
+      width: 16,
+      lines: [
+        { width: 16, text: "你好", shift: 6, overflowed: false },
+        { width: 16, text: "，…", shift: 6, overflowed: true },
+      ],
+      overflowed: true,
     });
   });
 
@@ -429,5 +465,22 @@ describe("text metrics", () => {
     });
 
     expect(renderer.measureMinContentNode(node)).toEqual({ width: 8, height: 200 });
+  });
+
+  test("MultilineText nodes pass wordBreak through to pretext layout", () => {
+    const recordedTexts: string[] = [];
+    const renderer = new ConstraintTestRenderer(createRecordingGraphics(recordedTexts), {});
+    const node = new MultilineText<C>("你好，世界你好", {
+      lineHeight: 20,
+      font: "16px multiline-node-keep-all",
+      style: "#000",
+      align: "start",
+      wordBreak: "keep-all",
+    });
+
+    expect(renderer.measureNode(node, { maxWidth: 16 })).toEqual({ width: 16, height: 80 });
+    renderer.drawNode(node, { maxWidth: 16 });
+
+    expect(recordedTexts).toEqual(["你好", "，", "世界", "你好"]);
   });
 });
