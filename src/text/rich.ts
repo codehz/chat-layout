@@ -3,8 +3,9 @@ import {
   materializeRichInlineLineRange,
   measureRichInlineStats,
   prepareRichInline,
-  walkRichInlineLineRanges,
   type PreparedRichInline,
+  type RichInlineCursor,
+  type RichInlineFragmentRange,
   type RichInlineLineRange,
 } from "@chenglou/pretext/rich-inline";
 import type {
@@ -31,7 +32,15 @@ import { getPreparedUnits, measurePreparedMinContentWidth, readPreparedText } fr
 
 const RICH_PREPARED_CACHE_CAPACITY = 256;
 
-const richPreparedCache = new Map<string, PreparedRichInline>();
+const LEADING_COLLAPSIBLE_BOUNDARY_RE = /^[ \t\n\f\r]+/;
+const TRAILING_COLLAPSIBLE_BOUNDARY_RE = /[ \t\n\f\r]+$/;
+
+type RichPreparedState = {
+  prepared: PreparedRichInline;
+  preparedItemIndexBySourceItemIndex: (number | undefined)[];
+};
+
+const richPreparedCache = new Map<string, RichPreparedState>();
 
 export interface RichFragmentLayout {
   itemIndex: number;
@@ -92,7 +101,7 @@ function getRichPreparedCacheKey<C extends CanvasRenderingContext2D>(
 function readRichPrepared<C extends CanvasRenderingContext2D>(
   spans: InlineSpan<C>[],
   defaultFont: string,
-): PreparedRichInline {
+): RichPreparedState {
   const key = getRichPreparedCacheKey(spans, defaultFont);
   const cached = readLruValue(richPreparedCache, key);
   if (cached != null) {
@@ -104,7 +113,124 @@ function readRichPrepared<C extends CanvasRenderingContext2D>(
     break: span.break,
     extraWidth: span.extraWidth,
   }));
-  return writeLruValue(richPreparedCache, key, prepareRichInline(items), RICH_PREPARED_CACHE_CAPACITY);
+  const preparedItemIndexBySourceItemIndex = buildPreparedItemIndexBySourceItemIndex(spans);
+  return writeLruValue(
+    richPreparedCache,
+    key,
+    {
+      prepared: prepareRichInline(items),
+      preparedItemIndexBySourceItemIndex,
+    },
+    RICH_PREPARED_CACHE_CAPACITY,
+  );
+}
+
+function trimRichInlineBoundaryWhitespace(text: string): string {
+  return text
+    .replace(LEADING_COLLAPSIBLE_BOUNDARY_RE, "")
+    .replace(TRAILING_COLLAPSIBLE_BOUNDARY_RE, "");
+}
+
+function buildPreparedItemIndexBySourceItemIndex<C extends CanvasRenderingContext2D>(
+  spans: InlineSpan<C>[],
+): (number | undefined)[] {
+  const preparedItemIndexBySourceItemIndex: (number | undefined)[] = Array.from({ length: spans.length });
+  let preparedItemIndex = 0;
+  for (let index = 0; index < spans.length; index += 1) {
+    if (trimRichInlineBoundaryWhitespace(spans[index]!.text).length === 0) {
+      continue;
+    }
+    preparedItemIndexBySourceItemIndex[index] = preparedItemIndex;
+    preparedItemIndex += 1;
+  }
+  return preparedItemIndexBySourceItemIndex;
+}
+
+function getRichFragmentStartCursor(
+  prepared: RichPreparedState,
+  fragment: RichInlineFragmentRange,
+): RichInlineCursor | null {
+  const itemIndex = prepared.preparedItemIndexBySourceItemIndex[fragment.itemIndex];
+  if (itemIndex == null) {
+    return null;
+  }
+  return {
+    itemIndex,
+    segmentIndex: fragment.start.segmentIndex,
+    graphemeIndex: fragment.start.graphemeIndex,
+  };
+}
+
+function splitOverflowingRichLineRange(
+  prepared: RichPreparedState,
+  lineRange: RichInlineLineRange,
+  maxWidth: number,
+): RichInlineLineRange {
+  if (lineRange.width <= maxWidth || lineRange.fragments.length <= 1) {
+    return lineRange;
+  }
+
+  const trailingFragment = lineRange.fragments[lineRange.fragments.length - 1]!;
+  const splitCursor = getRichFragmentStartCursor(prepared, trailingFragment);
+  if (splitCursor == null) {
+    return lineRange;
+  }
+
+  const fragments = lineRange.fragments.slice(0, -1);
+  const width = fragments.reduce((total, fragment) => total + fragment.gapBefore + fragment.occupiedWidth, 0);
+  return {
+    fragments,
+    width,
+    end: splitCursor,
+  };
+}
+
+function layoutNextConstrainedRichInlineLineRange(
+  prepared: RichPreparedState,
+  maxWidth: number,
+  start?: RichInlineCursor,
+): RichInlineLineRange | null {
+  const lineRange = layoutNextRichInlineLineRange(prepared.prepared, maxWidth, start);
+  if (lineRange == null) {
+    return null;
+  }
+  return splitOverflowingRichLineRange(prepared, lineRange, maxWidth);
+}
+
+function walkConstrainedRichInlineLineRanges(
+  prepared: RichPreparedState,
+  maxWidth: number,
+  onLine: (lineRange: RichInlineLineRange) => void,
+): number {
+  let lineCount = 0;
+  let cursor: RichInlineCursor | undefined;
+  while (true) {
+    const lineRange = layoutNextConstrainedRichInlineLineRange(prepared, maxWidth, cursor);
+    if (lineRange == null) {
+      return lineCount;
+    }
+    onLine(lineRange);
+    lineCount += 1;
+    cursor = lineRange.end;
+  }
+}
+
+function measureConstrainedRichInlineStats(
+  prepared: RichPreparedState,
+  maxWidth: number,
+): { lineCount: number; maxLineWidth: number } {
+  let lineCount = 0;
+  let maxLineWidth = 0;
+  walkConstrainedRichInlineLineRanges(prepared, maxWidth, (lineRange) => {
+    lineCount += 1;
+    if (lineRange.width > maxLineWidth) {
+      maxLineWidth = lineRange.width;
+    }
+  });
+  return {
+    lineCount,
+    maxLineWidth,
+  };
 }
 
 function measureRichFragmentShift<C extends CanvasRenderingContext2D>(ctx: Context<C>, font: string): number {
@@ -120,7 +246,7 @@ function materializeRichLine<C extends CanvasRenderingContext2D>(
   overflowed: boolean,
 ): RichLineLayout {
   const prepared = readRichPrepared(spans, defaultFont);
-  const richLine = materializeRichInlineLineRange(prepared, lineRange);
+  const richLine = materializeRichInlineLineRange(prepared.prepared, lineRange);
   const fragments: RichFragmentLayout[] = richLine.fragments.map((fragment) => {
     const span = spans[fragment.itemIndex];
     const font = span?.font ?? defaultFont;
@@ -335,7 +461,7 @@ export function layoutRichFirstLineIntrinsic<C extends CanvasRenderingContext2D>
     return { width: 0, fragments: [], overflowed: false };
   }
   const prepared = readRichPrepared(spans, defaultFont);
-  const lineRange = layoutNextRichInlineLineRange(prepared, INTRINSIC_MAX_WIDTH);
+  const lineRange = layoutNextRichInlineLineRange(prepared.prepared, INTRINSIC_MAX_WIDTH);
   if (lineRange == null) {
     return { width: 0, fragments: [], overflowed: false };
   }
@@ -354,7 +480,7 @@ export function layoutRichFirstLine<C extends CanvasRenderingContext2D>(
     return { width: 0, fragments: [], overflowed: false };
   }
   const prepared = readRichPrepared(spans, defaultFont);
-  const lineRange = layoutNextRichInlineLineRange(prepared, clampedMaxWidth);
+  const lineRange = layoutNextConstrainedRichInlineLineRange(prepared, clampedMaxWidth);
   if (lineRange == null) {
     return { width: 0, fragments: [], overflowed: false };
   }
@@ -390,7 +516,7 @@ export function measureRichText<C extends CanvasRenderingContext2D>(
     return { width: 0, lineCount: 0 };
   }
   const prepared = readRichPrepared(spans, defaultFont);
-  const { maxLineWidth: width, lineCount } = measureRichInlineStats(prepared, maxWidth);
+  const { maxLineWidth: width, lineCount } = measureConstrainedRichInlineStats(prepared, maxWidth);
   return { width, lineCount };
 }
 
@@ -403,7 +529,7 @@ export function measureRichTextIntrinsic<C extends CanvasRenderingContext2D>(
     return { width: 0, lineCount: 0 };
   }
   const prepared = readRichPrepared(spans, defaultFont);
-  const { maxLineWidth: width, lineCount } = measureRichInlineStats(prepared, INTRINSIC_MAX_WIDTH);
+  const { maxLineWidth: width, lineCount } = measureRichInlineStats(prepared.prepared, INTRINSIC_MAX_WIDTH);
   return { width, lineCount };
 }
 
@@ -433,7 +559,7 @@ export function measureRichTextMinContent<C extends CanvasRenderingContext2D>(
   }
   const prepared = readRichPrepared(spans, defaultFont);
   const lineMaxWidth = Math.max(maxWidth, MIN_CONTENT_WIDTH_EPSILON);
-  const { lineCount } = measureRichInlineStats(prepared, lineMaxWidth);
+  const { lineCount } = measureConstrainedRichInlineStats(prepared, lineMaxWidth);
   return { width: maxWidth, lineCount };
 }
 
@@ -449,7 +575,7 @@ export function layoutRichText<C extends CanvasRenderingContext2D>(
   }
   const prepared = readRichPrepared(spans, defaultFont);
   const lineRanges: RichInlineLineRange[] = [];
-  walkRichInlineLineRanges(prepared, maxWidth, (lineRange) => lineRanges.push(lineRange));
+  walkConstrainedRichInlineLineRanges(prepared, maxWidth, (lineRange) => lineRanges.push(lineRange));
   if (lineRanges.length === 0) {
     return { width: 0, lines: [], overflowed: false };
   }
