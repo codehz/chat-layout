@@ -264,7 +264,7 @@ describe("layout context", () => {
       align: "start",
       lineHeight: 20,
       font: "16px sans-serif",
-      style: "#000",
+      color: "#000",
     });
 
     const wideSingle = renderer.measureNode(singleLine, { maxWidth: 200 });

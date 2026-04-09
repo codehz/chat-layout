@@ -104,7 +104,7 @@ export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
 }
 
 /**
- * A span-like inline text fragment used by rich multi-line text.
+ * A span-like inline text fragment used by rich text nodes.
  */
 export interface InlineSpan<C extends CanvasRenderingContext2D> {
   /** Source text contained in this inline fragment. */

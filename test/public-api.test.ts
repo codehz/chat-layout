@@ -45,7 +45,7 @@ const whiteSpaceModeTypecheck: TextWhiteSpaceMode = "pre-wrap";
 const textOptionsTypecheck: TextOptions<C> = {
   lineHeight: 20,
   font: "16px sans-serif",
-  style: "#000",
+  color: "#000",
   overflow: overflowModeTypecheck,
   overflowWrap: overflowWrapModeTypecheck,
   whiteSpace: whiteSpaceModeTypecheck,
@@ -55,7 +55,7 @@ const textOptionsTypecheck: TextOptions<C> = {
 const multilineTextOptionsTypecheck: MultilineTextOptions<C> = {
   lineHeight: 20,
   font: "16px sans-serif",
-  style: "#000",
+  color: "#000",
   align: "start",
   overflow: overflowModeTypecheck,
   overflowWrap: overflowWrapModeTypecheck,

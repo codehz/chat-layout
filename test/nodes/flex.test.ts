@@ -521,7 +521,7 @@ describe("Flex", () => {
         align: "start",
         lineHeight: 20,
         font: "16px sans-serif",
-        style: "#000",
+        color: "#000",
       }), { shrink: 1 }),
     ], {
       direction: "row",

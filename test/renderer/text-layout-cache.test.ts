@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { MultilineText, Text } from "../../src/nodes";
-import type { MultilineTextOptions, TextOptions } from "../../src/types";
+import type { InlineSpan, MultilineTextOptions, TextOptions } from "../../src/types";
 import { ChatRenderer, DebugRenderer, ListState, memoRenderItem } from "../../src/renderer";
 import { createTextGraphics, ensureMockOffscreenCanvas, withOffscreenMeasureCounter } from "../helpers/graphics";
 import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
@@ -14,7 +14,7 @@ function createSingleLineNode(text: string, font: string, options: Partial<TextO
   return new Text(text, {
     lineHeight: 20,
     font,
-    style: "#000",
+    color: "#000",
     ...options,
   });
 }
@@ -24,7 +24,7 @@ function createMultilineNode(text: string, font: string, options: Partial<Multil
     align: "start",
     lineHeight: 20,
     font,
-    style: "#000",
+    color: "#000",
     ...options,
   });
 }
@@ -55,6 +55,39 @@ describe("text layout cache", () => {
     });
   });
 
+  test("repeated draws of the same rich Text node reuse cached layout work", () => {
+    let graphicsMeasures = 0;
+    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
+      graphicsMeasures += 1;
+    }), {});
+    const spans: InlineSpan<C>[] = [
+      { text: "alpha " },
+      { text: "beta", font: "700 16px cache-test-rich-single", color: "#0369a1" },
+      { text: " gamma delta epsilon" },
+    ];
+    const node = new Text(spans, {
+      lineHeight: 20,
+      font: "16px cache-test-rich-single",
+      color: "#000",
+      overflow: "ellipsis",
+      ellipsisPosition: "middle",
+    });
+
+    withOffscreenMeasureCounter((offscreen) => {
+      renderer.drawNode(node, { maxWidth: 72 });
+      const warmGraphicsMeasures = graphicsMeasures;
+      const warmOffscreenMeasures = offscreen.count;
+
+      expect(warmGraphicsMeasures).toBeGreaterThan(0);
+      expect(warmOffscreenMeasures).toBeGreaterThan(0);
+
+      renderer.drawNode(node, { maxWidth: 72 });
+
+      expect(graphicsMeasures).toBe(warmGraphicsMeasures);
+      expect(offscreen.count).toBe(warmOffscreenMeasures);
+    });
+  });
+
   test("repeated renders of the same visible MultilineText node reuse cached layout work", () => {
     let graphicsMeasures = 0;
     const list = new ListState([{ text: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-chat-repeat" }]);
@@ -66,7 +99,7 @@ describe("text layout cache", () => {
         align: "start",
         lineHeight: 20,
         font: "16px cache-test-chat-repeat",
-        style: "#000",
+        color: "#000",
       })),
     });
 

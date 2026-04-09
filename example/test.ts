@@ -9,6 +9,7 @@ import {
   type Context,
   type DynValue,
   type HitTest,
+  type InlineSpan,
   type Node,
 } from "..";
 
@@ -83,6 +84,14 @@ const renderer = new DebugRenderer(ctx, {});
 
 let color = "green";
 
+const singleLineRichText: InlineSpan<C>[] = [
+  { text: "单行 " },
+  { text: "rich", font: "700 16px monospace", color: "#0f766e" },
+  { text: " text 也支持 " },
+  { text: "inline span", font: "700 16px monospace", color: "#2563eb" },
+  { text: " 省略了" },
+];
+
 class ClickDetect extends Wrapper<C> {
   hittest(_ctx: Context<C>, _test: HitTest): boolean {
     color = "red";
@@ -108,10 +117,12 @@ const node = new RoundedBox(
             [
               new ClickDetect(
                 new RoundedBox(
-                  new Text("测试 3".repeat(2), {
+                  new Text(singleLineRichText, {
                     lineHeight: 20,
                     font: "400 16px monospace",
                     color: () => color,
+                    overflow: "ellipsis",
+                    ellipsisPosition: "middle",
                   }),
                   {
                     left: 14,

@@ -54,6 +54,7 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 - `Text` and `MultilineText` default to `overflowWrap: "break-word"`, which preserves compatibility-first min-content sizing for shrink layouts.
 - Use `overflowWrap: "anywhere"` when long unspaced strings should contribute grapheme-level breakpoints to min-content sizing.
 - `Text` supports `overflow: "ellipsis"` with `ellipsisPosition: "start" | "end" | "middle"` when measured under a finite `maxWidth`.
+- `Text` and `MultilineText` both accept either a plain string or `InlineSpan[]` for mixed inline styles.
 - `MultilineText` supports `overflow: "ellipsis"` together with `maxLines`; values below `1` are treated as `1`.
 
 ## Text ellipsis
@@ -61,7 +62,11 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 Single-line `Text` can ellipsize at the start, end, or middle when a finite width constraint is present:
 
 ```ts
-const title = new Text("Extremely long thread title that should not blow out the row", {
+const title = new Text([
+  { text: "Extremely long " },
+  { text: "thread title", font: "700 16px system-ui", color: "#0f766e" },
+  { text: " that should not blow out the row" },
+], {
   lineHeight: 20,
   font: "16px system-ui",
   color: "#111",

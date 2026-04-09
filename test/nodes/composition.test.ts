@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, Text } from "../../src/nodes";
 import { BaseRenderer } from "../../src/renderer";
-import type { Box, Context, HitTest, LayoutConstraints, Node, TextOverflowWrapMode } from "../../src/types";
+import type { Box, Context, HitTest, InlineSpan, LayoutConstraints, Node, TextOverflowWrapMode } from "../../src/types";
 import { createTextGraphics as createGraphics, ensureMockOffscreenCanvas } from "../helpers/graphics";
 
 type C = CanvasRenderingContext2D;
@@ -136,7 +136,7 @@ function createChatLikeBubbleTree(
         new Text("A", {
           lineHeight: 15,
           font: "12px sans-serif",
-          style: "#000",
+          color: "#000",
         }),
       ),
       new Fixed(15, 15),
@@ -149,7 +149,7 @@ function createChatLikeBubbleTree(
       lineHeight: 20,
       font: "16px sans-serif",
       align: "start",
-      style: "#000",
+      color: "#000",
       overflowWrap: options.messageOverflowWrap,
     }),
     { alignSelf: "start" },
@@ -164,13 +164,13 @@ function createChatLikeBubbleTree(
           new Text(reply.sender, {
             lineHeight: 14,
             font: "11px sans-serif",
-            style: "#333",
+            color: "#333",
           }),
           new MultilineText(reply.content, {
             lineHeight: 16,
             font: "13px sans-serif",
             align: "start",
-            style: "#555",
+            color: "#555",
             overflowWrap: options.replyOverflowWrap,
           }),
         ],
@@ -292,7 +292,7 @@ describe("Place", () => {
     const node = new Text<C>("  padded text  ", {
       lineHeight: 20,
       font: "16px sans-serif",
-      style: "#000",
+      color: "#000",
     });
 
     const box = renderer.measureNode(node);
@@ -304,6 +304,55 @@ describe("Place", () => {
     ]);
   });
 
+  test("Text draws inline spans on a single line", () => {
+    const { graphics, fillTexts } = createTextRecordingGraphics();
+    const renderer = new ConstraintTestRenderer(graphics, {});
+    const spans: InlineSpan<C>[] = [
+      { text: "alpha " },
+      { text: "beta", font: "700 16px sans-serif", color: "#0369a1" },
+      { text: " gamma" },
+    ];
+    const node = new Text<C>(spans, {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      color: "#000",
+    });
+
+    expect(renderer.measureNode(node)).toEqual({ width: 128, height: 20 });
+    renderer.drawNode(node);
+
+    expect(fillTexts).toEqual([
+      { text: "alpha", x: 0, y: 13 },
+      { text: "beta", x: 48, y: 13 },
+      { text: "gamma", x: 88, y: 13 },
+    ]);
+  });
+
+  test("Text ellipsizes inline spans under maxWidth", () => {
+    const { graphics, fillTexts } = createTextRecordingGraphics();
+    const renderer = new ConstraintTestRenderer(graphics, {});
+    const spans: InlineSpan<C>[] = [
+      { text: "alpha " },
+      { text: "beta", font: "700 16px sans-serif", color: "#0369a1" },
+      { text: " gamma" },
+    ];
+    const node = new Text<C>(spans, {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      color: "#000",
+      overflow: "ellipsis",
+    });
+
+    expect(renderer.measureNode(node, { maxWidth: 64 })).toEqual({ width: 64, height: 20 });
+    renderer.drawNode(node, { maxWidth: 64 });
+
+    expect(fillTexts).toEqual([
+      { text: "alpha", x: 0, y: 13 },
+      { text: "b", x: 48, y: 13 },
+      { text: "…", x: 56, y: 13 },
+    ]);
+  });
+
   test("MultilineText defaults to normal white-space collapsing", () => {
     const { graphics, fillTexts } = createTextRecordingGraphics();
     const renderer = new ConstraintTestRenderer(graphics, {});
@@ -311,7 +360,7 @@ describe("Place", () => {
       lineHeight: 20,
       font: "16px sans-serif",
       align: "start",
-      style: "#000",
+      color: "#000",
     });
 
     const box = renderer.measureNode(node);
@@ -327,14 +376,14 @@ describe("Place", () => {
     const textNode = new Text<C>("  padded text  ", {
       lineHeight: 20,
       font: "16px sans-serif",
-      style: "#000",
+      color: "#000",
       whiteSpace: "pre-wrap",
     });
     const multilineNode = new MultilineText<C>("  alpha  \n\n beta ", {
       lineHeight: 20,
       font: "16px sans-serif",
       align: "start",
-      style: "#000",
+      color: "#000",
       whiteSpace: "pre-wrap",
     });
 
@@ -354,7 +403,7 @@ describe("Place", () => {
       lineHeight: 20,
       font: "16px sans-serif",
       align: "end",
-      style: "#000",
+      color: "#000",
       whiteSpace: "pre-wrap",
     });
 
@@ -368,7 +417,7 @@ describe("Place", () => {
       lineHeight: 20,
       font: "16px sans-serif",
       physicalAlign: "right",
-      style: "#000",
+      color: "#000",
       whiteSpace: "pre-wrap",
     });
 
@@ -520,7 +569,7 @@ describe("Place", () => {
         lineHeight: 20,
         font: "16px sans-serif",
         align: "start",
-        style: "#000",
+        color: "#000",
       }),
       { align: "start", expand: false },
     );
@@ -539,7 +588,7 @@ describe("Place", () => {
           new Text("A", {
             lineHeight: 15,
             font: "12px sans-serif",
-            style: "#000",
+            color: "#000",
           }),
         ),
         new Fixed(15, 15),
@@ -551,7 +600,7 @@ describe("Place", () => {
         lineHeight: 20,
         font: "16px sans-serif",
         align: "start",
-        style: "#000",
+        color: "#000",
       }),
       {
         top: 6,

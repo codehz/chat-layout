@@ -2,6 +2,9 @@ import {
   layoutEllipsizedFirstLine,
   layoutFirstLine,
   layoutFirstLineIntrinsic,
+  layoutRichEllipsizedFirstLine,
+  layoutRichFirstLine,
+  layoutRichFirstLineIntrinsic,
   layoutRichText,
   layoutRichTextIntrinsic,
   layoutRichTextWithOverflow,
@@ -15,6 +18,7 @@ import {
   measureTextMinContent,
   measureTextIntrinsic,
   type RichBlockLayout,
+  type RichLineLayout,
   type RichMeasurement,
   type TextLayout,
   type TextMeasurement,
@@ -146,6 +150,22 @@ function getSingleLineLayout<C extends CanvasRenderingContext2D>(
   );
 }
 
+function getRichSingleLineLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  options: TextOptions<C>,
+): RichLineLayout {
+  const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+  return readCachedTextLayout(node, ctx, getSingleLineLayoutKey(maxWidth), () =>
+    maxWidth == null
+      ? layoutRichFirstLineIntrinsic(ctx, spans, options.font, options.color)
+      : options.overflow === "ellipsis"
+        ? layoutRichEllipsizedFirstLine(ctx, spans, maxWidth, options.font, options.color, options.ellipsisPosition ?? "end")
+        : layoutRichFirstLine(ctx, spans, maxWidth, options.font, options.color)
+  );
+}
+
 function getMultiLineOverflowLayout<C extends CanvasRenderingContext2D>(
   node: Node<C>,
   ctx: Context<C>,
@@ -213,6 +233,39 @@ function getSingleLineMinContentLayout<C extends CanvasRenderingContext2D>(
       shift,
     };
   });
+}
+
+function getRichSingleLineMinContentWidth<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  options: TextOptions<C>,
+): number {
+  return readCachedTextLayout(node, ctx, getSingleLineMinContentLayoutKey(), () =>
+    measureRichTextMinContent(ctx, spans, options.font, options.overflowWrap).width
+  );
+}
+
+function drawRichLine<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  line: RichLineLayout,
+  fallbackColor: TextOptions<C>["color"],
+  x: number,
+  y: number,
+  lineHeight: number,
+): void {
+  let cursorX = x;
+  for (let fragmentIndex = 0; fragmentIndex < line.fragments.length; fragmentIndex += 1) {
+    const fragment = line.fragments[fragmentIndex]!;
+    cursorX += fragment.gapBefore;
+    ctx.with((g) => {
+      g.font = fragment.font;
+      g.fillStyle = ctx.resolveDynValue((fragment.color ?? fallbackColor) as typeof fallbackColor);
+      g.textAlign = "left";
+      g.fillText(fragment.text, cursorX, y + (lineHeight + fragment.shift) / 2);
+    });
+    cursorX += fragment.occupiedWidth;
+  }
 }
 
 function getMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
@@ -406,36 +459,52 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
  */
 export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
   /**
-   * @param text Source text to measure and draw.
+   * @param text Source text to measure and draw. Pass an `InlineSpan[]` for mixed inline styles.
    * @param options Text layout and drawing options.
    */
   constructor(
-    readonly text: string,
+    readonly text: string | InlineSpan<C>[],
     readonly options: TextOptions<C>,
   ) {}
 
   measure(ctx: Context<C>): Box {
+    if (typeof this.text !== "string") {
+      const { width } = getRichSingleLineLayout(this, ctx, this.text, this.options);
+      return { width, height: this.options.lineHeight };
+    }
+    const text = this.text;
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width } = getSingleLineLayout(this, ctx, this.text, this.options);
+      const { width } = getSingleLineLayout(this, ctx, text, this.options);
       return { width, height: this.options.lineHeight };
     });
   }
 
   measureMinContent(ctx: Context<C>): Box {
+    if (typeof this.text !== "string") {
+      const width = getRichSingleLineMinContentWidth(this, ctx, this.text, this.options);
+      return { width, height: this.options.lineHeight };
+    }
+    const text = this.text;
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width } = getSingleLineMinContentLayout(this, ctx, this.text, this.options);
+      const { width } = getSingleLineMinContentLayout(this, ctx, text, this.options);
       return { width, height: this.options.lineHeight };
     });
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
+    if (typeof this.text !== "string") {
+      const line = getRichSingleLineLayout(this, ctx, this.text, this.options);
+      drawRichLine(ctx, line, this.options.color, x, y, this.options.lineHeight);
+      return false;
+    }
+    const text = this.text;
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.color);
-      const { text, shift } = getSingleLineLayout(this, ctx, this.text, this.options);
-      g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
+      const layout = getSingleLineLayout(this, ctx, text, this.options);
+      g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
       return false;
     });
   }

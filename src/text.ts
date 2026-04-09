@@ -7,6 +7,7 @@ import {
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
 import {
+  layoutNextRichInlineLineRange,
   materializeRichInlineLineRange,
   measureRichInlineStats,
   prepareRichInline,
@@ -638,6 +639,16 @@ export interface RichMeasurement {
   lineCount: number;
 }
 
+type RichUnitLayout = {
+  fragmentIndex: number;
+  itemIndex: number;
+  text: string;
+  width: number;
+  font: string;
+  color: DynValue<any, string> | undefined;
+  leadingGap: number;
+};
+
 function getRichPreparedCacheKey<C extends CanvasRenderingContext2D>(
   spans: InlineSpan<C>[],
   defaultFont: string,
@@ -693,6 +704,298 @@ function materializeRichLine<C extends CanvasRenderingContext2D>(
     };
   });
   return { width: richLine.width, fragments, overflowed };
+}
+
+function flattenRichLineUnits(line: RichLineLayout): RichUnitLayout[] {
+  const units: RichUnitLayout[] = [];
+  for (let fragmentIndex = 0; fragmentIndex < line.fragments.length; fragmentIndex += 1) {
+    const fragment = line.fragments[fragmentIndex]!;
+    const prepared = readPreparedText(fragment.text, fragment.font, "normal", "normal");
+    const fragmentUnits = getPreparedUnits(prepared);
+    if (fragmentUnits.length === 0) {
+      continue;
+    }
+
+    const textWidth = fragmentUnits.reduce((total, unit) => total + unit.width, 0);
+    const trailingExtraWidth = Math.max(0, fragment.occupiedWidth - textWidth);
+
+    for (let unitIndex = 0; unitIndex < fragmentUnits.length; unitIndex += 1) {
+      const unit = fragmentUnits[unitIndex]!;
+      units.push({
+        fragmentIndex,
+        itemIndex: fragment.itemIndex,
+        text: unit.text,
+        width: unit.width + (unitIndex === fragmentUnits.length - 1 ? trailingExtraWidth : 0),
+        font: fragment.font,
+        color: fragment.color,
+        leadingGap: unitIndex === 0 ? fragment.gapBefore : 0,
+      });
+    }
+  }
+  return units;
+}
+
+function buildRichPrefixWidths(units: RichUnitLayout[]): number[] {
+  const widths = [0];
+  let total = 0;
+  for (const unit of units) {
+    total += unit.leadingGap + unit.width;
+    widths.push(total);
+  }
+  return widths;
+}
+
+function buildRichSuffixWidths(units: RichUnitLayout[]): number[] {
+  const widths = [0];
+  let total = 0;
+  for (let index = units.length - 1; index >= 0; index -= 1) {
+    const unit = units[index]!;
+    total += unit.width;
+    if (widths.length > 1) {
+      total += unit.leadingGap;
+    }
+    widths.push(total);
+  }
+  return widths;
+}
+
+function materializeRichFragmentsFromUnits(
+  units: RichUnitLayout[],
+  start: number,
+  end: number,
+  suppressLeadingGap: boolean,
+): RichFragmentLayout[] {
+  const fragments: RichFragmentLayout[] = [];
+  for (let index = start; index < end; index += 1) {
+    const unit = units[index]!;
+    const previous = fragments[fragments.length - 1];
+    const previousUnit = units[index - 1];
+    if (previous != null && previousUnit != null && previousUnit.fragmentIndex === unit.fragmentIndex) {
+      previous.text += unit.text;
+      previous.occupiedWidth += unit.width;
+      continue;
+    }
+
+    fragments.push({
+      itemIndex: unit.itemIndex,
+      text: unit.text,
+      font: unit.font,
+      color: unit.color,
+      gapBefore: fragments.length === 0 && suppressLeadingGap ? 0 : unit.leadingGap,
+      occupiedWidth: unit.width,
+      shift: 0,
+    });
+  }
+  return fragments;
+}
+
+function measureRichFragmentsShift<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  fragments: RichFragmentLayout[],
+): RichFragmentLayout[] {
+  return fragments.map((fragment) => {
+    const previousFont = ctx.graphics.font;
+    ctx.graphics.font = fragment.font;
+    const shift = measureFontShift(ctx);
+    ctx.graphics.font = previousFont;
+    return { ...fragment, shift };
+  });
+}
+
+function createRichEllipsisFragment<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  font: string,
+  color: DynValue<C, string> | undefined,
+): RichFragmentLayout {
+  const previousFont = ctx.graphics.font;
+  ctx.graphics.font = font;
+  const occupiedWidth = measureEllipsisWidth(ctx);
+  const shift = measureFontShift(ctx);
+  ctx.graphics.font = previousFont;
+  return {
+    itemIndex: -1,
+    text: ELLIPSIS_GLYPH,
+    font,
+    color,
+    gapBefore: 0,
+    occupiedWidth,
+    shift,
+  };
+}
+
+function createRichEllipsisOnlyLayout<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  maxWidth: number,
+  font: string,
+  color: DynValue<C, string> | undefined,
+): RichLineLayout {
+  const ellipsis = createRichEllipsisFragment(ctx, font, color);
+  if (ellipsis.occupiedWidth > maxWidth) {
+    return { width: 0, fragments: [], overflowed: true };
+  }
+  return { width: ellipsis.occupiedWidth, fragments: [ellipsis], overflowed: true };
+}
+
+function layoutPreparedRichEllipsis<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  line: RichLineLayout,
+  maxWidth: number,
+  defaultFont: string,
+  defaultColor: DynValue<C, string>,
+  position: TextEllipsisPosition,
+): RichLineLayout {
+  if (!line.overflowed && line.width <= maxWidth) {
+    return { ...line, overflowed: false };
+  }
+
+  const units = flattenRichLineUnits(line);
+  const fallbackFragment = line.fragments[0];
+  const fallbackFont = fallbackFragment?.font ?? defaultFont;
+  const fallbackColor = (fallbackFragment?.color ?? defaultColor) as DynValue<C, string>;
+  const ellipsisOnly = createRichEllipsisOnlyLayout(ctx, maxWidth, fallbackFont, fallbackColor);
+  if (ellipsisOnly.fragments.length === 0) {
+    return ellipsisOnly;
+  }
+
+  if (units.length === 0) {
+    return ellipsisOnly;
+  }
+
+  const ellipsisWidth = ellipsisOnly.width;
+  const availableWidth = Math.max(0, maxWidth - ellipsisWidth);
+  const prefixWidths = buildRichPrefixWidths(units);
+  const suffixWidths = buildRichSuffixWidths(units);
+
+  let prefixCount = 0;
+  let suffixCount = 0;
+
+  switch (position) {
+    case "start":
+      suffixCount = Math.min(units.length, findMaxFittingCount(suffixWidths, availableWidth));
+      break;
+    case "middle": {
+      let bestVisibleUnits = -1;
+      let bestBalanceScore = Number.NEGATIVE_INFINITY;
+      for (let nextPrefixCount = 0; nextPrefixCount <= units.length; nextPrefixCount += 1) {
+        const prefixWidth = prefixWidths[nextPrefixCount] ?? 0;
+        if (prefixWidth > availableWidth) {
+          break;
+        }
+        const remainingWidth = availableWidth - prefixWidth;
+        const maxSuffixCount = Math.max(0, units.length - nextPrefixCount - 1);
+        const nextSuffixCount = Math.min(maxSuffixCount, findMaxFittingCount(suffixWidths, remainingWidth));
+        const visibleUnits = nextPrefixCount + nextSuffixCount;
+        const balanceScore = -Math.abs(nextPrefixCount - nextSuffixCount);
+        if (
+          visibleUnits > bestVisibleUnits ||
+          (visibleUnits === bestVisibleUnits && balanceScore > bestBalanceScore) ||
+          (visibleUnits === bestVisibleUnits && balanceScore === bestBalanceScore && nextPrefixCount > prefixCount)
+        ) {
+          prefixCount = nextPrefixCount;
+          suffixCount = nextSuffixCount;
+          bestVisibleUnits = visibleUnits;
+          bestBalanceScore = balanceScore;
+        }
+      }
+      break;
+    }
+    case "end":
+      prefixCount = Math.min(units.length, findMaxFittingCount(prefixWidths, availableWidth));
+      break;
+  }
+
+  const prefixFragments = measureRichFragmentsShift(ctx, materializeRichFragmentsFromUnits(units, 0, prefixCount, false));
+  const suffixStartIndex = units.length - suffixCount;
+  const suffixFragments = measureRichFragmentsShift(
+    ctx,
+    materializeRichFragmentsFromUnits(units, suffixStartIndex, units.length, true),
+  );
+
+  const ellipsisSource =
+    position === "start"
+      ? (suffixFragments[0] ?? line.fragments[0])
+      : position === "middle"
+        ? (prefixFragments[prefixFragments.length - 1] ?? suffixFragments[0] ?? line.fragments[line.fragments.length - 1])
+        : (prefixFragments[prefixFragments.length - 1] ?? line.fragments[line.fragments.length - 1]);
+  const ellipsis = createRichEllipsisFragment(
+    ctx,
+    ellipsisSource?.font ?? defaultFont,
+    (ellipsisSource?.color ?? defaultColor) as DynValue<C, string>,
+  );
+
+  const fragments =
+    position === "start"
+      ? [ellipsis, ...suffixFragments]
+      : position === "middle"
+        ? [...prefixFragments, ellipsis, ...suffixFragments]
+        : [...prefixFragments, ellipsis];
+  const width =
+    position === "start"
+      ? ellipsis.occupiedWidth + (suffixWidths[suffixCount] ?? 0)
+      : position === "middle"
+        ? (prefixWidths[prefixCount] ?? 0) + ellipsis.occupiedWidth + (suffixWidths[suffixCount] ?? 0)
+        : (prefixWidths[prefixCount] ?? 0) + ellipsis.occupiedWidth;
+
+  return { width, fragments, overflowed: true };
+}
+
+export function layoutRichFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+  defaultColor: DynValue<C, string>,
+): RichLineLayout {
+  if (spans.length === 0) {
+    return { width: 0, fragments: [], overflowed: false };
+  }
+  const prepared = readRichPrepared(spans, defaultFont);
+  const lineRange = layoutNextRichInlineLineRange(prepared, INTRINSIC_MAX_WIDTH);
+  if (lineRange == null) {
+    return { width: 0, fragments: [], overflowed: false };
+  }
+  return materializeRichLine(ctx, spans, defaultFont, defaultColor, lineRange, false);
+}
+
+export function layoutRichFirstLine<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  maxWidth: number,
+  defaultFont: string,
+  defaultColor: DynValue<C, string>,
+): RichLineLayout {
+  if (maxWidth < 0) {
+    maxWidth = 0;
+  }
+  if (spans.length === 0 || maxWidth === 0) {
+    return { width: 0, fragments: [], overflowed: false };
+  }
+  const prepared = readRichPrepared(spans, defaultFont);
+  const lineRange = layoutNextRichInlineLineRange(prepared, maxWidth);
+  if (lineRange == null) {
+    return { width: 0, fragments: [], overflowed: false };
+  }
+  return materializeRichLine(ctx, spans, defaultFont, defaultColor, lineRange, false);
+}
+
+export function layoutRichEllipsizedFirstLine<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  maxWidth: number,
+  defaultFont: string,
+  defaultColor: DynValue<C, string>,
+  ellipsisPosition: TextEllipsisPosition = "end",
+): RichLineLayout {
+  if (maxWidth < 0) {
+    maxWidth = 0;
+  }
+  const intrinsicLine = layoutRichFirstLineIntrinsic(ctx, spans, defaultFont, defaultColor);
+  if (intrinsicLine.fragments.length === 0) {
+    return { ...intrinsicLine, overflowed: false };
+  }
+  if (maxWidth === 0) {
+    return { width: 0, fragments: [], overflowed: true };
+  }
+  return layoutPreparedRichEllipsis(ctx, intrinsicLine, maxWidth, defaultFont, defaultColor, ellipsisPosition);
 }
 
 export function measureRichText<C extends CanvasRenderingContext2D>(

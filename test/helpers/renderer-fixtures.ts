@@ -36,7 +36,7 @@ export function createTextNode(text: string): Text<C> {
   return new Text(text, {
     lineHeight: 20,
     font: "16px sans-serif",
-    style: "#000",
+    color: "#000",
   });
 }
 
