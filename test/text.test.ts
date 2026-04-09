@@ -444,7 +444,7 @@ describe("text metrics", () => {
     const node = new Text<C>("alphabet", {
       lineHeight: 20,
       font: "16px text-node-ellipsis",
-      style: "#000",
+      color: "#000",
       overflow: "ellipsis",
       ellipsisPosition: "middle",
     });
@@ -460,7 +460,7 @@ describe("text metrics", () => {
     const node = new Text<C>("abcdefghij", {
       lineHeight: 20,
       font: "16px text-node-anywhere",
-      style: "#000",
+      color: "#000",
       overflowWrap: "anywhere",
     });
 
@@ -473,7 +473,7 @@ describe("text metrics", () => {
     const node = new MultilineText<C>("abcdefghijklmno", {
       lineHeight: 20,
       font: "16px multiline-node-ellipsis",
-      style: "#000",
+      color: "#000",
       align: "start",
       overflow: "ellipsis",
       maxLines: 2,
@@ -491,7 +491,7 @@ describe("text metrics", () => {
     const node = new MultilineText<C>("hello world\n  foo bar baz", {
       lineHeight: 20,
       font: "16px multiline-node-pre-wrap",
-      style: "#000",
+      color: "#000",
       align: "start",
       whiteSpace: "pre-wrap",
     });
@@ -507,7 +507,7 @@ describe("text metrics", () => {
     const node = new MultilineText<C>("abcdefghij", {
       lineHeight: 20,
       font: "16px multiline-node-anywhere",
-      style: "#000",
+      color: "#000",
       align: "start",
       overflowWrap: "anywhere",
     });
@@ -518,9 +518,9 @@ describe("text metrics", () => {
   test("rich text metrics measure and layout multiline spans", () => {
     const ctx = createMeasuredContext("16px rich-measure");
     const spans: InlineSpan<C>[] = [
-      { text: "hello ", style: "#111" },
-      { text: "world", font: "600 16px rich-bold", style: "#f00" },
-      { text: " again", style: "#222" },
+      { text: "hello ", color: "#111" },
+      { text: "world", font: "600 16px rich-bold", color: "#f00" },
+      { text: " again", color: "#222" },
     ];
 
     expect(measureRichTextIntrinsic(ctx, spans, "16px rich-measure")).toEqual({ width: 136, lineCount: 1 });
@@ -533,8 +533,8 @@ describe("text metrics", () => {
   test("rich text metrics support maxLines ellipsis", () => {
     const ctx = createMeasuredContext("16px rich-overflow");
     const spans: InlineSpan<C>[] = [
-      { text: "abcdefghij", style: "#111" },
-      { text: "klmno", font: "600 16px rich-overflow-bold", style: "#f00" },
+      { text: "abcdefghij", color: "#111" },
+      { text: "klmno", font: "600 16px rich-overflow-bold", color: "#f00" },
     ];
 
     const layout = layoutRichTextWithOverflow(ctx, spans, 40, "16px rich-overflow", "#000", 2, "ellipsis");
@@ -546,25 +546,25 @@ describe("text metrics", () => {
   test("rich text min-content uses widest span fragment", () => {
     const ctx = createMeasuredContext("16px rich-min");
     const spans: InlineSpan<C>[] = [
-      { text: "a", style: "#111" },
-      { text: "abcdefgh", font: "600 16px rich-min-bold", style: "#f00" },
-      { text: "bc", style: "#222" },
+      { text: "a", color: "#111" },
+      { text: "abcdefgh", font: "600 16px rich-min-bold", color: "#f00" },
+      { text: "bc", color: "#222" },
     ];
 
     expect(measureRichTextMinContent(ctx, spans, "16px rich-min", "anywhere")).toEqual({ width: 8, lineCount: 11 });
   });
 
-  test("MultilineText nodes draw rich spans with per-fragment font and style", () => {
+  test("MultilineText nodes draw rich spans with per-fragment font and color", () => {
     const recordedDraws: RecordedDraw[] = [];
     const renderer = new ConstraintTestRenderer(createRichRecordingGraphics(recordedDraws), {});
     const node = new MultilineText<C>([
-      { text: "hello ", style: "#111" },
-      { text: "world", font: "600 16px rich-node-bold", style: "#f00" },
-      { text: " again", style: "#222" },
+      { text: "hello ", color: "#111" },
+      { text: "world", font: "600 16px rich-node-bold", color: "#f00" },
+      { text: " again", color: "#222" },
     ], {
       lineHeight: 20,
       font: "16px rich-node",
-      style: "#000",
+      color: "#000",
       align: "start",
     });
 

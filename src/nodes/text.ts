@@ -254,7 +254,7 @@ function getRichMultiLineOverflowLayout<C extends CanvasRenderingContext2D>(
 ): RichBlockLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
   return readCachedTextLayout(node, ctx, getRichMultiLineOverflowLayoutKey(maxWidth), () =>
-    layoutRichTextWithOverflow(ctx, spans, maxWidth ?? 0, options.font, options.style, options.maxLines, options.overflow)
+    layoutRichTextWithOverflow(ctx, spans, maxWidth ?? 0, options.font, options.color, options.maxLines, options.overflow)
   );
 }
 
@@ -270,8 +270,8 @@ function getRichMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
   }
   return readCachedTextLayout(node, ctx, getRichMultiLineDrawLayoutKey(maxWidth), () =>
     maxWidth == null
-      ? layoutRichTextIntrinsic(ctx, spans, options.font, options.style)
-      : layoutRichText(ctx, spans, maxWidth, options.font, options.style)
+      ? layoutRichTextIntrinsic(ctx, spans, options.font, options.color)
+      : layoutRichText(ctx, spans, maxWidth, options.font, options.color)
   );
 }
 
@@ -346,7 +346,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           cursorX += frag.gapBefore;
           ctx.with((g) => {
             g.font = frag.font;
-            g.fillStyle = ctx.resolveDynValue((frag.style ?? this.options.style) as typeof this.options.style);
+            g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
             if (align === "right") {
               g.textAlign = "right";
             } else if (align === "center") {
@@ -364,7 +364,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     }
     return ctx.with((g) => {
       g.font = this.options.font;
-      g.fillStyle = ctx.resolveDynValue(this.options.style);
+      g.fillStyle = ctx.resolveDynValue(this.options.color);
       const { width, lines } = getMultiLineDrawLayout(this, ctx, this.text as string, this.options);
       switch (resolvePhysicalTextAlign(this.options)) {
         case "left":
@@ -433,7 +433,7 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
   draw(ctx: Context<C>, x: number, y: number): boolean {
     return ctx.with((g) => {
       g.font = this.options.font;
-      g.fillStyle = ctx.resolveDynValue(this.options.style);
+      g.fillStyle = ctx.resolveDynValue(this.options.color);
       const { text, shift } = getSingleLineLayout(this, ctx, this.text, this.options);
       g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
       return false;

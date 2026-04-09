@@ -98,7 +98,7 @@ const node = new RoundedBox(
           lineHeight: 20,
           font: "400 16px monospace",
           align: "center",
-          style: "black",
+          color: "black",
         }),
         { align: "center" },
       ),
@@ -108,10 +108,10 @@ const node = new RoundedBox(
             [
               new ClickDetect(
                 new RoundedBox(
-                  new Text("测试3".repeat(2), {
+                  new Text("测试 3".repeat(2), {
                     lineHeight: 20,
                     font: "400 16px monospace",
-                    style: () => color,
+                    color: () => color,
                   }),
                   {
                     left: 14,
@@ -128,7 +128,7 @@ const node = new RoundedBox(
                   lineHeight: 16,
                   font: "400 12px monospace",
                   align: "center",
-                  style: "black",
+                  color: "black",
                 }),
                 {
                   left: 10,
@@ -163,7 +163,7 @@ const node = new RoundedBox(
             lineHeight: 20,
             font: "400 16px monospace",
             physicalAlign: "right",
-            style: "black",
+            color: "black",
           }),
           {
             left: 10,

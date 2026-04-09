@@ -157,23 +157,23 @@ type ChatItem = MessageItem | RevokedItem;
 
 const richTextMessage: InlineSpan<C>[] = [
   { text: "现在这个 chat example 可以直接展示 " },
-  { text: "rich text", font: "700 16px system-ui", style: "#0f766e" },
+  { text: "rich text", font: "700 16px system-ui", color: "#0f766e" },
   { text: " 了，支持 " },
-  { text: "颜色", style: "#2563eb" },
+  { text: "颜色", color: "#2563eb" },
   { text: "、" },
-  { text: "粗体", font: "700 16px system-ui", style: "#b91c1c" },
+  { text: "粗体", font: "700 16px system-ui", color: "#b91c1c" },
   { text: "，以及 " },
-  { text: "inline code", font: "15px ui-monospace, SFMono-Regular, Consolas, monospace", style: "#7c3aed" },
+  { text: "inline code", font: "15px ui-monospace, SFMono-Regular, Consolas, monospace", color: "#7c3aed" },
   { text: " 这样的片段混排。" },
 ];
 
 const richReplyPreview: InlineSpan<C>[] = [
   { text: "回复预览里也能用 " },
-  { text: "rich text", font: "700 13px system-ui", style: "#0f766e" },
+  { text: "rich text", font: "700 13px system-ui", color: "#0f766e" },
   { text: "，比如 " },
-  { text: "关键词高亮", style: "#2563eb" },
+  { text: "关键词高亮", color: "#2563eb" },
   { text: " 和 " },
-  { text: "code()", font: "12px ui-monospace, SFMono-Regular, Consolas, monospace", style: "#7c3aed" },
+  { text: "code()", font: "12px ui-monospace, SFMono-Regular, Consolas, monospace", color: "#7c3aed" },
   {
     text: "，超长内容仍然会按原来的两行省略规则收起，不需要额外处理。",
   },
@@ -225,7 +225,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
             new Text(`${item.sender}已撤回一条消息`, {
               lineHeight: 18,
               font: "14px system-ui",
-              style: () => (currentHover?.id === item.id ? "#525252" : "#666"),
+              color: () => (currentHover?.id === item.id ? "#525252" : "#666"),
               overflow: "ellipsis",
             }),
             {
@@ -262,7 +262,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
         new Text(item.sender, {
           lineHeight: 15,
           font: "12px system-ui",
-          style: "black",
+          color: "black",
         }),
         {
           top: 0,
@@ -286,7 +286,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     new MultilineText(item.content, {
       lineHeight: 20,
       font: "16px system-ui",
-      style: "black",
+      color: "black",
       align: "start",
       overflowWrap: "anywhere",
     }),
@@ -302,12 +302,12 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
             new Text(item.reply.sender, {
               lineHeight: 14,
               font: "11px system-ui",
-              style: () => (currentHover?.id === item.id ? "#4d4d4d" : "#666"),
+              color: () => (currentHover?.id === item.id ? "#4d4d4d" : "#666"),
             }),
             new MultilineText(item.reply.content, {
               lineHeight: 16,
               font: "13px system-ui",
-              style: () => (currentHover?.id === item.id ? "#222" : "#444"),
+              color: () => (currentHover?.id === item.id ? "#222" : "#444"),
               align: "start",
               overflow: "ellipsis",
               overflowWrap: "anywhere",

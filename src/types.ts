@@ -93,8 +93,8 @@ export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
   lineHeight: number;
   /** Canvas font string used for measurement and drawing. */
   font: string;
-  /** Fill style or resolver used when drawing the text. */
-  style: DynValue<C, string>;
+  /** Color or resolver used when drawing the text. */
+  color: DynValue<C, string>;
   /** Default: normal; matches pretext and CSS-style collapsible whitespace behavior. */
   whiteSpace?: TextWhiteSpaceMode;
   /** Default: normal; use keep-all to match pretext's CJK-friendly line breaking mode. */
@@ -111,8 +111,8 @@ export interface InlineSpan<C extends CanvasRenderingContext2D> {
   text: string;
   /** Canvas font string override for this fragment. Falls back to the node-level font. */
   font?: string;
-  /** Fill style override for this fragment. Falls back to the node-level style. */
-  style?: DynValue<C, string>;
+  /** Color override for this fragment. Falls back to the node-level color. */
+  color?: DynValue<C, string>;
   /** Optional break hint forwarded to pretext rich-inline layout. */
   break?: "normal" | "never";
   /** Optional extra occupied width forwarded to pretext rich-inline layout. */

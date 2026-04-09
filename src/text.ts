@@ -615,7 +615,7 @@ export interface RichFragmentLayout {
   itemIndex: number;
   text: string;
   font: string;
-  style: DynValue<any, string> | undefined;
+  color: DynValue<any, string> | undefined;
   gapBefore: number;
   occupiedWidth: number;
   shift: number;
@@ -667,7 +667,7 @@ function materializeRichLine<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   spans: InlineSpan<C>[],
   defaultFont: string,
-  defaultStyle: DynValue<C, string>,
+  defaultColor: DynValue<C, string>,
   lineRange: RichInlineLineRange,
   overflowed: boolean,
 ): RichLineLayout {
@@ -677,7 +677,7 @@ function materializeRichLine<C extends CanvasRenderingContext2D>(
   const fragments: RichFragmentLayout[] = richLine.fragments.map((frag) => {
     const span = spans[frag.itemIndex];
     const fragFont = span?.font ?? defaultFont;
-    const fragStyle = span?.style ?? defaultStyle;
+    const fragColor = span?.color ?? defaultColor;
     const prevFont = ctx.graphics.font;
     ctx.graphics.font = fragFont;
     const shift = measureFontShift(ctx);
@@ -686,7 +686,7 @@ function materializeRichLine<C extends CanvasRenderingContext2D>(
       itemIndex: frag.itemIndex,
       text: frag.text,
       font: fragFont,
-      style: fragStyle as DynValue<any, string>,
+      color: fragColor as DynValue<any, string>,
       gapBefore: frag.gapBefore,
       occupiedWidth: frag.occupiedWidth,
       shift,
@@ -747,14 +747,14 @@ export function layoutRichText<C extends CanvasRenderingContext2D>(
   spans: InlineSpan<C>[],
   maxWidth: number,
   defaultFont: string,
-  defaultStyle: DynValue<C, string>,
+  defaultColor: DynValue<C, string>,
 ): RichBlockLayout {
   if (spans.length === 0) return { width: 0, lines: [], overflowed: false };
   const prepared = readRichPrepared(spans, defaultFont);
   const lineRanges: RichInlineLineRange[] = [];
   walkRichInlineLineRanges(prepared, maxWidth, (line) => lineRanges.push(line));
   if (lineRanges.length === 0) return { width: 0, lines: [], overflowed: false };
-  const lines = lineRanges.map((lr) => materializeRichLine(ctx, spans, defaultFont, defaultStyle, lr, false));
+  const lines = lineRanges.map((lr) => materializeRichLine(ctx, spans, defaultFont, defaultColor, lr, false));
   const width = lines.reduce((max, line) => Math.max(max, line.width), 0);
   return { width, lines, overflowed: false };
 }
@@ -763,9 +763,9 @@ export function layoutRichTextIntrinsic<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   spans: InlineSpan<C>[],
   defaultFont: string,
-  defaultStyle: DynValue<C, string>,
+  defaultColor: DynValue<C, string>,
 ): RichBlockLayout {
-  return layoutRichText(ctx, spans, INTRINSIC_MAX_WIDTH, defaultFont, defaultStyle);
+  return layoutRichText(ctx, spans, INTRINSIC_MAX_WIDTH, defaultFont, defaultColor);
 }
 
 export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
@@ -773,14 +773,14 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
   spans: InlineSpan<C>[],
   maxWidth: number,
   defaultFont: string,
-  defaultStyle: DynValue<C, string>,
+  defaultColor: DynValue<C, string>,
   maxLines?: number,
   overflow: TextOverflowMode = "clip",
 ): RichBlockLayout {
   if (spans.length === 0) return { width: 0, lines: [], overflowed: false };
 
   const normalizedMaxLines = normalizeMaxLines(maxLines);
-  const layout = layoutRichText(ctx, spans, maxWidth, defaultFont, defaultStyle);
+  const layout = layoutRichText(ctx, spans, maxWidth, defaultFont, defaultColor);
 
   if (normalizedMaxLines == null || layout.lines.length <= normalizedMaxLines) {
     return layout;
@@ -827,7 +827,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
   const resultFragments: RichFragmentLayout[] = [];
   let usedWidth = 0;
   let ellipsisFont = lastFrag.font;
-  let ellipsisStyle: DynValue<any, string> | undefined = lastFrag.style;
+  let ellipsisColor: DynValue<any, string> | undefined = lastFrag.color;
   let truncated = false;
 
   for (let fi = 0; fi < lastLine.fragments.length; fi++) {
@@ -841,7 +841,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
     } else {
       // Try fitting a prefix of this fragment character by character
       ellipsisFont = frag.font;
-      ellipsisStyle = frag.style;
+      ellipsisColor = frag.color;
       const remaining = budget - usedWidth - neededGap;
       if (remaining > 0 && frag.text.length > 0) {
         // Measure grapheme prefix that fits
@@ -878,7 +878,7 @@ export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
     itemIndex: -1,
     text: ELLIPSIS_GLYPH,
     font: ellipsisFont,
-    style: ellipsisStyle,
+    color: ellipsisColor,
     gapBefore: 0,
     occupiedWidth: ellipsisWidth,
     shift: ellipsisShift,

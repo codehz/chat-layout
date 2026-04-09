@@ -20,7 +20,7 @@ const bubble = new RoundedBox(
   new MultilineText(item.content, {
     lineHeight: 20,
     font: "16px system-ui",
-    style: "black",
+    color: "black",
     align: "start",
   }),
   { top: 6, bottom: 6, left: 10, right: 10, radii: 8, fill: "#ccc" },
@@ -64,7 +64,7 @@ Single-line `Text` can ellipsize at the start, end, or middle when a finite widt
 const title = new Text("Extremely long thread title that should not blow out the row", {
   lineHeight: 20,
   font: "16px system-ui",
-  style: "#111",
+  color: "#111",
   overflow: "ellipsis",
   ellipsisPosition: "middle",
 });
@@ -76,7 +76,7 @@ Multi-line `MultilineText` can cap the visible line count and convert the last v
 const preview = new MultilineText(reply.content, {
   lineHeight: 16,
   font: "13px system-ui",
-  style: "#444",
+  color: "#444",
   align: "start",
   overflowWrap: "anywhere",
   overflow: "ellipsis",
