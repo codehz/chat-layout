@@ -40,6 +40,7 @@ type RichPreparedState = {
   preparedItemIndexBySourceItemIndex: (number | undefined)[];
 };
 
+// Keep shared caching focused on expensive pretext prepare work.
 const richPreparedCache = new Map<string, RichPreparedState>();
 
 export interface RichFragmentLayout {

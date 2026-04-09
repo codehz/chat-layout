@@ -6,8 +6,8 @@ export const PREPARED_TEXT_CACHE_CAPACITY = 512;
 
 const LINE_START_CURSOR = { segmentIndex: 0, graphemeIndex: 0 } as const;
 
+// Keep shared caching focused on expensive pretext prepare work.
 const preparedTextCache = new Map<string, PreparedTextWithSegments>();
-const preparedUnitCache = new WeakMap<PreparedTextWithSegments, PreparedTextUnit[]>();
 
 export type PreparedTextUnit = {
   text: string;
@@ -81,11 +81,6 @@ export function measurePreparedMinContentWidth(
 }
 
 export function getPreparedUnits(prepared: PreparedTextWithSegments): PreparedTextUnit[] {
-  const cached = preparedUnitCache.get(prepared);
-  if (cached != null) {
-    return cached;
-  }
-
   const units: PreparedTextUnit[] = [];
   for (let index = 0; index < prepared.segments.length; index += 1) {
     const segment = prepared.segments[index] ?? "";
@@ -109,7 +104,6 @@ export function getPreparedUnits(prepared: PreparedTextWithSegments): PreparedTe
     }
   }
 
-  preparedUnitCache.set(prepared, units);
   return units;
 }
 
