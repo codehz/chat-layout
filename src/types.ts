@@ -61,9 +61,9 @@ export type TextAlign = "start" | "center" | "end";
 export type PhysicalTextAlign = "left" | "center" | "right";
 
 /**
- * Whitespace normalization mode for text measurement and layout.
+ * Whitespace handling mode for text measurement and layout.
  */
-export type TextWhitespaceMode = "preserve" | "trim-and-collapse";
+export type TextWhiteSpaceMode = "normal" | "pre-wrap";
 
 /**
  * Text overflow behavior when content exceeds a finite width constraint.
@@ -90,8 +90,8 @@ export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
   font: string;
   /** Fill style or resolver used when drawing the text. */
   style: DynValue<C, string>;
-  /** Default: preserve input whitespace, including blank lines and edge spaces. */
-  whitespace?: TextWhitespaceMode;
+  /** Default: normal; matches pretext and CSS-style collapsible whitespace behavior. */
+  whiteSpace?: TextWhiteSpaceMode;
   /** Default: break-word; use anywhere when min-content should honor grapheme break opportunities. */
   overflowWrap?: TextOverflowWrapMode;
 }

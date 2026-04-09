@@ -10,7 +10,7 @@ import type {
   TextEllipsisPosition,
   TextOverflowMode,
   TextOverflowWrapMode,
-  TextWhitespaceMode,
+  TextWhiteSpaceMode,
 } from "./types";
 
 export interface TextLayout {
@@ -37,13 +37,14 @@ export interface OverflowTextBlockLayout {
 // `fontBoundingBox*` depends on the active font, so one fixed probe is enough.
 const FONT_SHIFT_PROBE = "M";
 const ELLIPSIS_GLYPH = "…";
-const PREPARED_SEGMENT_CACHE_CAPACITY = 512;
+const INTRINSIC_MAX_WIDTH = Number.POSITIVE_INFINITY;
+const PREPARED_TEXT_CACHE_CAPACITY = 512;
 const FONT_SHIFT_CACHE_CAPACITY = 64;
 const ELLIPSIS_WIDTH_CACHE_CAPACITY = 64;
 const LINE_START_CURSOR = { segmentIndex: 0, graphemeIndex: 0 } as const;
 const MIN_CONTENT_WIDTH_EPSILON = 0.001;
 
-const preparedSegmentCache = new Map<string, PreparedTextWithSegments>();
+const preparedTextCache = new Map<string, PreparedTextWithSegments>();
 const fontShiftCache = new Map<string, number>();
 const ellipsisWidthCache = new Map<string, number>();
 const preparedUnitCache = new WeakMap<PreparedTextWithSegments, PreparedTextUnit[]>();
@@ -54,16 +55,6 @@ type PreparedTextUnit = {
 };
 
 let sharedGraphemeSegmenter: Intl.Segmenter | null | undefined;
-
-function preprocessSegments(text: string, whitespace: TextWhitespaceMode = "preserve"): string[] {
-  const segments = text.split("\n");
-  if (whitespace === "trim-and-collapse") {
-    return segments
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-  }
-  return segments;
-}
 
 function readLruValue<T>(cache: Map<string, T>, key: string): T | undefined {
   const cached = cache.get(key);
@@ -88,17 +79,38 @@ function writeLruValue<T>(cache: Map<string, T>, key: string, value: T, capacity
   return value;
 }
 
-function getPreparedSegmentCacheKey(segment: string, font: string): string {
-  return `${font}\u0000${segment}`;
+function getPreparedTextCacheKey(text: string, font: string, whiteSpace: TextWhiteSpaceMode): string {
+  return `${font}\u0000${whiteSpace}\u0000${text}`;
 }
 
-function readPreparedSegment(segment: string, font: string): PreparedTextWithSegments {
-  const key = getPreparedSegmentCacheKey(segment, font);
-  const cached = readLruValue(preparedSegmentCache, key);
+function readPreparedText(text: string, font: string, whiteSpace: TextWhiteSpaceMode): PreparedTextWithSegments {
+  const key = getPreparedTextCacheKey(text, font, whiteSpace);
+  const cached = readLruValue(preparedTextCache, key);
   if (cached != null) {
     return cached;
   }
-  return writeLruValue(preparedSegmentCache, key, prepareWithSegments(segment, font), PREPARED_SEGMENT_CACHE_CAPACITY);
+  return writeLruValue(
+    preparedTextCache,
+    key,
+    prepareWithSegments(text, font, { whiteSpace }),
+    PREPARED_TEXT_CACHE_CAPACITY,
+  );
+}
+
+function readPreparedFirstLine<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  text: string,
+  whiteSpace: TextWhiteSpaceMode,
+): { text: string; prepared: PreparedTextWithSegments } | undefined {
+  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
+  const line = layoutNextLine(prepared, LINE_START_CURSOR, INTRINSIC_MAX_WIDTH);
+  if (line == null) {
+    return undefined;
+  }
+  return {
+    text: line.text,
+    prepared: readPreparedText(line.text, ctx.graphics.font, whiteSpace),
+  };
 }
 
 function measureFontShift<C extends CanvasRenderingContext2D>(ctx: Context<C>): number {
@@ -353,17 +365,16 @@ function normalizeMaxLines(maxLines: number | undefined): number | undefined {
 export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): TextLayout {
-  const segments = preprocessSegments(text, whitespace);
-  const segment = segments[0];
-  if (!segment) {
+  const firstLine = readPreparedFirstLine(ctx, text, whiteSpace);
+  if (firstLine == null) {
     return { width: 0, text: "", shift: 0 };
   }
   const shift = measureFontShift(ctx);
   return {
-    width: ctx.graphics.measureText(segment).width,
-    text: segment,
+    width: measurePreparedWidth(firstLine.prepared),
+    text: firstLine.text,
     shift,
   };
 }
@@ -371,43 +382,32 @@ export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
 export function measureTextIntrinsic<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): TextMeasurement {
-  const segments = preprocessSegments(text, whitespace);
-  if (segments.length === 0) {
+  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
+  let width = 0;
+  const lineCount = walkLineRanges(prepared, INTRINSIC_MAX_WIDTH, (line) => {
+    width = Math.max(width, line.width);
+  });
+  if (lineCount === 0) {
     return { width: 0, lineCount: 0 };
   }
-
-  let width = 0;
-  for (const segment of segments) {
-    width = Math.max(width, ctx.graphics.measureText(segment).width);
-  }
-
-  return { width, lineCount: segments.length };
+  return { width, lineCount };
 }
 
 export function layoutTextIntrinsic<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): { width: number; lines: TextLayout[] } {
-  const segments = preprocessSegments(text, whitespace);
-  if (segments.length === 0) {
+  const intrinsic = layoutWithLines(readPreparedText(text, ctx.graphics.font, whiteSpace), INTRINSIC_MAX_WIDTH, 0);
+  if (intrinsic.lines.length === 0) {
     return { width: 0, lines: [] };
   }
 
   const shift = measureFontShift(ctx);
-  let width = 0;
-  const lines: TextLayout[] = [];
-  for (const segment of segments) {
-    const measuredWidth = ctx.graphics.measureText(segment).width;
-    width = Math.max(width, measuredWidth);
-    lines.push({
-      width: measuredWidth,
-      text: segment,
-      shift,
-    });
-  }
+  const lines = intrinsic.lines.map((line) => ({ width: line.width, text: line.text, shift }));
+  const width = lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0);
 
   return { width, lines };
 }
@@ -416,21 +416,16 @@ export function layoutFirstLine<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
   maxWidth: number,
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): TextLayout {
   if (maxWidth < 0) {
     maxWidth = 0;
-  }
-  const segments = preprocessSegments(text, whitespace);
-  const segment = segments[0];
-  if (!segment) {
-    return { width: 0, text: "", shift: 0 };
   }
   const shift = measureFontShift(ctx);
   if (maxWidth === 0) {
     return { width: 0, text: "", shift };
   }
-  const prepared = readPreparedSegment(segment, ctx.graphics.font);
+  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
   const line = layoutNextLine(prepared, LINE_START_CURSOR, maxWidth);
   if (line == null) {
     return { width: 0, text: "", shift };
@@ -443,22 +438,20 @@ export function layoutEllipsizedFirstLine<C extends CanvasRenderingContext2D>(
   text: string,
   maxWidth: number,
   ellipsisPosition: TextEllipsisPosition = "end",
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): OverflowTextLayout {
   if (maxWidth < 0) {
     maxWidth = 0;
   }
-  const segments = preprocessSegments(text, whitespace);
-  const segment = segments[0];
-  if (!segment) {
+  const firstLine = readPreparedFirstLine(ctx, text, whiteSpace);
+  if (firstLine == null) {
     return { width: 0, text: "", shift: 0, overflowed: false };
   }
   const shift = measureFontShift(ctx);
   if (maxWidth === 0) {
     return { width: 0, text: "", shift, overflowed: true };
   }
-  const prepared = readPreparedSegment(segment, ctx.graphics.font);
-  return layoutPreparedEllipsis(ctx, prepared, segment, maxWidth, shift, ellipsisPosition);
+  return layoutPreparedEllipsis(ctx, firstLine.prepared, firstLine.text, maxWidth, shift, ellipsisPosition);
 }
 
 function layoutForcedEllipsizedLine<C extends CanvasRenderingContext2D>(
@@ -466,11 +459,12 @@ function layoutForcedEllipsizedLine<C extends CanvasRenderingContext2D>(
   text: string,
   maxWidth: number,
   shift: number,
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): OverflowTextLayout {
   if (text.length === 0) {
     return createEllipsisOnlyLayout(ctx, maxWidth, shift);
   }
-  const prepared = readPreparedSegment(text, ctx.graphics.font);
+  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
   return layoutPreparedEllipsis(ctx, prepared, text, maxWidth, shift, "end", true);
 }
 
@@ -478,31 +472,20 @@ export function measureText<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
   maxWidth: number,
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): TextMeasurement {
   if (maxWidth < 0) {
     maxWidth = 0;
   }
-
-  const segments = preprocessSegments(text, whitespace);
-  if (segments.length === 0 || maxWidth === 0) {
+  if (maxWidth === 0) {
     return { width: 0, lineCount: 0 };
   }
 
-  const font = ctx.graphics.font;
+  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
   let width = 0;
-  let lineCount = 0;
-
-  for (const segment of segments) {
-    if (segment.length === 0) {
-      lineCount += 1;
-      continue;
-    }
-    const prepared = readPreparedSegment(segment, font);
-    lineCount += walkLineRanges(prepared, maxWidth, (line) => {
-      width = Math.max(width, line.width);
-    });
-  }
+  const lineCount = walkLineRanges(prepared, maxWidth, (line) => {
+    width = Math.max(width, line.width);
+  });
 
   return { width, lineCount };
 }
@@ -510,35 +493,17 @@ export function measureText<C extends CanvasRenderingContext2D>(
 export function measureTextMinContent<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
   overflowWrap: TextOverflowWrapMode = "break-word",
 ): TextMeasurement {
-  const segments = preprocessSegments(text, whitespace);
-  if (segments.length === 0) {
+  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
+  if (prepared.widths.length === 0) {
     return { width: 0, lineCount: 0 };
   }
 
-  const font = ctx.graphics.font;
-  let width = 0;
-
-  for (const segment of segments) {
-    if (segment.length === 0) {
-      continue;
-    }
-    const prepared = readPreparedSegment(segment, font);
-    width = Math.max(width, measurePreparedMinContentWidth(prepared, overflowWrap));
-  }
-
-  let lineCount = 0;
+  const width = measurePreparedMinContentWidth(prepared, overflowWrap);
   const lineMaxWidth = Math.max(width, MIN_CONTENT_WIDTH_EPSILON);
-  for (const segment of segments) {
-    if (segment.length === 0) {
-      lineCount += 1;
-      continue;
-    }
-    const prepared = readPreparedSegment(segment, font);
-    lineCount += walkLineRanges(prepared, lineMaxWidth, () => {});
-  }
+  const lineCount = walkLineRanges(prepared, lineMaxWidth, () => {});
 
   return { width, lineCount };
 }
@@ -547,34 +512,23 @@ export function layoutText<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
   text: string,
   maxWidth: number,
-  whitespace: TextWhitespaceMode = "preserve",
+  whiteSpace: TextWhiteSpaceMode = "normal",
 ): { width: number; lines: TextLayout[] } {
   if (maxWidth < 0) {
     maxWidth = 0;
   }
-
-  const segments = preprocessSegments(text, whitespace);
-  if (segments.length === 0 || maxWidth === 0) {
+  if (maxWidth === 0) {
     return { width: 0, lines: [] };
   }
 
-  const font = ctx.graphics.font;
-  const shift = measureFontShift(ctx);
-  let width = 0;
-  const lines: TextLayout[] = [];
-
-  for (const segment of segments) {
-    if (segment.length === 0) {
-      lines.push({ width: 0, text: "", shift });
-      continue;
-    }
-    const prepared = readPreparedSegment(segment, font);
-    const { lines: segLines } = layoutWithLines(prepared, maxWidth, 0);
-    for (const segLine of segLines) {
-      width = Math.max(width, segLine.width);
-      lines.push({ width: segLine.width, text: segLine.text, shift });
-    }
+  const layout = layoutWithLines(readPreparedText(text, ctx.graphics.font, whiteSpace), maxWidth, 0);
+  if (layout.lines.length === 0) {
+    return { width: 0, lines: [] };
   }
+
+  const shift = measureFontShift(ctx);
+  const lines = layout.lines.map((line) => ({ width: line.width, text: line.text, shift }));
+  const width = lines.reduce((maxLineWidth, line) => Math.max(maxLineWidth, line.width), 0);
 
   return { width, lines };
 }
@@ -584,16 +538,16 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
   text: string,
   maxWidth: number,
   options: {
-    whitespace?: TextWhitespaceMode;
+    whiteSpace?: TextWhiteSpaceMode;
     overflow?: TextOverflowMode;
     maxLines?: number;
   } = {},
 ): OverflowTextBlockLayout {
-  const whitespace = options.whitespace ?? "preserve";
+  const whiteSpace = options.whiteSpace ?? "normal";
   const overflow = options.overflow ?? "clip";
   const normalizedMaxLines = normalizeMaxLines(options.maxLines);
 
-  const layout = layoutText(ctx, text, maxWidth, whitespace);
+  const layout = layoutText(ctx, text, maxWidth, whiteSpace);
   if (normalizedMaxLines == null || layout.lines.length <= normalizedMaxLines) {
     return {
       width: layout.width,
@@ -615,7 +569,7 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
   const lastVisibleLine = visibleLines[visibleLines.length - 1];
   const ellipsizedLastLine = lastVisibleLine == null || lastVisibleLine.text.length === 0
     ? createEllipsisOnlyLayout(ctx, Math.max(0, maxWidth), shift)
-    : layoutForcedEllipsizedLine(ctx, lastVisibleLine.text, maxWidth, shift);
+    : layoutForcedEllipsizedLine(ctx, lastVisibleLine.text, maxWidth, shift, whiteSpace);
 
   const lines = [
     ...visibleLines.slice(0, -1).map((line) => ({ ...line, overflowed: false })),

@@ -108,10 +108,10 @@ function getSingleLineLayout<C extends CanvasRenderingContext2D>(
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
   return readCachedTextLayout(node, ctx, getSingleLineLayoutKey(maxWidth), () =>
     maxWidth == null
-      ? layoutFirstLineIntrinsic(ctx, text, options.whitespace)
+      ? layoutFirstLineIntrinsic(ctx, text, options.whiteSpace)
       : options.overflow === "ellipsis"
-        ? layoutEllipsizedFirstLine(ctx, text, maxWidth, options.ellipsisPosition ?? "end", options.whitespace)
-        : layoutFirstLine(ctx, text, maxWidth, options.whitespace)
+        ? layoutEllipsizedFirstLine(ctx, text, maxWidth, options.ellipsisPosition ?? "end", options.whiteSpace)
+        : layoutFirstLine(ctx, text, maxWidth, options.whiteSpace)
   );
 }
 
@@ -124,7 +124,7 @@ function getMultiLineOverflowLayout<C extends CanvasRenderingContext2D>(
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
   return readCachedTextLayout(node, ctx, getMultiLineOverflowLayoutKey(maxWidth), () =>
     layoutTextWithOverflow(ctx, text, maxWidth ?? 0, {
-      whitespace: options.whitespace,
+      whiteSpace: options.whiteSpace,
       overflow: options.overflow,
       maxLines: options.maxLines,
     })
@@ -143,7 +143,7 @@ function getMultiLineMeasureLayout<C extends CanvasRenderingContext2D>(
     return { width: layout.width, lineCount: layout.lines.length };
   }
   return readCachedTextLayout(node, ctx, getMultiLineMeasureLayoutKey(maxWidth), () =>
-    maxWidth == null ? measureTextIntrinsic(ctx, text, options.whitespace) : measureText(ctx, text, maxWidth, options.whitespace)
+    maxWidth == null ? measureTextIntrinsic(ctx, text, options.whiteSpace) : measureText(ctx, text, maxWidth, options.whiteSpace)
   );
 }
 
@@ -158,7 +158,7 @@ function getMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
     return getMultiLineOverflowLayout(node, ctx, text, options);
   }
   return readCachedTextLayout(node, ctx, getMultiLineDrawLayoutKey(maxWidth), () =>
-    maxWidth == null ? layoutTextIntrinsic(ctx, text, options.whitespace) : layoutText(ctx, text, maxWidth, options.whitespace)
+    maxWidth == null ? layoutTextIntrinsic(ctx, text, options.whiteSpace) : layoutText(ctx, text, maxWidth, options.whiteSpace)
   );
 }
 
@@ -169,8 +169,8 @@ function getSingleLineMinContentLayout<C extends CanvasRenderingContext2D>(
   options: TextOptions<C>,
 ): SingleLineLayout {
   return readCachedTextLayout(node, ctx, getSingleLineMinContentLayoutKey(), () => {
-    const measurement = measureTextMinContent(ctx, text, options.whitespace, options.overflowWrap);
-    const { shift } = layoutFirstLineIntrinsic(ctx, text, options.whitespace);
+    const measurement = measureTextMinContent(ctx, text, options.whiteSpace, options.overflowWrap);
+    const { shift } = layoutFirstLineIntrinsic(ctx, text, options.whiteSpace);
     return {
       width: measurement.width,
       text,
@@ -183,11 +183,11 @@ function getMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
   node: Node<C>,
   ctx: Context<C>,
   text: string,
-  whitespace: MultilineTextOptions<C>["whitespace"],
+  whiteSpace: MultilineTextOptions<C>["whiteSpace"],
   overflowWrap: MultilineTextOptions<C>["overflowWrap"],
 ): MultiLineMeasureLayout {
   return readCachedTextLayout(node, ctx, getMultiLineMinContentLayoutKey(), () =>
-    measureTextMinContent(ctx, text, whitespace, overflowWrap)
+    measureTextMinContent(ctx, text, whiteSpace, overflowWrap)
   );
 }
 
@@ -219,7 +219,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
         this,
         ctx,
         this.text,
-        this.options.whitespace,
+        this.options.whiteSpace,
         this.options.overflowWrap,
       );
       return { width, height: lineCount * this.options.lineHeight };

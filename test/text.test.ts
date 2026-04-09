@@ -60,7 +60,7 @@ function createRecordingGraphics(recordedTexts: string[]): C {
 }
 
 describe("text metrics", () => {
-  test("multiline intrinsic layout measures font shift once per layout", () => {
+  test("multiline intrinsic layout follows normal white-space by default", () => {
     const measuredTexts: string[] = [];
     const ctx = {
       graphics: {
@@ -78,16 +78,14 @@ describe("text metrics", () => {
 
     const layout = layoutTextIntrinsic(ctx, "alpha\nbeta\ngamma");
 
-    expect(layout.width).toBe(40);
+    expect(layout.width).toBe(128);
     expect(layout.lines).toEqual([
-      { width: 40, text: "alpha", shift: 6 },
-      { width: 32, text: "beta", shift: 6 },
-      { width: 40, text: "gamma", shift: 6 },
+      { width: 128, text: "alpha beta gamma", shift: 6 },
     ]);
-    expect(measuredTexts).toHaveLength(4);
+    expect(measuredTexts).toEqual(["M"]);
   });
 
-  test("constrained measurement matches drawn multiline layout for preserved blank lines", () => {
+  test("pre-wrap constrained measurement matches drawn multiline layout for preserved blank lines", () => {
     const ctx = {
       graphics: {
         font: "16px text-metrics-preserve",
@@ -102,8 +100,8 @@ describe("text metrics", () => {
     } as Context<C>;
 
     const text = "你好世界 hello\n\nwrapped words for measurement";
-    const measured = measureText(ctx, text, 48, "preserve");
-    const layout = layoutText(ctx, text, 48, "preserve");
+    const measured = measureText(ctx, text, 48, "pre-wrap");
+    const layout = layoutText(ctx, text, 48, "pre-wrap");
 
     expect(measured).toEqual({
       width: layout.width,
@@ -112,7 +110,7 @@ describe("text metrics", () => {
     expect(layout.lines.some((line) => line.text === "")).toBe(true);
   });
 
-  test("trim-and-collapse measurement keeps semantic parity with layout", () => {
+  test("normal measurement keeps semantic parity with layout", () => {
     const ctx = {
       graphics: {
         font: "16px text-metrics-trim",
@@ -127,11 +125,11 @@ describe("text metrics", () => {
     } as Context<C>;
 
     const text = "  alpha beta  \n \n  gamma delta  ";
-    const intrinsic = measureTextIntrinsic(ctx, text, "trim-and-collapse");
-    const constrained = measureText(ctx, text, 40, "trim-and-collapse");
-    const layout = layoutText(ctx, text, 40, "trim-and-collapse");
+    const intrinsic = measureTextIntrinsic(ctx, text, "normal");
+    const constrained = measureText(ctx, text, 40, "normal");
+    const layout = layoutText(ctx, text, 40, "normal");
 
-    expect(intrinsic.lineCount).toBe(2);
+    expect(intrinsic.lineCount).toBe(1);
     expect(constrained).toEqual({
       width: layout.width,
       lineCount: layout.lines.length,
@@ -139,7 +137,7 @@ describe("text metrics", () => {
     expect(layout.lines.every((line) => line.text.trim().length > 0)).toBe(true);
   });
 
-  test("min-content measurement uses the longest token and preserves blank lines", () => {
+  test("pre-wrap min-content measurement uses the longest token and preserves blank lines", () => {
     const ctx = {
       graphics: {
         font: "16px text-min-content-preserve",
@@ -153,7 +151,7 @@ describe("text metrics", () => {
       },
     } as Context<C>;
 
-    expect(measureTextMinContent(ctx, "alpha beta\n\ngamma delta", "preserve")).toEqual({
+    expect(measureTextMinContent(ctx, "alpha beta\n\ngamma delta", "pre-wrap")).toEqual({
       width: 40,
       lineCount: 5,
     });
@@ -193,13 +191,13 @@ describe("text metrics", () => {
       },
     } as Context<C>;
 
-    expect(measureTextMinContent(ctx, "abcdefghij", "preserve", "anywhere")).toEqual({
+    expect(measureTextMinContent(ctx, "abcdefghij", "normal", "anywhere")).toEqual({
       width: 8,
       lineCount: 10,
     });
   });
 
-  test("min-content trim-and-collapse drops empty lines before tokenizing", () => {
+  test("normal min-content collapses blank lines before tokenizing", () => {
     const ctx = {
       graphics: {
         font: "16px text-min-content-trim",
@@ -213,10 +211,28 @@ describe("text metrics", () => {
       },
     } as Context<C>;
 
-    expect(measureTextMinContent(ctx, "  alpha beta  \n \n  gamma ", "trim-and-collapse")).toEqual({
+    expect(measureTextMinContent(ctx, "  alpha beta  \n \n  gamma ", "normal")).toEqual({
       width: 40,
       lineCount: 3,
     });
+  });
+
+  test("pre-wrap constrained layout preserves leading spaces after hard breaks", () => {
+    const ctx = createMeasuredContext("16px pre-wrap-leading-space");
+    const text = "hello world\n  foo bar baz";
+    const measured = measureText(ctx, text, 40, "pre-wrap");
+    const layout = layoutText(ctx, text, 40, "pre-wrap");
+
+    expect(measured).toEqual({ width: layout.width, lineCount: layout.lines.length });
+    expect(layout.lines.map((line) => line.text)).toEqual(["hello ", "world", "  foo ", "bar ", "baz"]);
+  });
+
+  test("pre-wrap constrained layout keeps repeated spaces inside wrapped lines", () => {
+    const ctx = createMeasuredContext("16px pre-wrap-repeated-space");
+    const text = "a  a  a\n  a  a";
+    const layout = layoutText(ctx, text, 40, "pre-wrap");
+
+    expect(layout.lines.map((line) => line.text)).toEqual(["a  a  ", "a", "  a  ", "a"]);
   });
 
   test("single-line end ellipsis keeps the visible prefix within maxWidth", () => {
@@ -314,13 +330,13 @@ describe("text metrics", () => {
     });
   });
 
-  test("trim-and-collapse ellipsis drops blank lines before applying maxLines", () => {
-    const ctx = createMeasuredContext("16px multiline-trim-ellipsis");
+  test("normal ellipsis collapses blank lines before applying maxLines", () => {
+    const ctx = createMeasuredContext("16px multiline-normal-ellipsis");
 
     expect(layoutTextWithOverflow(ctx, "  alpha beta  \n \n  gamma delta  ", 40, {
       overflow: "ellipsis",
       maxLines: 1,
-      whitespace: "trim-and-collapse",
+      whiteSpace: "normal",
     })).toEqual({
       width: 40,
       lines: [{ width: 40, text: "alph…", shift: 6, overflowed: true }],
@@ -383,6 +399,23 @@ describe("text metrics", () => {
     renderer.drawNode(node, { maxWidth: 40 });
 
     expect(recordedTexts).toEqual(["abcde", "fghi…"]);
+  });
+
+  test("MultilineText nodes preserve spaces with pre-wrap under constrained layout", () => {
+    const recordedTexts: string[] = [];
+    const renderer = new ConstraintTestRenderer(createRecordingGraphics(recordedTexts), {});
+    const node = new MultilineText<C>("hello world\n  foo bar baz", {
+      lineHeight: 20,
+      font: "16px multiline-node-pre-wrap",
+      style: "#000",
+      align: "start",
+      whiteSpace: "pre-wrap",
+    });
+
+    expect(renderer.measureNode(node, { maxWidth: 40 })).toEqual({ width: 48, height: 100 });
+    renderer.drawNode(node, { maxWidth: 40 });
+
+    expect(recordedTexts).toEqual(["hello ", "world", "  foo ", "bar ", "baz"]);
   });
 
   test("MultilineText nodes honor anywhere min-content sizing for continuous strings", () => {

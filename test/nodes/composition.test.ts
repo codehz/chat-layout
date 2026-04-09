@@ -286,7 +286,7 @@ function measureChatLikeBubbleTree(
 }
 
 describe("Place", () => {
-  test("Text preserves leading and trailing whitespace by default", () => {
+  test("Text defaults to normal white-space collapsing", () => {
     const { graphics, fillTexts } = createTextRecordingGraphics();
     const renderer = new ConstraintTestRenderer(graphics, {});
     const node = new Text<C>("  padded text  ", {
@@ -298,13 +298,13 @@ describe("Place", () => {
     const box = renderer.measureNode(node);
     renderer.drawNode(node);
 
-    expect(box).toEqual({ width: 120, height: 20 });
+    expect(box).toEqual({ width: 88, height: 20 });
     expect(fillTexts).toEqual([
-      { text: "  padded text  ", x: 0, y: 13 },
+      { text: "padded text", x: 0, y: 13 },
     ]);
   });
 
-  test("MultilineText preserves blank lines and edge whitespace by default", () => {
+  test("MultilineText defaults to normal white-space collapsing", () => {
     const { graphics, fillTexts } = createTextRecordingGraphics();
     const renderer = new ConstraintTestRenderer(graphics, {});
     const node = new MultilineText<C>("  alpha  \n\n beta ", {
@@ -317,34 +317,34 @@ describe("Place", () => {
     const box = renderer.measureNode(node);
     renderer.drawNode(node);
 
-    expect(box).toEqual({ width: 72, height: 60 });
-    expect(fillTexts.map(({ text }) => text)).toEqual(["  alpha  ", "", " beta "]);
+    expect(box).toEqual({ width: 80, height: 20 });
+    expect(fillTexts.map(({ text }) => text)).toEqual(["alpha beta"]);
   });
 
-  test("Text and MultilineText only normalize whitespace when explicitly requested", () => {
+  test("Text and MultilineText preserve whitespace when pre-wrap is requested", () => {
     const { graphics, fillTexts } = createTextRecordingGraphics();
     const renderer = new ConstraintTestRenderer(graphics, {});
     const textNode = new Text<C>("  padded text  ", {
       lineHeight: 20,
       font: "16px sans-serif",
       style: "#000",
-      whitespace: "trim-and-collapse",
+      whiteSpace: "pre-wrap",
     });
     const multilineNode = new MultilineText<C>("  alpha  \n\n beta ", {
       lineHeight: 20,
       font: "16px sans-serif",
       align: "start",
       style: "#000",
-      whitespace: "trim-and-collapse",
+      whiteSpace: "pre-wrap",
     });
 
-    expect(renderer.measureNode(textNode)).toEqual({ width: 88, height: 20 });
+    expect(renderer.measureNode(textNode)).toEqual({ width: 120, height: 20 });
     renderer.drawNode(textNode);
 
-    expect(renderer.measureNode(multilineNode)).toEqual({ width: 40, height: 40 });
+    expect(renderer.measureNode(multilineNode)).toEqual({ width: 72, height: 60 });
     renderer.drawNode(multilineNode);
 
-    expect(fillTexts.map(({ text }) => text)).toEqual(["padded text", "alpha", "beta"]);
+    expect(fillTexts.map(({ text }) => text)).toEqual(["  padded text  ", "  alpha  ", "", " beta "]);
   });
 
   test("MultilineText supports logical align and explicit physicalAlign", () => {
@@ -355,6 +355,7 @@ describe("Place", () => {
       font: "16px sans-serif",
       align: "end",
       style: "#000",
+      whiteSpace: "pre-wrap",
     });
 
     logicalRenderer.drawNode(logicalNode);
@@ -368,6 +369,7 @@ describe("Place", () => {
       font: "16px sans-serif",
       physicalAlign: "right",
       style: "#000",
+      whiteSpace: "pre-wrap",
     });
 
     physicalRenderer.drawNode(physicalNode);

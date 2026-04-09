@@ -266,4 +266,28 @@ describe("text layout cache", () => {
       expect(offscreen.count).toBe(warmOffscreenMeasures);
     });
   });
+
+  test("same text with different whiteSpace modes keep separate prepared text entries", () => {
+    let graphicsMeasures = 0;
+    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
+      graphicsMeasures += 1;
+    }), {});
+    const text = "  alpha  \n\n beta ";
+    const font = "16px cache-test-white-space-mode";
+    const normalNode = createMultilineNode(text, font, { whiteSpace: "normal" });
+    const preWrapNode = createMultilineNode(text, font, { whiteSpace: "pre-wrap" });
+
+    withOffscreenMeasureCounter((offscreen) => {
+      renderer.drawNode(normalNode, { maxWidth: 80 });
+      const normalGraphicsMeasures = graphicsMeasures;
+      const normalOffscreenMeasures = offscreen.count;
+
+      expect(normalOffscreenMeasures).toBeGreaterThan(0);
+
+      renderer.drawNode(preWrapNode, { maxWidth: 80 });
+
+      expect(graphicsMeasures).toBe(normalGraphicsMeasures);
+      expect(offscreen.count).toBeGreaterThan(normalOffscreenMeasures);
+    });
+  });
 });
