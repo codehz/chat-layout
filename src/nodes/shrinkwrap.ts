@@ -5,6 +5,7 @@ import { readLayoutResult, withConstraints, writeLayoutResult } from "./shared";
 
 export interface ShrinkWrapOptions {
   tolerance?: number;
+  preferredMinWidth?: number;
 }
 
 const DEFAULT_TOLERANCE = 0.5;
@@ -89,6 +90,12 @@ export class ShrinkWrap<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     const referenceConstraints = { ...boundedConstraints };
     const referenceBox = ctx.measureNode(this.inner, referenceConstraints);
     let lowerBound = measureNodeMinContent(ctx, this.inner, boundedConstraints).width;
+    const preferredMinWidth = this.options.preferredMinWidth == null
+      ? undefined
+      : Math.max(0, this.options.preferredMinWidth);
+    if (preferredMinWidth != null && preferredMinWidth <= availableWidth) {
+      lowerBound = Math.max(lowerBound, preferredMinWidth);
+    }
     if (boundedConstraints.minWidth != null) {
       lowerBound = Math.max(lowerBound, boundedConstraints.minWidth);
     }

@@ -895,6 +895,36 @@ describe("Place", () => {
     });
   });
 
+  test("ShrinkWrap respects preferredMinWidth as a soft lower bound", () => {
+    const renderer = new BaseRenderer(createGraphics(240, 100), {});
+    const place = new Place<C>(createResponsiveProbeNode().node, { align: "end", expand: true });
+    const wrapped = new ShrinkWrap<C>(place, { preferredMinWidth: 140 });
+    const constraints = { maxWidth: 200 };
+
+    const box = renderer.measureNode(wrapped, constraints);
+    const layout = renderer.getLayoutResult(wrapped, constraints);
+
+    expect(box).toEqual({ width: 140, height: 10 });
+    expect(layout?.children[0]?.constraints).toEqual({
+      maxWidth: 140,
+    });
+  });
+
+  test("ShrinkWrap ignores preferredMinWidth when parent maxWidth is tighter", () => {
+    const renderer = new BaseRenderer(createGraphics(240, 100), {});
+    const place = new Place<C>(createResponsiveProbeNode().node, { align: "end", expand: true });
+    const wrapped = new ShrinkWrap<C>(place, { preferredMinWidth: 140 });
+    const constraints = { maxWidth: 130 };
+
+    const box = renderer.measureNode(wrapped, constraints);
+    const layout = renderer.getLayoutResult(wrapped, constraints);
+
+    expect(box.width).toBeGreaterThanOrEqual(120);
+    expect(box.width).toBeLessThan(120.5);
+    expect(box.height).toBe(10);
+    expect(layout?.children[0]?.constraints?.maxWidth).toBeLessThan(130);
+  });
+
   test("ShrinkWrap lets reply previews widen a chat bubble only as much as needed", () => {
     const renderer = new BaseRenderer(createGraphics(320, 200), {});
     const noReply = new ShrinkWrap<C>(

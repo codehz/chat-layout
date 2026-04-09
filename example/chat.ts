@@ -358,7 +358,9 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     alignItems: item.sender === "A" ? "end" : "start",
   });
 
-  const shrinkWrappedBody = new ShrinkWrap<C>(body);
+  const shrinkWrappedBody = new ShrinkWrap<C>(body, {
+    preferredMinWidth: 160,
+  });
 
   const alignedBody = new Place<C>(shrinkWrappedBody, {
     align: item.sender === "A" ? "end" : "start",
