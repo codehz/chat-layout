@@ -1,8 +1,9 @@
 import {
   layoutNextLine,
   layoutWithLines,
+  measureLineStats,
+  measureNaturalWidth,
   prepareWithSegments,
-  walkLineRanges,
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
 import type {
@@ -137,7 +138,7 @@ function measurePreparedMinContentWidth(
     maxAnyWidth = Math.max(maxAnyWidth, segmentWidth);
     const segment = prepared.segments[i];
     if (segment != null && segment.trim().length > 0) {
-      const breakableWidths = prepared.breakableWidths[i];
+      const breakableWidths = prepared.breakableFitAdvances[i];
       const minContentWidth = overflowWrap === "anywhere" && breakableWidths != null && breakableWidths.length > 0
         ? breakableWidths.reduce((widest, width) => Math.max(widest, width), 0)
         : segmentWidth;
@@ -145,14 +146,6 @@ function measurePreparedMinContentWidth(
     }
   }
   return maxWidth > 0 ? maxWidth : maxAnyWidth;
-}
-
-function measurePreparedWidth(prepared: PreparedTextWithSegments): number {
-  let width = 0;
-  for (const segmentWidth of prepared.widths) {
-    width += segmentWidth ?? 0;
-  }
-  return width;
 }
 
 function getGraphemeSegmenter(): Intl.Segmenter | null {
@@ -187,7 +180,7 @@ function getPreparedUnits(prepared: PreparedTextWithSegments): PreparedTextUnit[
   for (let i = 0; i < prepared.segments.length; i += 1) {
     const segment = prepared.segments[i] ?? "";
     const segmentWidth = prepared.widths[i] ?? 0;
-    const breakableWidths = prepared.breakableWidths[i];
+    const breakableWidths = prepared.breakableFitAdvances[i];
     if (breakableWidths != null && segment.length > 0) {
       const graphemes = splitGraphemes(segment);
       if (graphemes.length === breakableWidths.length) {
@@ -286,7 +279,7 @@ function layoutPreparedEllipsis<C extends CanvasRenderingContext2D>(
   position: TextEllipsisPosition,
   forceEllipsis = false,
 ): OverflowTextLayout {
-  const intrinsicWidth = measurePreparedWidth(prepared);
+  const intrinsicWidth = measureNaturalWidth(prepared);
   if (!forceEllipsis && intrinsicWidth <= maxWidth) {
     return { width: intrinsicWidth, text, shift, overflowed: false };
   }
@@ -373,7 +366,7 @@ export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
   }
   const shift = measureFontShift(ctx);
   return {
-    width: measurePreparedWidth(firstLine.prepared),
+    width: measureNaturalWidth(firstLine.prepared),
     text: firstLine.text,
     shift,
   };
@@ -385,10 +378,7 @@ export function measureTextIntrinsic<C extends CanvasRenderingContext2D>(
   whiteSpace: TextWhiteSpaceMode = "normal",
 ): TextMeasurement {
   const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
-  let width = 0;
-  const lineCount = walkLineRanges(prepared, INTRINSIC_MAX_WIDTH, (line) => {
-    width = Math.max(width, line.width);
-  });
+  const { maxLineWidth: width, lineCount } = measureLineStats(prepared, INTRINSIC_MAX_WIDTH);
   if (lineCount === 0) {
     return { width: 0, lineCount: 0 };
   }
@@ -482,10 +472,7 @@ export function measureText<C extends CanvasRenderingContext2D>(
   }
 
   const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace);
-  let width = 0;
-  const lineCount = walkLineRanges(prepared, maxWidth, (line) => {
-    width = Math.max(width, line.width);
-  });
+  const { maxLineWidth: width, lineCount } = measureLineStats(prepared, maxWidth);
 
   return { width, lineCount };
 }
@@ -503,7 +490,7 @@ export function measureTextMinContent<C extends CanvasRenderingContext2D>(
 
   const width = measurePreparedMinContentWidth(prepared, overflowWrap);
   const lineMaxWidth = Math.max(width, MIN_CONTENT_WIDTH_EPSILON);
-  const lineCount = walkLineRanges(prepared, lineMaxWidth, () => {});
+  const { lineCount } = measureLineStats(prepared, lineMaxWidth);
 
   return { width, lineCount };
 }

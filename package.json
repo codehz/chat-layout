@@ -9,7 +9,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@chenglou/pretext": "0.0.3"
+    "@chenglou/pretext": "0.0.5"
   },
   "repository": {
     "url": "https://github.com/codehz/chat-layout.git"
