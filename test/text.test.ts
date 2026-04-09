@@ -2,15 +2,20 @@ import { describe, expect, test } from "bun:test";
 
 import {
   layoutEllipsizedFirstLine,
+  layoutRichText,
+  layoutRichTextWithOverflow,
   layoutText,
   layoutTextIntrinsic,
   layoutTextWithOverflow,
+  measureRichText,
+  measureRichTextIntrinsic,
+  measureRichTextMinContent,
   measureText,
   measureTextIntrinsic,
   measureTextMinContent,
 } from "../src/text";
 import { MultilineText, Text } from "../src/nodes";
-import type { Context } from "../src/types";
+import type { Context, InlineSpan } from "../src/types";
 import { ensureMockOffscreenCanvas } from "./helpers/graphics";
 import { ConstraintTestRenderer } from "./helpers/renderer-fixtures";
 
@@ -32,6 +37,15 @@ function createMeasuredContext(font: string): Context<C> {
     },
   } as Context<C>;
 }
+
+type RecordedDraw = {
+  text: string;
+  font: string;
+  fillStyle: string | CanvasGradient | CanvasPattern;
+  textAlign: CanvasTextAlign;
+  x: number;
+  y: number;
+};
 
 function createRecordingGraphics(recordedTexts: string[]): C {
   return {
@@ -57,6 +71,40 @@ function createRecordingGraphics(recordedTexts: string[]): C {
     save() {},
     restore() {},
   } as unknown as C;
+}
+
+function createRichRecordingGraphics(recordedDraws: RecordedDraw[]): C {
+  const graphics = {
+    canvas: {
+      clientWidth: 320,
+      clientHeight: 100,
+    },
+    fillStyle: "#000",
+    font: "16px sans-serif",
+    textAlign: "left" as CanvasTextAlign,
+    textRendering: "auto",
+    clearRect() {},
+    fillText(text: string, x = 0, y = 0) {
+      recordedDraws.push({
+        text,
+        font: graphics.font,
+        fillStyle: graphics.fillStyle,
+        textAlign: graphics.textAlign,
+        x,
+        y,
+      });
+    },
+    measureText(text: string) {
+      return {
+        width: text.length * 8,
+        fontBoundingBoxAscent: 8,
+        fontBoundingBoxDescent: 2,
+      } as TextMetrics;
+    },
+    save() {},
+    restore() {},
+  };
+  return graphics as unknown as C;
 }
 
 describe("text metrics", () => {
@@ -467,20 +515,65 @@ describe("text metrics", () => {
     expect(renderer.measureMinContentNode(node)).toEqual({ width: 8, height: 200 });
   });
 
-  test("MultilineText nodes pass wordBreak through to pretext layout", () => {
-    const recordedTexts: string[] = [];
-    const renderer = new ConstraintTestRenderer(createRecordingGraphics(recordedTexts), {});
-    const node = new MultilineText<C>("你好，世界你好", {
+  test("rich text metrics measure and layout multiline spans", () => {
+    const ctx = createMeasuredContext("16px rich-measure");
+    const spans: InlineSpan<C>[] = [
+      { text: "hello ", style: "#111" },
+      { text: "world", font: "600 16px rich-bold", style: "#f00" },
+      { text: " again", style: "#222" },
+    ];
+
+    expect(measureRichTextIntrinsic(ctx, spans, "16px rich-measure")).toEqual({ width: 136, lineCount: 1 });
+    expect(measureRichText(ctx, spans, 48, "16px rich-measure")).toEqual({ width: 40, lineCount: 3 });
+
+    const layout = layoutRichText(ctx, spans, 48, "16px rich-measure", "#000");
+    expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual(["hello", "world", "again"]);
+  });
+
+  test("rich text metrics support maxLines ellipsis", () => {
+    const ctx = createMeasuredContext("16px rich-overflow");
+    const spans: InlineSpan<C>[] = [
+      { text: "abcdefghij", style: "#111" },
+      { text: "klmno", font: "600 16px rich-overflow-bold", style: "#f00" },
+    ];
+
+    const layout = layoutRichTextWithOverflow(ctx, spans, 40, "16px rich-overflow", "#000", 2, "ellipsis");
+    expect(layout.overflowed).toBe(true);
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines[1]?.fragments.map((frag) => frag.text).join("")).toBe("fghi…");
+  });
+
+  test("rich text min-content uses widest span fragment", () => {
+    const ctx = createMeasuredContext("16px rich-min");
+    const spans: InlineSpan<C>[] = [
+      { text: "a", style: "#111" },
+      { text: "abcdefgh", font: "600 16px rich-min-bold", style: "#f00" },
+      { text: "bc", style: "#222" },
+    ];
+
+    expect(measureRichTextMinContent(ctx, spans, "16px rich-min", "anywhere")).toEqual({ width: 8, lineCount: 11 });
+  });
+
+  test("MultilineText nodes draw rich spans with per-fragment font and style", () => {
+    const recordedDraws: RecordedDraw[] = [];
+    const renderer = new ConstraintTestRenderer(createRichRecordingGraphics(recordedDraws), {});
+    const node = new MultilineText<C>([
+      { text: "hello ", style: "#111" },
+      { text: "world", font: "600 16px rich-node-bold", style: "#f00" },
+      { text: " again", style: "#222" },
+    ], {
       lineHeight: 20,
-      font: "16px multiline-node-keep-all",
+      font: "16px rich-node",
       style: "#000",
       align: "start",
-      wordBreak: "keep-all",
     });
 
-    expect(renderer.measureNode(node, { maxWidth: 16 })).toEqual({ width: 16, height: 80 });
-    renderer.drawNode(node, { maxWidth: 16 });
+    expect(renderer.measureNode(node, { maxWidth: 48 })).toEqual({ width: 40, height: 60 });
+    renderer.drawNode(node, { maxWidth: 48 });
 
-    expect(recordedTexts).toEqual(["你好", "，", "世界", "你好"]);
+    expect(recordedDraws.map((draw) => draw.text)).toEqual(["hello", "world", "again"]);
+    expect(recordedDraws[0]).toMatchObject({ font: "16px rich-node", fillStyle: "#111", textAlign: "left" });
+    expect(recordedDraws[1]).toMatchObject({ font: "600 16px rich-node-bold", fillStyle: "#f00", textAlign: "left" });
+    expect(recordedDraws[2]).toMatchObject({ font: "16px rich-node", fillStyle: "#222", textAlign: "left" });
   });
 });

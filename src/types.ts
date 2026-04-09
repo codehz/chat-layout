@@ -104,6 +104,22 @@ export interface TextStyleOptions<C extends CanvasRenderingContext2D> {
 }
 
 /**
+ * A span-like inline text fragment used by rich multi-line text.
+ */
+export interface InlineSpan<C extends CanvasRenderingContext2D> {
+  /** Source text contained in this inline fragment. */
+  text: string;
+  /** Canvas font string override for this fragment. Falls back to the node-level font. */
+  font?: string;
+  /** Fill style override for this fragment. Falls back to the node-level style. */
+  style?: DynValue<C, string>;
+  /** Optional break hint forwarded to pretext rich-inline layout. */
+  break?: "normal" | "never";
+  /** Optional extra occupied width forwarded to pretext rich-inline layout. */
+  extraWidth?: number;
+}
+
+/**
  * Options for multi-line text nodes.
  */
 export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {

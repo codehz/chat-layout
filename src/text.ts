@@ -6,8 +6,18 @@ import {
   prepareWithSegments,
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
+import {
+  materializeRichInlineLineRange,
+  measureRichInlineStats,
+  prepareRichInline,
+  walkRichInlineLineRanges,
+  type PreparedRichInline,
+  type RichInlineLineRange,
+} from "@chenglou/pretext/rich-inline";
 import type {
   Context,
+  DynValue,
+  InlineSpan,
   TextEllipsisPosition,
   TextOverflowMode,
   TextOverflowWrapMode,
@@ -592,6 +602,297 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
   return {
     width: lines.reduce((lineWidth, line) => Math.max(lineWidth, line.width), 0),
     lines,
+    overflowed: true,
+  };
+}
+
+// ─── Rich inline (InlineSpan) layout ────────────────────────────────────────
+
+const RICH_PREPARED_CACHE_CAPACITY = 256;
+const richPreparedCache = new Map<string, PreparedRichInline>();
+
+export interface RichFragmentLayout {
+  itemIndex: number;
+  text: string;
+  font: string;
+  style: DynValue<any, string> | undefined;
+  gapBefore: number;
+  occupiedWidth: number;
+  shift: number;
+}
+
+export interface RichLineLayout {
+  width: number;
+  fragments: RichFragmentLayout[];
+  overflowed: boolean;
+}
+
+export interface RichBlockLayout {
+  width: number;
+  lines: RichLineLayout[];
+  overflowed: boolean;
+}
+
+export interface RichMeasurement {
+  width: number;
+  lineCount: number;
+}
+
+function getRichPreparedCacheKey<C extends CanvasRenderingContext2D>(
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+): string {
+  return spans
+    .map((s) => `${s.font ?? defaultFont}\u0000${s.text}\u0000${s.break ?? ""}\u0000${s.extraWidth ?? 0}`)
+    .join("\u0001");
+}
+
+function readRichPrepared<C extends CanvasRenderingContext2D>(
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+): PreparedRichInline {
+  const key = getRichPreparedCacheKey(spans, defaultFont);
+  const cached = readLruValue(richPreparedCache, key);
+  if (cached != null) return cached;
+  const items = spans.map((s) => ({
+    text: s.text,
+    font: s.font ?? defaultFont,
+    break: s.break,
+    extraWidth: s.extraWidth,
+  }));
+  return writeLruValue(richPreparedCache, key, prepareRichInline(items), RICH_PREPARED_CACHE_CAPACITY);
+}
+
+function materializeRichLine<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+  defaultStyle: DynValue<C, string>,
+  lineRange: RichInlineLineRange,
+  overflowed: boolean,
+): RichLineLayout {
+  const prepared = readRichPrepared(spans, defaultFont);
+  const richLine = materializeRichInlineLineRange(prepared, lineRange);
+  // Set the font for measuring shift per-fragment based on fragment font
+  const fragments: RichFragmentLayout[] = richLine.fragments.map((frag) => {
+    const span = spans[frag.itemIndex];
+    const fragFont = span?.font ?? defaultFont;
+    const fragStyle = span?.style ?? defaultStyle;
+    const prevFont = ctx.graphics.font;
+    ctx.graphics.font = fragFont;
+    const shift = measureFontShift(ctx);
+    ctx.graphics.font = prevFont;
+    return {
+      itemIndex: frag.itemIndex,
+      text: frag.text,
+      font: fragFont,
+      style: fragStyle as DynValue<any, string>,
+      gapBefore: frag.gapBefore,
+      occupiedWidth: frag.occupiedWidth,
+      shift,
+    };
+  });
+  return { width: richLine.width, fragments, overflowed };
+}
+
+export function measureRichText<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  maxWidth: number,
+  defaultFont: string,
+): RichMeasurement {
+  if (spans.length === 0) return { width: 0, lineCount: 0 };
+  const prepared = readRichPrepared(spans, defaultFont);
+  const { maxLineWidth: width, lineCount } = measureRichInlineStats(prepared, maxWidth);
+  return { width, lineCount };
+}
+
+export function measureRichTextIntrinsic<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+): RichMeasurement {
+  if (spans.length === 0) return { width: 0, lineCount: 0 };
+  const prepared = readRichPrepared(spans, defaultFont);
+  const { maxLineWidth: width, lineCount } = measureRichInlineStats(prepared, INTRINSIC_MAX_WIDTH);
+  return { width, lineCount };
+}
+
+export function measureRichTextMinContent<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+  overflowWrap: TextOverflowWrapMode = "break-word",
+): RichMeasurement {
+  if (spans.length === 0) return { width: 0, lineCount: 0 };
+  // Measure min-content per span independently, take the max. This is an MVP
+  // approximation; `break: "never"` cross-span groups are not modeled precisely.
+  let maxWidth = 0;
+  for (const span of spans) {
+    if (span.text.trim().length === 0) continue;
+    const font = span.font ?? defaultFont;
+    const prep = readPreparedText(span.text, font, "normal", "normal");
+    const spanMin = measurePreparedMinContentWidth(prep, overflowWrap) + (span.extraWidth ?? 0);
+    if (spanMin > maxWidth) maxWidth = spanMin;
+  }
+  if (maxWidth === 0) return { width: 0, lineCount: 0 };
+  const prepared = readRichPrepared(spans, defaultFont);
+  const lineMaxWidth = Math.max(maxWidth, MIN_CONTENT_WIDTH_EPSILON);
+  const { lineCount } = measureRichInlineStats(prepared, lineMaxWidth);
+  return { width: maxWidth, lineCount };
+}
+
+export function layoutRichText<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  maxWidth: number,
+  defaultFont: string,
+  defaultStyle: DynValue<C, string>,
+): RichBlockLayout {
+  if (spans.length === 0) return { width: 0, lines: [], overflowed: false };
+  const prepared = readRichPrepared(spans, defaultFont);
+  const lineRanges: RichInlineLineRange[] = [];
+  walkRichInlineLineRanges(prepared, maxWidth, (line) => lineRanges.push(line));
+  if (lineRanges.length === 0) return { width: 0, lines: [], overflowed: false };
+  const lines = lineRanges.map((lr) => materializeRichLine(ctx, spans, defaultFont, defaultStyle, lr, false));
+  const width = lines.reduce((max, line) => Math.max(max, line.width), 0);
+  return { width, lines, overflowed: false };
+}
+
+export function layoutRichTextIntrinsic<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  defaultFont: string,
+  defaultStyle: DynValue<C, string>,
+): RichBlockLayout {
+  return layoutRichText(ctx, spans, INTRINSIC_MAX_WIDTH, defaultFont, defaultStyle);
+}
+
+export function layoutRichTextWithOverflow<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  maxWidth: number,
+  defaultFont: string,
+  defaultStyle: DynValue<C, string>,
+  maxLines?: number,
+  overflow: TextOverflowMode = "clip",
+): RichBlockLayout {
+  if (spans.length === 0) return { width: 0, lines: [], overflowed: false };
+
+  const normalizedMaxLines = normalizeMaxLines(maxLines);
+  const layout = layoutRichText(ctx, spans, maxWidth, defaultFont, defaultStyle);
+
+  if (normalizedMaxLines == null || layout.lines.length <= normalizedMaxLines) {
+    return layout;
+  }
+
+  const visibleLines = layout.lines.slice(0, normalizedMaxLines);
+
+  if (overflow !== "ellipsis") {
+    return {
+      width: visibleLines.reduce((max, line) => Math.max(max, line.width), 0),
+      lines: visibleLines,
+      overflowed: true,
+    };
+  }
+
+  // End-ellipsis on the last visible line
+  const lastLine = visibleLines[visibleLines.length - 1];
+  if (lastLine == null || lastLine.fragments.length === 0) {
+    return {
+      width: visibleLines.slice(0, -1).reduce((max, line) => Math.max(max, line.width), 0),
+      lines: visibleLines.slice(0, -1),
+      overflowed: true,
+    };
+  }
+
+  // Find the last fragment's font for ellipsis width measurement
+  const lastFrag = lastLine.fragments[lastLine.fragments.length - 1]!;
+  const prevFont1 = ctx.graphics.font;
+  ctx.graphics.font = lastFrag.font;
+  const ellipsisWidth = measureEllipsisWidth(ctx);
+  ctx.graphics.font = prevFont1;
+
+  if (maxWidth <= 0 || ellipsisWidth > maxWidth) {
+    const truncatedLine: RichLineLayout = { width: 0, fragments: [], overflowed: true };
+    return {
+      width: visibleLines.slice(0, -1).reduce((max, line) => Math.max(max, line.width), 0),
+      lines: [...visibleLines.slice(0, -1), truncatedLine],
+      overflowed: true,
+    };
+  }
+
+  // Rebuild last line respecting ellipsis budget
+  const budget = maxWidth - ellipsisWidth;
+  const resultFragments: RichFragmentLayout[] = [];
+  let usedWidth = 0;
+  let ellipsisFont = lastFrag.font;
+  let ellipsisStyle: DynValue<any, string> | undefined = lastFrag.style;
+  let truncated = false;
+
+  for (let fi = 0; fi < lastLine.fragments.length; fi++) {
+    const frag = lastLine.fragments[fi]!;
+    const neededGap = fi === 0 ? 0 : frag.gapBefore;
+    const fragTotal = neededGap + frag.occupiedWidth;
+
+    if (usedWidth + fragTotal <= budget) {
+      resultFragments.push({ ...frag, gapBefore: fi === 0 ? 0 : frag.gapBefore });
+      usedWidth += fragTotal;
+    } else {
+      // Try fitting a prefix of this fragment character by character
+      ellipsisFont = frag.font;
+      ellipsisStyle = frag.style;
+      const remaining = budget - usedWidth - neededGap;
+      if (remaining > 0 && frag.text.length > 0) {
+        // Measure grapheme prefix that fits
+        const frag_prep = readPreparedText(frag.text, frag.font, "normal", "normal");
+        const units = getPreparedUnits(frag_prep);
+        let charWidth = 0;
+        let charText = "";
+        for (const unit of units) {
+          if (charWidth + unit.width > remaining) break;
+          charWidth += unit.width;
+          charText += unit.text;
+        }
+        if (charText.length > 0) {
+          resultFragments.push({
+            ...frag,
+            text: charText,
+            occupiedWidth: charWidth,
+            gapBefore: fi === 0 ? 0 : frag.gapBefore,
+          });
+          usedWidth += neededGap + charWidth;
+        }
+      }
+      truncated = true;
+      break;
+    }
+  }
+
+  // Append ellipsis as a synthetic fragment
+  const prevFont2 = ctx.graphics.font;
+  ctx.graphics.font = ellipsisFont;
+  const ellipsisShift = measureFontShift(ctx);
+  ctx.graphics.font = prevFont2;
+  resultFragments.push({
+    itemIndex: -1,
+    text: ELLIPSIS_GLYPH,
+    font: ellipsisFont,
+    style: ellipsisStyle,
+    gapBefore: 0,
+    occupiedWidth: ellipsisWidth,
+    shift: ellipsisShift,
+  });
+
+  const lastLineResult: RichLineLayout = {
+    width: usedWidth + ellipsisWidth,
+    fragments: resultFragments,
+    overflowed: truncated || layout.lines.length > normalizedMaxLines,
+  };
+
+  return {
+    width: [...visibleLines.slice(0, -1), lastLineResult].reduce((max, line) => Math.max(max, line.width), 0),
+    lines: [...visibleLines.slice(0, -1), lastLineResult],
     overflowed: true,
   };
 }

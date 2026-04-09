@@ -2,16 +2,24 @@ import {
   layoutEllipsizedFirstLine,
   layoutFirstLine,
   layoutFirstLineIntrinsic,
+  layoutRichText,
+  layoutRichTextIntrinsic,
+  layoutRichTextWithOverflow,
   layoutText,
   layoutTextIntrinsic,
   layoutTextWithOverflow,
+  measureRichText,
+  measureRichTextIntrinsic,
+  measureRichTextMinContent,
   measureText,
   measureTextMinContent,
   measureTextIntrinsic,
+  type RichBlockLayout,
+  type RichMeasurement,
   type TextLayout,
   type TextMeasurement,
 } from "../text";
-import type { Box, Context, MultilineTextOptions, Node, PhysicalTextAlign, TextOptions } from "../types";
+import type { Box, Context, InlineSpan, MultilineTextOptions, Node, PhysicalTextAlign, TextOptions } from "../types";
 
 type SingleLineLayout = TextLayout;
 type MultiLineDrawLayout = {
@@ -79,12 +87,24 @@ function getMultiLineMeasureLayoutKey(maxWidth: number | undefined): string {
   return maxWidth == null ? "multi:measure:intrinsic" : `multi:measure:${maxWidth}`;
 }
 
+function getRichMultiLineMeasureLayoutKey(maxWidth: number | undefined): string {
+  return maxWidth == null ? "rich:measure:intrinsic" : `rich:measure:${maxWidth}`;
+}
+
 function getMultiLineDrawLayoutKey(maxWidth: number | undefined): string {
   return maxWidth == null ? "multi:draw:intrinsic" : `multi:draw:${maxWidth}`;
 }
 
+function getRichMultiLineDrawLayoutKey(maxWidth: number | undefined): string {
+  return maxWidth == null ? "rich:draw:intrinsic" : `rich:draw:${maxWidth}`;
+}
+
 function getMultiLineOverflowLayoutKey(maxWidth: number | undefined): string {
   return maxWidth == null ? "multi:overflow:intrinsic" : `multi:overflow:${maxWidth}`;
+}
+
+function getRichMultiLineOverflowLayoutKey(maxWidth: number | undefined): string {
+  return maxWidth == null ? "rich:overflow:intrinsic" : `rich:overflow:${maxWidth}`;
 }
 
 function shouldUseMultilineOverflowLayout(options: Pick<MultilineTextOptions<any>, "maxLines">): boolean {
@@ -97,6 +117,10 @@ function getSingleLineMinContentLayoutKey(): string {
 
 function getMultiLineMinContentLayoutKey(): string {
   return "multi:min-content";
+}
+
+function getRichMultiLineMinContentLayoutKey(): string {
+  return "rich:min-content";
 }
 
 function getSingleLineLayout<C extends CanvasRenderingContext2D>(
@@ -204,34 +228,103 @@ function getMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
   );
 }
 
+function getRichMultiLineMeasureLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  options: MultilineTextOptions<C>,
+): RichMeasurement {
+  const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+  if (maxWidth != null && shouldUseMultilineOverflowLayout(options)) {
+    const layout = getRichMultiLineOverflowLayout(node, ctx, spans, options);
+    return { width: layout.width, lineCount: layout.lines.length };
+  }
+  return readCachedTextLayout(node, ctx, getRichMultiLineMeasureLayoutKey(maxWidth), () =>
+    maxWidth == null
+      ? measureRichTextIntrinsic(ctx, spans, options.font)
+      : measureRichText(ctx, spans, maxWidth, options.font)
+  );
+}
+
+function getRichMultiLineOverflowLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  options: MultilineTextOptions<C>,
+): RichBlockLayout {
+  const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+  return readCachedTextLayout(node, ctx, getRichMultiLineOverflowLayoutKey(maxWidth), () =>
+    layoutRichTextWithOverflow(ctx, spans, maxWidth ?? 0, options.font, options.style, options.maxLines, options.overflow)
+  );
+}
+
+function getRichMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  options: MultilineTextOptions<C>,
+): RichBlockLayout {
+  const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+  if (maxWidth != null && shouldUseMultilineOverflowLayout(options)) {
+    return getRichMultiLineOverflowLayout(node, ctx, spans, options);
+  }
+  return readCachedTextLayout(node, ctx, getRichMultiLineDrawLayoutKey(maxWidth), () =>
+    maxWidth == null
+      ? layoutRichTextIntrinsic(ctx, spans, options.font, options.style)
+      : layoutRichText(ctx, spans, maxWidth, options.font, options.style)
+  );
+}
+
+function getRichMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  ctx: Context<C>,
+  spans: InlineSpan<C>[],
+  options: MultilineTextOptions<C>,
+): RichMeasurement {
+  return readCachedTextLayout(node, ctx, getRichMultiLineMinContentLayoutKey(), () =>
+    measureRichTextMinContent(ctx, spans, options.font, options.overflowWrap)
+  );
+}
+
 /**
  * Draws wrapped text using the configured line height and alignment.
+ * Accepts either a plain string or an array of `InlineSpan` items for mixed inline styles.
  */
 export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C> {
   /**
-   * @param text Source text to measure and draw.
+   * @param text Source text to measure and draw. Pass an `InlineSpan[]` for mixed inline styles.
    * @param options Text layout and drawing options.
    */
   constructor(
-    readonly text: string,
+    readonly text: string | InlineSpan<C>[],
     readonly options: MultilineTextOptions<C>,
   ) {}
 
   measure(ctx: Context<C>): Box {
+    if (typeof this.text !== "string") {
+      const spans = this.text;
+      const { width, lineCount } = getRichMultiLineMeasureLayout(this, ctx, spans, this.options);
+      return { width, height: lineCount * this.options.lineHeight };
+    }
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width, lineCount } = getMultiLineMeasureLayout(this, ctx, this.text, this.options);
+      const { width, lineCount } = getMultiLineMeasureLayout(this, ctx, this.text as string, this.options);
       return { width, height: lineCount * this.options.lineHeight };
     });
   }
 
   measureMinContent(ctx: Context<C>): Box {
+    if (typeof this.text !== "string") {
+      const spans = this.text;
+      const { width, lineCount } = getRichMultiLineMinContentLayout(this, ctx, spans, this.options);
+      return { width, height: lineCount * this.options.lineHeight };
+    }
     return ctx.with((g) => {
       g.font = this.options.font;
       const { width, lineCount } = getMultiLineMinContentLayout(
         this,
         ctx,
-        this.text,
+        this.text as string,
         this.options.whiteSpace,
         this.options.wordBreak,
         this.options.overflowWrap,
@@ -241,10 +334,38 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   }
 
   draw(ctx: Context<C>, x: number, y: number): boolean {
+    if (typeof this.text !== "string") {
+      const spans = this.text;
+      const { width, lines } = getRichMultiLineDrawLayout(this, ctx, spans, this.options);
+      const align = resolvePhysicalTextAlign(this.options);
+      const startX = align === "right" ? x + width : align === "center" ? x + width / 2 : x;
+      for (const line of lines) {
+        let cursorX = startX;
+        for (let fi = 0; fi < line.fragments.length; fi++) {
+          const frag = line.fragments[fi]!;
+          cursorX += frag.gapBefore;
+          ctx.with((g) => {
+            g.font = frag.font;
+            g.fillStyle = ctx.resolveDynValue((frag.style ?? this.options.style) as typeof this.options.style);
+            if (align === "right") {
+              g.textAlign = "right";
+            } else if (align === "center") {
+              g.textAlign = "center";
+            } else {
+              g.textAlign = "left";
+            }
+            g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+          });
+          cursorX += frag.occupiedWidth;
+        }
+        y += this.options.lineHeight;
+      }
+      return false;
+    }
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.style);
-      const { width, lines } = getMultiLineDrawLayout(this, ctx, this.text, this.options);
+      const { width, lines } = getMultiLineDrawLayout(this, ctx, this.text as string, this.options);
       switch (resolvePhysicalTextAlign(this.options)) {
         case "left":
           for (const { text, shift } of lines) {
