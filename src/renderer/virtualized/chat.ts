@@ -1,4 +1,4 @@
-import type { HitTest, Node, RenderFeedback } from "../../types";
+import type { HitTest, RenderFeedback } from "../../types";
 import { VirtualizedRenderer } from "./base";
 import type { JumpToOptions } from "./base";
 import {
@@ -6,7 +6,6 @@ import {
   resolveChatVisibleWindow,
   type NormalizedListState,
   type VisibleListState,
-  type VisibleWindowResult,
 } from "./solver";
 
 function clamp(value: number, min: number, max: number): number {
@@ -17,17 +16,14 @@ function clamp(value: number, min: number, max: number): number {
  * Virtualized renderer anchored to the bottom, suitable for chat-style UIs.
  */
 export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
-  #resolveVisibleWindow(): VisibleWindowResult<Node<C>> {
+  #resolveVisibleWindow() {
+    const now = globalThis.performance?.now() ?? Date.now();
     return resolveChatVisibleWindow(
       this.items,
       this._readListState(),
       this.graphics.canvas.clientHeight,
-      (item) => {
-        const node = this.options.renderItem(item);
-        return {
-          value: node,
-          height: this.measureRootNode(node).height,
-        };
+      (item, idx) => {
+        return this._resolveItem(item, idx, now);
       },
     );
   }
@@ -74,6 +70,10 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
       case "end":
         return this._getAnchorAtOffset(index, height);
     }
+  }
+
+  protected _getAnimatedLayerOffset(slotHeight: number, nodeHeight: number): number {
+    return slotHeight - nodeHeight;
   }
 
   render(feedback?: RenderFeedback): boolean {

@@ -40,14 +40,19 @@ export function ensureMockOffscreenCanvas(): void {
 }
 
 export function createGraphics(viewportHeight: number, viewportWidth = 320): C {
-  return {
+  const stateStack: { globalAlpha: number }[] = [];
+  const graphics = {
     canvas: {
       clientWidth: viewportWidth,
       clientHeight: viewportHeight,
     },
+    globalAlpha: 1,
     textRendering: "auto",
     clearRect() {},
     fillText() {},
+    beginPath() {},
+    rect() {},
+    clip() {},
     measureText() {
       return {
         width: 0,
@@ -55,9 +60,17 @@ export function createGraphics(viewportHeight: number, viewportWidth = 320): C {
         fontBoundingBoxDescent: 2,
       } as TextMetrics;
     },
-    save() {},
-    restore() {},
-  } as unknown as C;
+    save() {
+      stateStack.push({ globalAlpha: graphics.globalAlpha });
+    },
+    restore() {
+      const state = stateStack.pop();
+      if (state != null) {
+        graphics.globalAlpha = state.globalAlpha;
+      }
+    },
+  };
+  return graphics as unknown as C;
 }
 
 export function createTextGraphics(
@@ -65,17 +78,22 @@ export function createTextGraphics(
   viewportHeight = 100,
   onMeasureText?: (text: string) => void,
 ): C {
-  return {
+  const stateStack: { globalAlpha: number }[] = [];
+  const graphics = {
     canvas: {
       clientWidth: viewportWidth,
       clientHeight: viewportHeight,
     },
     fillStyle: "#000",
     font: "16px sans-serif",
+    globalAlpha: 1,
     textAlign: "left",
     textRendering: "auto",
     clearRect() {},
     fillText() {},
+    beginPath() {},
+    rect() {},
+    clip() {},
     measureText(text: string) {
       onMeasureText?.(text);
       return {
@@ -84,9 +102,17 @@ export function createTextGraphics(
         fontBoundingBoxDescent: 2,
       } as TextMetrics;
     },
-    save() {},
-    restore() {},
-  } as unknown as C;
+    save() {
+      stateStack.push({ globalAlpha: graphics.globalAlpha });
+    },
+    restore() {
+      const state = stateStack.pop();
+      if (state != null) {
+        graphics.globalAlpha = state.globalAlpha;
+      }
+    },
+  };
+  return graphics as unknown as C;
 }
 
 export function withOffscreenMeasureCounter<T>(cb: (counter: { count: number }) => T): T {

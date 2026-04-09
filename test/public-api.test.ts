@@ -6,6 +6,7 @@ import type {
   FlexItemOptions,
   MultilineTextOptions,
   Node,
+  ReplaceListItemAnimationOptions,
   TextEllipsisPosition,
   TextOptions,
   TextOverflowMode,
@@ -62,6 +63,10 @@ const multilineTextOptionsTypecheck: MultilineTextOptions<C> = {
   maxLines: 2,
 };
 
+const replaceAnimationOptionsTypecheck: ReplaceListItemAnimationOptions = {
+  duration: 180,
+};
+
 void flexItemOptionsTypecheck;
 void nodeWithMinContentTypecheck;
 void overflowModeTypecheck;
@@ -70,6 +75,7 @@ void ellipsisPositionTypecheck;
 void whiteSpaceModeTypecheck;
 void textOptionsTypecheck;
 void multilineTextOptionsTypecheck;
+void replaceAnimationOptionsTypecheck;
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {

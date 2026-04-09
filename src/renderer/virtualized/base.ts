@@ -1,6 +1,10 @@
-import type { Node, RenderFeedback } from "../../types";
+import type { HitTest, Node, RenderFeedback } from "../../types";
 import { BaseRenderer } from "../base";
-import { ListState } from "../list-state";
+import {
+  ListState,
+  subscribeListState,
+  type ListStateChange,
+} from "../list-state";
 import type { NormalizedListState, VisibleListState, VisibleWindow } from "./solver";
 
 /**
@@ -31,6 +35,31 @@ type JumpAnimation = {
   onComplete: (() => void) | undefined;
 };
 
+type ReplacementLayer<C extends CanvasRenderingContext2D> = {
+  key: number;
+  node: Node<C>;
+  fromAlpha: number;
+  toAlpha: number;
+  startTime: number;
+  duration: number;
+};
+
+type ReplacementAnimation<C extends CanvasRenderingContext2D> = {
+  currentLayerKey: number;
+  layers: ReplacementLayer<C>[];
+  fromHeight: number;
+  toHeight: number;
+  startTime: number;
+  duration: number;
+};
+
+type VirtualizedResolvedItem<C extends CanvasRenderingContext2D> = {
+  draw: (y: number) => boolean;
+  hittest: (test: HitTest, y: number) => boolean;
+};
+
+const ALPHA_EPSILON = 1e-3;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -41,6 +70,19 @@ function sameState(state: ControlledState, position: number | undefined, offset:
 
 function smoothstep(value: number): number {
   return value * value * (3 - 2 * value);
+}
+
+function getProgress(startTime: number, duration: number, now: number): number {
+  if (!(duration > 0)) {
+    return 1;
+  }
+  return clamp((now - startTime) / duration, 0, 1);
+}
+
+function interpolate(from: number, to: number, startTime: number, duration: number, now: number): number {
+  const progress = getProgress(startTime, duration, now);
+  const eased = progress >= 1 ? 1 : smoothstep(progress);
+  return from + (to - from) * eased;
 }
 
 function getNow(): number {
@@ -63,6 +105,22 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
+  #replacementAnimations = new Map<number, ReplacementAnimation<C>>();
+  #nextReplacementLayerKey = 0;
+  #unsubscribeListState: () => void;
+
+  constructor(
+    graphics: C,
+    options: {
+      renderItem: (item: T) => Node<C>;
+      list: ListState<T>;
+    },
+  ) {
+    super(graphics, options);
+    this.#unsubscribeListState = subscribeListState(options.list, (change) => {
+      this.#handleListStateChange(change);
+    });
+  }
 
   /** Current anchor item index. */
   get position(): number | undefined {
@@ -197,11 +255,15 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     feedback.max = Number.isNaN(feedback.max) ? itemMax : Math.max(itemMax, feedback.max);
   }
 
-  protected _renderDrawList(list: VisibleWindow<Node<C>>["drawList"], shift: number, feedback?: RenderFeedback): boolean {
+  protected _renderDrawList(
+    list: VisibleWindow<VirtualizedResolvedItem<C>>["drawList"],
+    shift: number,
+    feedback?: RenderFeedback,
+  ): boolean {
     let result = false;
     const viewportHeight = this.graphics.canvas.clientHeight;
 
-    for (const { idx, value: node, offset, height } of list) {
+    for (const { idx, value: item, offset, height } of list) {
       const y = offset + shift;
       if (feedback != null) {
         this._accumulateRenderFeedback(feedback, idx, y, height);
@@ -209,7 +271,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       if (y + height < 0 || y > viewportHeight) {
         continue;
       }
-      if (this.drawRootNode(node, 0, y)) {
+      if (item.draw(y)) {
         result = true;
       }
     }
@@ -217,48 +279,43 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     return result;
   }
 
-  protected _renderVisibleWindow(window: VisibleWindow<Node<C>>, feedback?: RenderFeedback): boolean {
+  protected _renderVisibleWindow(window: VisibleWindow<VirtualizedResolvedItem<C>>, feedback?: RenderFeedback): boolean {
     this._resetRenderFeedback(feedback);
     return this._renderDrawList(window.drawList, window.shift, feedback);
   }
 
-  protected _hittestVisibleWindow(window: VisibleWindow<Node<C>>, test: { x: number; y: number; type: "click" | "auxclick" | "hover" }): boolean {
-    for (const { value: node, offset, height } of window.drawList) {
+  protected _hittestVisibleWindow(window: VisibleWindow<VirtualizedResolvedItem<C>>, test: HitTest): boolean {
+    for (const { value: item, offset, height } of window.drawList) {
       const y = offset + window.shift;
       if (test.y < y || test.y >= y + height) {
         continue;
       }
-      return node.hittest(
-        this.getRootContext(),
-        {
-          ...test,
-          y: test.y - y,
-        },
-      );
+      return item.hittest(test, y);
     }
     return false;
   }
 
   protected _prepareRender(): boolean {
+    const now = getNow();
+    const keepReplacing = this.#prepareReplacementAnimations(now);
     const animation = this.#jumpAnimation;
     if (animation == null) {
-      return false;
+      return keepReplacing;
     }
     if (this.items.length === 0) {
       this.#cancelJumpAnimation();
-      return false;
+      return keepReplacing;
     }
     if (this.#controlledState != null && !sameState(this.#controlledState, this.position, this.offset)) {
       this.#cancelJumpAnimation();
-      return false;
+      return keepReplacing;
     }
 
-    const progress = clamp((getNow() - animation.startTime) / animation.duration, 0, 1);
-    const eased = progress >= 1 ? 1 : smoothstep(progress);
-    const anchor = animation.startAnchor + (animation.targetAnchor - animation.startAnchor) * eased;
+    const anchor = interpolate(animation.startAnchor, animation.targetAnchor, animation.startTime, animation.duration, now);
+    const progress = getProgress(animation.startTime, animation.duration, now);
     this._applyAnchor(anchor);
     animation.needsMoreFrames = progress < 1;
-    return animation.needsMoreFrames;
+    return keepReplacing || animation.needsMoreFrames;
   }
 
   protected _finishRender(requestRedraw: boolean): boolean {
@@ -283,9 +340,49 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   }
 
   protected _getItemHeight(index: number): number {
+    const now = getNow();
+    const replacement = this.#readReplacementAnimation(index, now);
+    if (replacement != null) {
+      return this.#sampleReplacementHeight(replacement, now);
+    }
     const item = this.items[index];
     const node = this.options.renderItem(item);
     return this.measureRootNode(node).height;
+  }
+
+  protected _resolveItem(item: T, index: number, now: number): { value: VirtualizedResolvedItem<C>; height: number } {
+    const replacement = this.#readReplacementAnimation(index, now);
+    if (replacement == null) {
+      const node = this.options.renderItem(item);
+      return {
+        value: {
+          draw: (y) => this.drawRootNode(node, 0, y),
+          hittest: (test, y) =>
+            node.hittest(this.getRootContext(), {
+              ...test,
+              y: test.y - y,
+            }),
+        },
+        height: this.measureRootNode(node).height,
+      };
+    }
+
+    const slotHeight = this.#sampleReplacementHeight(replacement, now);
+    const layers = replacement.layers
+      .map((layer) => ({
+        alpha: this.#sampleLayerAlpha(layer, now),
+        node: layer.node,
+        nodeHeight: this.measureRootNode(layer.node).height,
+      }))
+      .filter((layer) => layer.alpha > ALPHA_EPSILON);
+
+    return {
+      value: {
+        draw: (y) => this.#drawReplacementLayers(layers, slotHeight, y),
+        hittest: () => false,
+      },
+      height: slotHeight,
+    };
   }
 
   protected _getAnchorAtOffset(index: number, offset: number): number {
@@ -330,9 +427,176 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   protected abstract _applyAnchor(anchor: number): void;
   protected abstract _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]>;
   protected abstract _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number;
+  protected abstract _getAnimatedLayerOffset(slotHeight: number, nodeHeight: number): number;
 
   #cancelJumpAnimation(): void {
     this.#jumpAnimation = undefined;
     this.#controlledState = undefined;
+  }
+
+  #createReplacementLayer(node: Node<C>, fromAlpha: number, toAlpha: number, startTime: number, duration: number): ReplacementLayer<C> {
+    return {
+      key: ++this.#nextReplacementLayerKey,
+      node,
+      fromAlpha,
+      toAlpha,
+      startTime,
+      duration,
+    };
+  }
+
+  #sampleLayerAlpha(layer: ReplacementLayer<C>, now: number): number {
+    return interpolate(layer.fromAlpha, layer.toAlpha, layer.startTime, layer.duration, now);
+  }
+
+  #sampleReplacementHeight(animation: ReplacementAnimation<C>, now: number): number {
+    return interpolate(animation.fromHeight, animation.toHeight, animation.startTime, animation.duration, now);
+  }
+
+  #isLayerComplete(layer: ReplacementLayer<C>, now: number): boolean {
+    return getProgress(layer.startTime, layer.duration, now) >= 1 && Math.abs(layer.toAlpha - this.#sampleLayerAlpha(layer, now)) <= ALPHA_EPSILON;
+  }
+
+  #readReplacementAnimation(index: number, now: number): ReplacementAnimation<C> | undefined {
+    const animation = this.#replacementAnimations.get(index);
+    if (animation == null) {
+      return undefined;
+    }
+
+    const currentLayer = animation.layers.find((layer) => layer.key === animation.currentLayerKey);
+    if (currentLayer == null) {
+      this.#replacementAnimations.delete(index);
+      return undefined;
+    }
+
+    animation.layers = animation.layers.filter((layer) => layer.key === animation.currentLayerKey || !this.#isLayerComplete(layer, now));
+    if (
+      getProgress(animation.startTime, animation.duration, now) >= 1 &&
+      this.#isLayerComplete(currentLayer, now) &&
+      animation.layers.length === 1
+    ) {
+      this.#replacementAnimations.delete(index);
+      return undefined;
+    }
+
+    return animation;
+  }
+
+  #prepareReplacementAnimations(now: number): boolean {
+    let keepAnimating = false;
+    for (const index of [...this.#replacementAnimations.keys()]) {
+      if (this.#readReplacementAnimation(index, now) != null) {
+        keepAnimating = true;
+      }
+    }
+    return keepAnimating;
+  }
+
+  #drawReplacementLayers(
+    layers: { alpha: number; node: Node<C>; nodeHeight: number }[],
+    slotHeight: number,
+    y: number,
+  ): boolean {
+    if (slotHeight <= 0) {
+      return false;
+    }
+
+    let result = false;
+    const width = this.graphics.canvas.clientWidth;
+    for (const layer of layers) {
+      const alpha = clamp(layer.alpha, 0, 1);
+      if (alpha <= ALPHA_EPSILON) {
+        continue;
+      }
+
+      this.graphics.save();
+      try {
+        this.graphics.beginPath?.();
+        this.graphics.rect?.(0, y, width, slotHeight);
+        this.graphics.clip?.();
+        if (typeof this.graphics.globalAlpha === "number") {
+          this.graphics.globalAlpha *= alpha;
+        }
+        const layerY = y + this._getAnimatedLayerOffset(slotHeight, layer.nodeHeight);
+        if (this.drawRootNode(layer.node, 0, layerY)) {
+          result = true;
+        }
+      } finally {
+        this.graphics.restore();
+      }
+    }
+    return result;
+  }
+
+  #handleListStateChange(change: ListStateChange<T>): void {
+    switch (change.type) {
+      case "replace":
+        this.#handleReplace(change.index, change.prevItem, change.nextItem, change.animation?.duration);
+        break;
+      case "unshift": {
+        if (change.count <= 0 || this.#replacementAnimations.size === 0) {
+          return;
+        }
+        const shifted = new Map<number, ReplacementAnimation<C>>();
+        for (const [index, animation] of this.#replacementAnimations) {
+          shifted.set(index + change.count, animation);
+        }
+        this.#replacementAnimations = shifted;
+        break;
+      }
+      case "push":
+        break;
+      case "reset":
+      case "set":
+        this.#replacementAnimations.clear();
+        break;
+    }
+  }
+
+  #handleReplace(index: number, prevItem: T, nextItem: T, duration: number | undefined): void {
+    const normalizedDuration = Number.isFinite(duration) ? Math.max(0, duration!) : 0;
+    if (normalizedDuration <= 0) {
+      this.#replacementAnimations.delete(index);
+      return;
+    }
+
+    const now = getNow();
+    const nextNode = this.options.renderItem(nextItem);
+    const nextHeight = this.measureRootNode(nextNode).height;
+    const animation = this.#readReplacementAnimation(index, now);
+    if (animation == null) {
+      const prevNode = this.options.renderItem(prevItem);
+      const outgoing = this.#createReplacementLayer(prevNode, 1, 0, now, normalizedDuration);
+      const incoming = this.#createReplacementLayer(nextNode, 0, 1, now, normalizedDuration);
+      this.#replacementAnimations.set(index, {
+        currentLayerKey: incoming.key,
+        layers: [outgoing, incoming],
+        fromHeight: this.measureRootNode(prevNode).height,
+        toHeight: nextHeight,
+        startTime: now,
+        duration: normalizedDuration,
+      });
+      return;
+    }
+
+    const currentLayer = animation.layers.find((layer) => layer.key === animation.currentLayerKey);
+    const currentNode = currentLayer?.node ?? this.options.renderItem(prevItem);
+    const currentAlpha = currentLayer == null ? 1 : this.#sampleLayerAlpha(currentLayer, now);
+    const layers = animation.layers.filter(
+      (layer) => layer.key !== animation.currentLayerKey && !this.#isLayerComplete(layer, now),
+    );
+    if (currentAlpha > ALPHA_EPSILON) {
+      layers.push(this.#createReplacementLayer(currentNode, currentAlpha, 0, now, normalizedDuration));
+    }
+    const incoming = this.#createReplacementLayer(nextNode, 0, 1, now, normalizedDuration);
+    layers.push(incoming);
+    this.#replacementAnimations.set(index, {
+      currentLayerKey: incoming.key,
+      layers,
+      fromHeight: this.#sampleReplacementHeight(animation, now),
+      toHeight: nextHeight,
+      startTime: now,
+      duration: normalizedDuration,
+    });
   }
 }
