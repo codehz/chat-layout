@@ -9,6 +9,7 @@ import {
   measureRichTextIntrinsic,
   measureRichTextMinContent,
 } from "../../src/text";
+import type { Context } from "../../src/types";
 import type { InlineSpan } from "../../src/types";
 import { createMeasuredContext } from "../helpers/text-fixtures";
 
@@ -165,5 +166,39 @@ describe("rich text metrics", () => {
     const layout = layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-ellipsis-cross-span", "#000");
     expect(layout.width).toBe(64);
     expect(layout.fragments.map((frag) => frag.text)).toEqual(["alpha", "b", "…"]);
+  });
+
+  test("font metrics are cached per font for rich layout and ellipsis", () => {
+    const measuredTexts: string[] = [];
+    const ctx = {
+      graphics: {
+        font: "16px rich-font-cache",
+        measureText(text: string) {
+          measuredTexts.push(`${this.font}:${text}`);
+          return {
+            width: text.length * 8,
+            fontBoundingBoxAscent: 8,
+            fontBoundingBoxDescent: 2,
+          } as TextMetrics;
+        },
+      },
+    } as unknown as Context<C>;
+    const spans: InlineSpan<C>[] = [
+      { text: "alpha ", color: "#111" },
+      { text: "beta", font: "600 16px rich-font-cache-bold", color: "#f00" },
+      { text: " gamma", color: "#222" },
+    ];
+
+    layoutRichText(ctx, spans, 48, "16px rich-font-cache", "#000");
+    layoutRichText(ctx, spans, 48, "16px rich-font-cache", "#000");
+    layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-font-cache", "#000");
+    layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-font-cache", "#000");
+
+    expect(measuredTexts).toEqual([
+      "16px rich-font-cache:M",
+      "600 16px rich-font-cache-bold:M",
+      "16px rich-font-cache:…",
+      "600 16px rich-font-cache-bold:…",
+    ]);
   });
 });

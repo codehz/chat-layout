@@ -213,7 +213,7 @@ describe("text layout cache", () => {
       (graphics.canvas as unknown as { clientWidth: number }).clientWidth = 100;
       renderer.draw(node);
 
-      expect(graphicsMeasures).toBeGreaterThan(warmGraphicsMeasures);
+      expect(graphicsMeasures).toBe(warmGraphicsMeasures);
       expect(offscreen.count).toBe(warmOffscreenMeasures);
     });
   });

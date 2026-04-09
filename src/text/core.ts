@@ -6,6 +6,8 @@ export const INTRINSIC_MAX_WIDTH = Number.POSITIVE_INFINITY;
 export const MIN_CONTENT_WIDTH_EPSILON = 0.001;
 
 let sharedGraphemeSegmenter: Intl.Segmenter | null | undefined;
+const fontShiftCache = new Map<string, number>();
+const ellipsisWidthCache = new Map<string, number>();
 
 export function readLruValue<T>(cache: Map<string, T>, key: string): T | undefined {
   const cached = cache.get(key);
@@ -31,15 +33,29 @@ export function writeLruValue<T>(cache: Map<string, T>, key: string, value: T, c
 }
 
 export function measureFontShift<C extends CanvasRenderingContext2D>(ctx: Context<C>): number {
+  const font = ctx.graphics.font;
+  const cached = fontShiftCache.get(font);
+  if (cached != null) {
+    return cached;
+  }
   const {
     fontBoundingBoxAscent: ascent = 0,
     fontBoundingBoxDescent: descent = 0,
   } = ctx.graphics.measureText(FONT_SHIFT_PROBE);
-  return ascent - descent;
+  const shift = ascent - descent;
+  fontShiftCache.set(font, shift);
+  return shift;
 }
 
 export function measureEllipsisWidth<C extends CanvasRenderingContext2D>(ctx: Context<C>): number {
-  return ctx.graphics.measureText(ELLIPSIS_GLYPH).width;
+  const font = ctx.graphics.font;
+  const cached = ellipsisWidthCache.get(font);
+  if (cached != null) {
+    return cached;
+  }
+  const width = ctx.graphics.measureText(ELLIPSIS_GLYPH).width;
+  ellipsisWidthCache.set(font, width);
+  return width;
 }
 
 function getGraphemeSegmenter(): Intl.Segmenter | null {

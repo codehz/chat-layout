@@ -270,6 +270,35 @@ describe("plain text metrics", () => {
     });
   });
 
+  test("font metrics are cached per font for plain ellipsis layout", () => {
+    const measuredTexts: string[] = [];
+    const ctx = {
+      graphics: {
+        font: "16px plain-font-cache",
+        measureText(text: string) {
+          measuredTexts.push(`${this.font}:${text}`);
+          return {
+            width: text.length * 8,
+            fontBoundingBoxAscent: 8,
+            fontBoundingBoxDescent: 2,
+          } as TextMetrics;
+        },
+      },
+    } as Context<C>;
+
+    layoutEllipsizedFirstLine(ctx, "alphabet", 40, "end");
+    layoutEllipsizedFirstLine(ctx, "alphabet", 40, "end");
+    ctx.graphics.font = "16px plain-font-cache-alt";
+    layoutEllipsizedFirstLine(ctx, "alphabet", 40, "end");
+
+    expect(measuredTexts).toEqual([
+      "16px plain-font-cache:M",
+      "16px plain-font-cache:…",
+      "16px plain-font-cache-alt:M",
+      "16px plain-font-cache-alt:…",
+    ]);
+  });
+
   test("multiline overflow ellipsis rewrites the last visible line only when truncated", () => {
     const ctx = createMeasuredContext("16px multiline-ellipsis");
 
