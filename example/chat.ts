@@ -131,18 +131,42 @@ if (context == null) {
 const ctx: C = context;
 ctx.scale(devicePixelRatio, devicePixelRatio);
 
-type ChatItem = {
+type ReplyPreview = {
   sender: string;
   content: string;
-  reply?: {
-    sender: string;
-    content: string;
-  };
 };
 
-let currentHover: ChatItem | undefined;
+type BaseChatItem = {
+  id: number;
+  sender: string;
+};
 
-class HoverDetector extends Wrapper<C> {
+type MessageItem = BaseChatItem & {
+  kind: "message";
+  content: string;
+  reply?: ReplyPreview;
+};
+
+type RevokedItem = BaseChatItem & {
+  kind: "revoked";
+  original: MessageItem;
+};
+
+type ChatItem = MessageItem | RevokedItem;
+
+let currentHover: ChatItem | undefined;
+const REPLACE_ANIMATION_DURATION = 320;
+
+function revokeMessage(item: MessageItem): RevokedItem {
+  return {
+    id: item.id,
+    sender: item.sender,
+    kind: "revoked",
+    original: item,
+  };
+}
+
+class ItemDetector extends Wrapper<C> {
   constructor(
     inner: Node<C>,
     readonly item: ChatItem,
@@ -150,21 +174,65 @@ class HoverDetector extends Wrapper<C> {
     super(inner);
   }
 
-  hittest(_ctx: Context<C>, _test: HitTest): boolean {
+  hittest(_ctx: Context<C>, test: HitTest): boolean {
     currentHover = this.item;
+    if (test.type === "click") {
+      const index = list.items.indexOf(this.item);
+      if (index < 0) {
+        return true;
+      }
+      const nextItem = this.item.kind === "revoked" ? this.item.original : revokeMessage(this.item);
+      currentHover = nextItem;
+      list.replace(index, nextItem, {
+        duration: REPLACE_ANIMATION_DURATION,
+      });
+    }
     return true;
   }
 }
 
 const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
+  if (item.kind === "revoked") {
+    return new ItemDetector(
+      new Place(
+        new PaddingBox(
+          new RoundedBox(
+            new Text(`${item.sender}已撤回一条消息`, {
+              lineHeight: 18,
+              font: "14px system-ui",
+              style: () => (currentHover?.id === item.id ? "#525252" : "#666"),
+              overflow: "ellipsis",
+            }),
+            {
+              top: 10,
+              bottom: 10,
+              left: 12,
+              right: 12,
+              radii: 999,
+              fill: () => (currentHover?.id === item.id ? "#d9d9d9" : "#ececec"),
+              stroke: () => (currentHover?.id === item.id ? "#bcbcbc" : "#d3d3d3"),
+            },
+          ),
+          {
+            top: 8,
+            bottom: 8,
+            left: 4,
+            right: 4,
+          },
+        ),
+        {
+          align: item.sender === "A" ? "end" : "start",
+        },
+      ),
+      item,
+    );
+  }
+
   const senderLine = new Flex<C>(
     [
-      new HoverDetector(
-        new Circle(15, {
-          fill: "blue",
-        }),
-        item,
-      ),
+      new Circle(15, {
+        fill: "blue",
+      }),
       new RoundedBox(
         new Text(item.sender, {
           lineHeight: 15,
@@ -177,7 +245,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
           left: 0,
           right: 0,
           radii: 2,
-          fill: () => (currentHover === item ? "red" : "transparent"),
+          fill: () => (currentHover?.id === item.id ? "red" : "transparent"),
         },
       ),
     ],
@@ -209,12 +277,12 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
             new Text(item.reply.sender, {
               lineHeight: 14,
               font: "11px system-ui",
-              style: () => (currentHover === item ? "#4d4d4d" : "#666"),
+              style: () => (currentHover?.id === item.id ? "#4d4d4d" : "#666"),
             }),
             new MultilineText(item.reply.content, {
               lineHeight: 16,
               font: "13px system-ui",
-              style: () => (currentHover === item ? "#222" : "#444"),
+              style: () => (currentHover?.id === item.id ? "#222" : "#444"),
               align: "start",
               overflow: "ellipsis",
               overflowWrap: "anywhere",
@@ -233,7 +301,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
           left: 8,
           right: 8,
           radii: 6,
-          fill: () => (currentHover === item ? "#c2c2c2" : "#e2e2e2"),
+          fill: () => (currentHover?.id === item.id ? "#c2c2c2" : "#e2e2e2"),
         },
       ),
       { alignSelf: "stretch" },
@@ -255,7 +323,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     left: 10,
     right: 10,
     radii: 8,
-    fill: () => (currentHover === item ? "#aaa" : "#ccc"),
+    fill: () => (currentHover?.id === item.id ? "#aaa" : "#ccc"),
   });
 
   const body = new Flex<C>([senderLine, content], {
@@ -289,18 +357,25 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
     right: 4,
   });
 
-  return new Place(padded, {
-    align: item.sender === "A" ? "end" : "start",
-  });
+  return new ItemDetector(
+    new Place(padded, {
+      align: item.sender === "A" ? "end" : "start",
+    }),
+    item,
+  );
 });
 
 const list = new ListState<ChatItem>([
   {
+    id: 1,
+    kind: "message",
     sender: "A",
     content:
       "hello world chat layout message render bubble timeline virtualized canvas",
   },
   {
+    id: 2,
+    kind: "message",
     sender: "B",
     content: "aaaa",
     reply: {
@@ -308,15 +383,19 @@ const list = new ListState<ChatItem>([
       content: "hello world chat layout message render",
     },
   },
-  { sender: "B", content: "aaaabbb" },
-  { sender: "B", content: "测试中文" },
+  { id: 3, kind: "message", sender: "B", content: "aaaabbb" },
+  { id: 4, kind: "message", sender: "B", content: "测试中文" },
   {
+    id: 5,
+    kind: "message",
     sender: "A",
     content:
       "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   },
-  { sender: "B", content: "测试aa中文aaa" },
+  { id: 6, kind: "message", sender: "B", content: "测试aa中文aaa" },
   {
+    id: 7,
+    kind: "message",
     sender: "A",
     content: randomText(8),
     reply: {
@@ -326,6 +405,8 @@ const list = new ListState<ChatItem>([
     },
   },
   {
+    id: 8,
+    kind: "message",
     sender: "B",
     content: "这里是一条会展示回复预览省略效果的消息。",
     reply: {
@@ -334,12 +415,13 @@ const list = new ListState<ChatItem>([
         "这是一条非常长的回复预览，用来演示 MultilineText 在 chat example 里的末尾 ellipsis 能力。它应该被限制在两行之内，而不是把整个气泡一路撑到天花板。",
     },
   },
-  { sender: "B", content: randomText(5) },
+  { id: 9, kind: "message", sender: "B", content: randomText(5) },
 ]);
 const renderer = new ChatRenderer(ctx, {
   renderItem,
   list,
 });
+let nextMessageId = list.items.length + 1;
 
 function drawFrame(): void {
   const feedback: RenderFeedback = {
@@ -383,6 +465,22 @@ canvas.addEventListener("pointermove", (e) => {
   }
 });
 
+canvas.addEventListener("pointerleave", () => {
+  currentHover = undefined;
+});
+
+canvas.addEventListener("click", (e) => {
+  const { top, left } = canvas.getBoundingClientRect();
+  const result = renderer.hittest({
+    x: e.clientX - left,
+    y: e.clientY - top,
+    type: "click",
+  });
+  if (!result) {
+    currentHover = undefined;
+  }
+});
+
 function randomText(words: number): string {
   const out: string[] = [];
   for (let i = 0; i < words; i += 1) {
@@ -393,6 +491,8 @@ function randomText(words: number): string {
 
 button("unshift", () => {
   list.unshift({
+    id: nextMessageId++,
+    kind: "message",
     sender: Math.random() < 0.5 ? "A" : "B",
     content: randomText(10 + Math.floor(200 * Math.random())),
   });
@@ -400,6 +500,8 @@ button("unshift", () => {
 
 button("push", () => {
   list.push({
+    id: nextMessageId++,
+    kind: "message",
     sender: Math.random() < 0.5 ? "A" : "B",
     content: randomText(10 + Math.floor(200 * Math.random())),
   });
@@ -418,5 +520,16 @@ button("jump middle (center)", () => {
 button("jump latest (no anim)", () => {
   renderer.jumpTo(list.items.length - 1, {
     animated: false,
+  });
+});
+
+button("revoke first", () => {
+  const item = list.items.find((entry): entry is MessageItem => entry.kind === "message");
+  if (item == null) {
+    return;
+  }
+  const index = list.items.indexOf(item);
+  list.replace(index, revokeMessage(item), {
+    duration: REPLACE_ANIMATION_DURATION,
   });
 });
