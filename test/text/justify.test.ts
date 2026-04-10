@@ -294,6 +294,38 @@ describe("plain text justify integration", () => {
     const measureWithout = renderer.measureNode(nodeWithout, { maxWidth: 80 });
     expect(measureWith).toEqual(measureWithout);
   });
+
+  test("last plain line resets letterSpacing after a previous rich justify draw", () => {
+    resetJustifySupportedCache();
+    const draws: JustifyRecordedDraw[] = [];
+    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
+
+    const richNode = new MultilineText<C>([
+      { text: "aa bb ", color: "#111" },
+      { text: "cc dd", color: "#222" },
+    ] satisfies InlineSpan<C>[], {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      color: "#000",
+      justify: "inter-character",
+    });
+
+    renderer.drawNode(richNode, { maxWidth: 80 });
+
+    const drawCountBeforePlain = draws.length;
+    const plainNode = new MultilineText<C>("aa bb cc dd", {
+      lineHeight: 20,
+      font: "16px sans-serif",
+      color: "#000",
+      justify: "inter-character",
+    });
+
+    renderer.drawNode(plainNode, { maxWidth: 80 });
+
+    const plainDraws = draws.slice(drawCountBeforePlain);
+    expect(plainDraws.at(-1)?.text).toBe("dd");
+    expect(plainDraws.at(-1)?.letterSpacing).toBe("0px");
+  });
 });
 
 describe("rich text justify integration", () => {

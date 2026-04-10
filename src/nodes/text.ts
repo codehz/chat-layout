@@ -78,6 +78,38 @@ function countSpaceChars(text: string): number {
   return count;
 }
 
+const DEFAULT_TEXT_SPACING = {
+  wordSpacing: "0px",
+  letterSpacing: "0px",
+} as const;
+
+function supportsTextSpacing(g: CanvasRenderingContext2D): g is CanvasRenderingContext2D & {
+  wordSpacing: string;
+  letterSpacing: string;
+} {
+  return typeof (g as any).wordSpacing === "string" && typeof (g as any).letterSpacing === "string";
+}
+
+function withTextSpacing<C extends CanvasRenderingContext2D, T>(
+  g: C,
+  spacing: { wordSpacing: string; letterSpacing: string },
+  cb: () => T,
+): T {
+  if (!supportsTextSpacing(g)) {
+    return cb();
+  }
+  const savedWordSpacing = g.wordSpacing;
+  const savedLetterSpacing = g.letterSpacing;
+  try {
+    g.wordSpacing = spacing.wordSpacing;
+    g.letterSpacing = spacing.letterSpacing;
+    return cb();
+  } finally {
+    g.wordSpacing = savedWordSpacing;
+    g.letterSpacing = savedLetterSpacing;
+  }
+}
+
 function getTextLayoutContext<C extends CanvasRenderingContext2D>(ctx: Context<C>): Context<C> & TextLayoutCacheAccess<C> {
   return ctx as Context<C> & TextLayoutCacheAccess<C>;
 }
@@ -296,7 +328,9 @@ function drawRichLine<C extends CanvasRenderingContext2D>(
       g.font = fragment.font;
       g.fillStyle = ctx.resolveDynValue((fragment.color ?? fallbackColor) as typeof fallbackColor);
       g.textAlign = "left";
-      g.fillText(fragment.text, cursorX, y + (lineHeight + fragment.shift) / 2);
+      withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
+        g.fillText(fragment.text, cursorX, y + (lineHeight + fragment.shift) / 2);
+      });
     });
     cursorX += fragment.occupiedWidth;
   }
@@ -482,9 +516,9 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
                   g.font = frag.font;
                   g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
                   g.textAlign = "left";
-                  (g as any).wordSpacing = spacing.wordSpacing;
-                  (g as any).letterSpacing = spacing.letterSpacing;
-                  g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+                  withTextSpacing(g, spacing, () => {
+                    g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+                  });
                 });
                 // Advance cursor: original width + extra spacing for spaces/chars in fragment text
                 if (mode === "inter-word") {
@@ -516,7 +550,9 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
               } else {
                 g.textAlign = "left";
               }
-              g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+              withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
+                g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+              });
             });
             cursorX += frag.occupiedWidth;
           }
@@ -540,7 +576,9 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
               } else {
                 g.textAlign = "left";
               }
-              g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+              withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
+                g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+              });
             });
             cursorX += frag.occupiedWidth;
           }
@@ -580,17 +618,10 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
             const info = analyzeLineForJustify(prepared, lineRange);
             if (shouldJustifyLine(lineRange.width, maxWidth, info, mode, threshold)) {
               const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode);
-              const savedWordSpacing = (g as any).wordSpacing;
-              const savedLetterSpacing = (g as any).letterSpacing;
-              try {
-                (g as any).wordSpacing = spacing.wordSpacing;
-                (g as any).letterSpacing = spacing.letterSpacing;
+              withTextSpacing(g, spacing, () => {
                 g.textAlign = "left";
                 g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
-              } finally {
-                (g as any).wordSpacing = savedWordSpacing;
-                (g as any).letterSpacing = savedLetterSpacing;
-              }
+              });
               y += this.options.lineHeight;
               lineIndex++;
               return;
@@ -598,50 +629,54 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           }
 
           // Fallback to normal alignment for this line
-          switch (resolvePhysicalTextAlign(this.options)) {
-            case "left":
-              g.textAlign = "left";
-              g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
-              break;
-            case "right":
-              g.textAlign = "right";
-              g.fillText(layout.text, x + width, y + (this.options.lineHeight + layout.shift) / 2);
-              break;
-            case "center":
-              g.textAlign = "center";
-              g.fillText(layout.text, x + width / 2, y + (this.options.lineHeight + layout.shift) / 2);
-              break;
-          }
+          withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
+            switch (resolvePhysicalTextAlign(this.options)) {
+              case "left":
+                g.textAlign = "left";
+                g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+                break;
+              case "right":
+                g.textAlign = "right";
+                g.fillText(layout.text, x + width, y + (this.options.lineHeight + layout.shift) / 2);
+                break;
+              case "center":
+                g.textAlign = "center";
+                g.fillText(layout.text, x + width / 2, y + (this.options.lineHeight + layout.shift) / 2);
+                break;
+            }
+          });
           y += this.options.lineHeight;
           lineIndex++;
         });
       } else {
-        switch (resolvePhysicalTextAlign(this.options)) {
-          case "left":
-            for (const { text, shift } of lines) {
-              g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
-              y += this.options.lineHeight;
+        withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
+          switch (resolvePhysicalTextAlign(this.options)) {
+            case "left":
+              for (const { text, shift } of lines) {
+                g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
+                y += this.options.lineHeight;
+              }
+              break;
+            case "right": {
+              x += width;
+              g.textAlign = "right";
+              for (const { text, shift } of lines) {
+                g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
+                y += this.options.lineHeight;
+              }
+              break;
             }
-            break;
-          case "right": {
-            x += width;
-            g.textAlign = "right";
-            for (const { text, shift } of lines) {
-              g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
-              y += this.options.lineHeight;
+            case "center": {
+              x += width / 2;
+              g.textAlign = "center";
+              for (const { text, shift } of lines) {
+                g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
+                y += this.options.lineHeight;
+              }
+              break;
             }
-            break;
           }
-          case "center": {
-            x += width / 2;
-            g.textAlign = "center";
-            for (const { text, shift } of lines) {
-              g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
-              y += this.options.lineHeight;
-            }
-            break;
-          }
-        }
+        });
       }
       return false;
     });
@@ -702,7 +737,9 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.color);
       const layout = getSingleLineLayout(this, ctx, text, this.options);
-      g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+      withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
+        g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+      });
       return false;
     });
   }
