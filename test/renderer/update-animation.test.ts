@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  ChatRenderer,
   ListState,
   TimelineRenderer,
   memoRenderItem,
@@ -54,7 +55,7 @@ function createProbeNode(
   };
 }
 
-function createRenderer(
+function createTimelineRenderer(
   items: Item[],
   draws: DrawProbe[],
   hits: string[] = [],
@@ -71,11 +72,28 @@ function createRenderer(
   return { list, renderer };
 }
 
+function createChatRenderer(
+  items: Item[],
+  draws: DrawProbe[],
+  hits: string[] = [],
+  viewportHeight = 120,
+): { list: ListState<Item>; renderer: ChatRenderer<C, Item> } {
+  const list = new ListState<Item>(items);
+  const renderItem = memoRenderItem<C, Item>((item) =>
+    createProbeNode(item, draws, hits),
+  );
+  const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+    list,
+    renderItem,
+  });
+  return { list, renderer };
+}
+
 describe("update animation", () => {
   test("ListState.update hard-cuts by default", () => {
     const draws: DrawProbe[] = [];
     const before = { id: "before", height: 20 };
-    const { list, renderer } = createRenderer([before], draws);
+    const { list, renderer } = createTimelineRenderer([before], draws);
 
     const afterDefault = { id: "after-default", height: 30 };
     list.update(before, afterDefault);
@@ -98,7 +116,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const oldItem = { id: "old", height: 20 };
-      const { list, renderer } = createRenderer(
+      const { list, renderer } = createTimelineRenderer(
         [oldItem, { id: "tail", height: 10 }],
         draws,
       );
@@ -141,7 +159,7 @@ describe("update animation", () => {
       const itemA = { id: "a", height: 20 };
       const itemB = { id: "b", height: 20 };
       const itemC = { id: "c", height: 20 };
-      const { list, renderer } = createRenderer([itemA], draws);
+      const { list, renderer } = createTimelineRenderer([itemA], draws);
 
       list.update(itemA, itemB, { duration: 100 });
       now.current = 50;
@@ -170,7 +188,7 @@ describe("update animation", () => {
       const draws: DrawProbe[] = [];
       const hits: string[] = [];
       const animatedOld = { id: "animated-old", height: 30, hit: true };
-      const { list, renderer } = createRenderer(
+      const { list, renderer } = createTimelineRenderer(
         [animatedOld, { id: "neighbor", height: 30, hit: true }],
         draws,
         hits,
@@ -197,7 +215,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const oldItem = { id: "old", height: 20, innerAlpha: 0.4 };
-      const { list, renderer } = createRenderer([oldItem], draws);
+      const { list, renderer } = createTimelineRenderer([oldItem], draws);
 
       list.update(
         oldItem,
@@ -220,7 +238,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const tailOld = { id: "tail-old", height: 20 };
-      const { list, renderer } = createRenderer(
+      const { list, renderer } = createTimelineRenderer(
         [{ id: "head", height: 20 }, tailOld],
         draws,
       );
@@ -235,6 +253,128 @@ describe("update animation", () => {
       expect(draws.find((draw) => draw.id === "tail-old")?.y).toBeCloseTo(25);
       expect(draws.find((draw) => draw.id === "tail-new")?.y).toBeCloseTo(25);
       expect(draws.find((draw) => draw.id === "suffix")?.y).toBeCloseTo(45);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("offscreen updates hard-cut once a visible snapshot exists", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const hiddenOld = { id: "hidden-old", height: 20 };
+      const { list, renderer } = createTimelineRenderer(
+        [{ id: "head", height: 20 }, { id: "middle", height: 20 }, hiddenOld],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.render();
+      draws.length = 0;
+
+      list.update(
+        hiddenOld,
+        { id: "hidden-new", height: 20 },
+        { duration: 100 },
+      );
+
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["head", "middle"]);
+
+      now.current = 50;
+      draws.length = 0;
+      list.applyScroll(-20);
+
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "hidden-new"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("animations are canceled after their slot leaves the viewport", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const animatedOld = { id: "animated-old", height: 20 };
+      const { list, renderer } = createTimelineRenderer(
+        [animatedOld, { id: "middle", height: 20 }, { id: "tail", height: 20 }],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.render();
+
+      list.update(
+        animatedOld,
+        { id: "animated-new", height: 20 },
+        { duration: 100 },
+      );
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual([
+        "animated-old",
+        "animated-new",
+        "middle",
+      ]);
+
+      list.applyScroll(-20);
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("partially visible chat updates keep animating", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const middleOld = { id: "middle-old", height: 30 };
+      const { list, renderer } = createChatRenderer(
+        [{ id: "top", height: 20 }, middleOld, { id: "bottom", height: 20 }],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.render();
+
+      list.update(
+        middleOld,
+        { id: "middle-new", height: 30 },
+        { duration: 100 },
+      );
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toContain("middle-old");
+      expect(draws.map((draw) => draw.id)).toContain("middle-new");
+      expect(draws.find((draw) => draw.id === "middle-old")?.alpha).toBeCloseTo(
+        0.5,
+      );
+      expect(draws.find((draw) => draw.id === "middle-new")?.alpha).toBeCloseTo(
+        0.5,
+      );
+      expect(draws.find((draw) => draw.id === "middle-old")?.y).toBeCloseTo(
+        -10,
+      );
+      expect(draws.find((draw) => draw.id === "middle-new")?.y).toBeCloseTo(
+        -10,
+      );
     } finally {
       restoreNow();
     }

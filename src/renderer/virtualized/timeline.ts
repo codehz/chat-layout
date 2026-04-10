@@ -91,15 +91,19 @@ export class TimelineRenderer<
       this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     const solution = this.#resolveVisibleWindow();
+    const requestSettleRedraw = this._updateVisibleItemSnapshot(
+      solution.window,
+    );
     const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
     this._commitListState(solution.normalizedState);
-    return this._finishRender(keepAnimating || requestRedraw);
+    return this._finishRender(
+      keepAnimating || requestRedraw || requestSettleRedraw,
+    );
   }
 
   hittest(test: HitTest): boolean {
-    return this._hittestVisibleWindow(
-      this.#resolveVisibleWindow().window,
-      test,
-    );
+    const solution = this.#resolveVisibleWindow();
+    this._updateVisibleItemSnapshot(solution.window);
+    return this._hittestVisibleWindow(solution.window, test);
   }
 }

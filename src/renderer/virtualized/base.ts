@@ -124,6 +124,8 @@ export abstract class VirtualizedRenderer<
   #jumpAnimation: JumpAnimation | undefined;
   #replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
   #activeReplacementItems = new Set<T>();
+  #visibleItems = new Set<T>();
+  #hasVisibleItemSnapshot = false;
   #nextReplacementLayerKey = 0;
 
   constructor(
@@ -266,19 +268,13 @@ export abstract class VirtualizedRenderer<
     top: number,
     height: number,
   ): void {
-    if (!Number.isFinite(top) || !Number.isFinite(height) || height <= 0) {
+    const visibleRange = this._readVisibleRange(top, height);
+    if (visibleRange == null) {
       return;
     }
 
-    const viewportHeight = this.graphics.canvas.clientHeight;
-    const visibleTop = clamp(-top, 0, height);
-    const visibleBottom = clamp(viewportHeight - top, 0, height);
-    if (visibleBottom <= visibleTop) {
-      return;
-    }
-
-    const itemMin = idx + visibleTop / height;
-    const itemMax = idx + visibleBottom / height;
+    const itemMin = idx + visibleRange.top / height;
+    const itemMax = idx + visibleRange.bottom / height;
     feedback.minIdx = Number.isNaN(feedback.minIdx)
       ? idx
       : Math.min(idx, feedback.minIdx);
@@ -323,6 +319,56 @@ export abstract class VirtualizedRenderer<
   ): boolean {
     this._resetRenderFeedback(feedback);
     return this._renderDrawList(window.drawList, window.shift, feedback);
+  }
+
+  protected _readVisibleRange(
+    top: number,
+    height: number,
+  ): { top: number; bottom: number } | undefined {
+    if (!Number.isFinite(top) || !Number.isFinite(height) || height <= 0) {
+      return undefined;
+    }
+
+    const viewportHeight = this.graphics.canvas.clientHeight;
+    const visibleTop = clamp(-top, 0, height);
+    const visibleBottom = clamp(viewportHeight - top, 0, height);
+    if (visibleBottom <= visibleTop) {
+      return undefined;
+    }
+
+    return {
+      top: visibleTop,
+      bottom: visibleBottom,
+    };
+  }
+
+  protected _updateVisibleItemSnapshot(
+    window: VisibleWindow<unknown>,
+  ): boolean {
+    const nextVisibleItems = new Set<T>();
+    for (const { idx, offset, height } of window.drawList) {
+      if (this._readVisibleRange(offset + window.shift, height) == null) {
+        continue;
+      }
+      const item = this.items[idx];
+      if (item != null) {
+        nextVisibleItems.add(item);
+      }
+    }
+
+    this.#visibleItems = nextVisibleItems;
+    this.#hasVisibleItemSnapshot = true;
+
+    let canceled = false;
+    for (const item of [...this.#activeReplacementItems]) {
+      if (nextVisibleItems.has(item)) {
+        continue;
+      }
+      this.#replacementAnimations.delete(item);
+      this.#activeReplacementItems.delete(item);
+      canceled = true;
+    }
+    return canceled;
   }
 
   protected _hittestVisibleWindow(
@@ -652,6 +698,8 @@ export abstract class VirtualizedRenderer<
       case "set":
         this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
         this.#activeReplacementItems.clear();
+        this.#visibleItems.clear();
+        this.#hasVisibleItemSnapshot = false;
         break;
     }
   }
@@ -661,7 +709,12 @@ export abstract class VirtualizedRenderer<
       0,
       typeof duration === "number" && Number.isFinite(duration) ? duration : 0,
     );
-    if (normalizedDuration <= 0) {
+    if (
+      normalizedDuration <= 0 ||
+      (this.#hasVisibleItemSnapshot &&
+        !this.#visibleItems.has(prevItem) &&
+        !this.#activeReplacementItems.has(prevItem))
+    ) {
       this.#replacementAnimations.delete(prevItem);
       this.#activeReplacementItems.delete(prevItem);
       return;
