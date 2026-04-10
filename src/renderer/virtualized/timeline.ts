@@ -1,6 +1,5 @@
 import { VirtualizedRenderer } from "./base";
 import type { JumpToOptions } from "./base";
-import type { TransitionPlacement } from "./base-types";
 import {
   normalizeTimelineState,
   resolveTimelineVisibleWindow,
@@ -75,9 +74,5 @@ export class TimelineRenderer<
       case "end":
         return this._getAnchorAtOffset(index, height - viewportHeight);
     }
-  }
-
-  protected _getDefaultAnimatedPlacement(): TransitionPlacement {
-    return "start";
   }
 }

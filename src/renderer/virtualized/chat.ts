@@ -1,6 +1,5 @@
 import { VirtualizedRenderer } from "./base";
 import type { JumpToOptions } from "./base";
-import type { TransitionPlacement } from "./base-types";
 import {
   normalizeChatState,
   resolveChatVisibleWindow,
@@ -81,9 +80,5 @@ export class ChatRenderer<
       case "end":
         return this._getAnchorAtOffset(index, height);
     }
-  }
-
-  protected _getDefaultAnimatedPlacement(): TransitionPlacement {
-    return "end";
   }
 }

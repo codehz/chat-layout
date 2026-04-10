@@ -13,7 +13,6 @@ import {
   type ControlledState,
   type ItemTransition,
   type TransitionLayer,
-  type TransitionPlacement,
   type VirtualizedResolvedItem,
 } from "./base-types";
 
@@ -27,15 +26,12 @@ export type TransitionRendererAdapter<
   drawNode: (node: Node<C>, x: number, y: number) => boolean;
   getRootContext: () => Context<C>;
   graphics: C;
-  defaultTransitionPlacement: TransitionPlacement;
   onDeleteComplete: (item: T) => void;
 };
 
 type SampledLayer<C extends CanvasRenderingContext2D> = {
   alpha: number;
   node: Node<C>;
-  nodeHeight: number;
-  placement: TransitionPlacement;
   translateY: number;
 };
 
@@ -43,7 +39,6 @@ type CurrentVisualState<C extends CanvasRenderingContext2D> = {
   node: Node<C>;
   alpha: number;
   height: number;
-  placement: TransitionPlacement;
   translateY: number;
 };
 
@@ -265,11 +260,7 @@ export class TransitionController<
     }
 
     const slotHeight = this.#sampleTransitionHeight(transition, now);
-    const layers = this.#readTransitionLayers(
-      transition,
-      now,
-      adapter.measureNode,
-    );
+    const layers = this.#readTransitionLayers(transition, now);
 
     return {
       value: {
@@ -359,7 +350,6 @@ export class TransitionController<
             0,
             now,
             normalizedDuration,
-            currentVisualState.placement,
             currentVisualState.translateY,
             0,
           )
@@ -370,7 +360,6 @@ export class TransitionController<
       1,
       now,
       normalizedDuration,
-      currentVisualState.placement,
       currentVisualState.translateY,
       0,
     );
@@ -427,7 +416,6 @@ export class TransitionController<
             0,
             now,
             normalizedDuration,
-            currentVisualState.placement,
             currentVisualState.translateY,
             0,
           )
@@ -486,7 +474,6 @@ export class TransitionController<
           1,
           now,
           duration,
-          "start",
           resolvedDistance,
           0,
         ),
@@ -559,7 +546,6 @@ export class TransitionController<
     toAlpha: number,
     startTime: number,
     duration: number,
-    placement: TransitionPlacement,
     fromTranslateY: number,
     toTranslateY: number,
   ): TransitionLayer<C> {
@@ -569,7 +555,6 @@ export class TransitionController<
       toAlpha,
       fromTranslateY,
       toTranslateY,
-      placement,
       startTime,
       duration,
     };
@@ -608,15 +593,12 @@ export class TransitionController<
   #readTransitionLayers(
     transition: ItemTransition<C>,
     now: number,
-    measureNode: (node: Node<C>) => Box,
   ): SampledLayer<C>[] {
     return [transition.fromLayer, transition.toLayer]
       .filter((layer): layer is TransitionLayer<C> => layer != null)
       .map((layer) => ({
         alpha: this.#sampleLayerAlpha(layer, now),
         node: layer.node,
-        nodeHeight: measureNode(layer.node).height,
-        placement: layer.placement,
         translateY: this.#sampleLayerTranslateY(layer, now),
       }))
       .filter((layer) => layer.alpha > ALPHA_EPSILON);
@@ -644,14 +626,7 @@ export class TransitionController<
         if (typeof adapter.graphics.globalAlpha === "number") {
           adapter.graphics.globalAlpha *= alpha;
         }
-        const layerY =
-          y +
-          this.#getPlacementOffset(
-            layer.placement,
-            slotHeight,
-            layer.nodeHeight,
-          ) +
-          layer.translateY;
+        const layerY = y + layer.translateY;
         if (adapter.drawNode(layer.node, 0, layerY)) {
           result = true;
         }
@@ -660,14 +635,6 @@ export class TransitionController<
       }
     }
     return result;
-  }
-
-  #getPlacementOffset(
-    placement: TransitionPlacement,
-    slotHeight: number,
-    nodeHeight: number,
-  ): number {
-    return placement === "end" ? slotHeight - nodeHeight : 0;
   }
 
   #isIndexVisible(
@@ -759,7 +726,6 @@ export class TransitionController<
         node: transition.toLayer.node,
         alpha: this.#sampleLayerAlpha(transition.toLayer, now),
         height: this.#sampleTransitionHeight(transition, now),
-        placement: transition.toLayer.placement,
         translateY: this.#sampleLayerTranslateY(transition.toLayer, now),
       };
     }
@@ -768,7 +734,6 @@ export class TransitionController<
         node: transition.fromLayer.node,
         alpha: this.#sampleLayerAlpha(transition.fromLayer, now),
         height: this.#sampleTransitionHeight(transition, now),
-        placement: transition.fromLayer.placement,
         translateY: this.#sampleLayerTranslateY(transition.fromLayer, now),
       };
     }
@@ -778,7 +743,6 @@ export class TransitionController<
       node,
       alpha: 1,
       height: ctx.measureNode(node).height,
-      placement: ctx.defaultTransitionPlacement,
       translateY: 0,
     };
   }

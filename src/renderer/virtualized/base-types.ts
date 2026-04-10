@@ -31,9 +31,6 @@ export type JumpAnimation = {
   onComplete: (() => void) | undefined;
 };
 
-/** Placement for a single layer within an item transition. */
-export type TransitionPlacement = "start" | "end";
-
 /** A single cross-fade layer within an item transition. */
 export type TransitionLayer<C extends CanvasRenderingContext2D> = {
   node: Node<C>;
@@ -41,7 +38,6 @@ export type TransitionLayer<C extends CanvasRenderingContext2D> = {
   toAlpha: number;
   fromTranslateY: number;
   toTranslateY: number;
-  placement: TransitionPlacement;
   startTime: number;
   duration: number;
 };

@@ -15,7 +15,6 @@ import {
   smoothstep,
 } from "./base-animation";
 import {
-  type TransitionPlacement,
   type ControlledState,
   type JumpAnimation,
   type VirtualizedResolvedItem,
@@ -501,7 +500,6 @@ export abstract class VirtualizedRenderer<
     index: number,
     block: NonNullable<JumpToOptions["block"]>,
   ): number;
-  protected abstract _getDefaultAnimatedPlacement(): TransitionPlacement;
 
   // ── Jump animation ─────────────────────────────────────────────────────────
 
@@ -523,7 +521,6 @@ export abstract class VirtualizedRenderer<
       drawNode: this.drawRootNode.bind(this),
       getRootContext: this.getRootContext.bind(this),
       graphics: this.graphics,
-      defaultTransitionPlacement: this._getDefaultAnimatedPlacement(),
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
     };
   }
