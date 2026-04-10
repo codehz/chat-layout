@@ -22,7 +22,14 @@ import {
   type RichMeasurement,
   type TextLayout,
   type TextMeasurement,
+  analyzeLineForJustify,
+  computeJustifySpacing,
+  isJustifySupported,
+  resolveJustifyMode,
+  shouldJustifyLine,
 } from "../text";
+import { readPreparedText } from "../text/plain-core";
+import { walkPreparedLineRanges } from "../text/inline-engine";
 import type { Box, Context, InlineSpan, MultilineTextOptions, Node, PhysicalTextAlign, TextOptions } from "../types";
 
 type SingleLineLayout = TextLayout;
@@ -447,30 +454,94 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.color);
       const { width, lines } = getMultiLineDrawLayout(this, ctx, this.text as string, this.options);
-      switch (resolvePhysicalTextAlign(this.options)) {
-        case "left":
-          for (const { text, shift } of lines) {
-            g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
-            y += this.options.lineHeight;
+      const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+      const mode = resolveJustifyMode(this.options.justify);
+      const canJustify = mode != null && maxWidth != null && maxWidth > 0 && isJustifySupported(g);
+      const threshold = this.options.justifyGapThreshold ?? 2.0;
+
+      if (canJustify) {
+        const prepared = readPreparedText(
+          this.text as string,
+          this.options.font,
+          this.options.whiteSpace ?? "normal",
+          this.options.wordBreak ?? "normal",
+        );
+        let lineIndex = 0;
+        const totalLines = lines.length;
+        walkPreparedLineRanges(prepared, maxWidth, (lineRange) => {
+          if (lineIndex >= totalLines) return false;
+          const layout = lines[lineIndex]!;
+          const isLastLine = lineIndex === totalLines - 1;
+          const isOverflowTruncated = isLastLine && shouldUseMultilineOverflowLayout(this.options)
+            && this.options.overflow === "ellipsis";
+          const wantJustify = !isOverflowTruncated
+            && (!isLastLine || this.options.justifyLastLine === true);
+
+          if (wantJustify) {
+            const info = analyzeLineForJustify(prepared, lineRange);
+            if (shouldJustifyLine(lineRange.width, maxWidth, info, mode, threshold)) {
+              const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode);
+              const savedWordSpacing = (g as any).wordSpacing;
+              const savedLetterSpacing = (g as any).letterSpacing;
+              try {
+                (g as any).wordSpacing = spacing.wordSpacing;
+                (g as any).letterSpacing = spacing.letterSpacing;
+                g.textAlign = "left";
+                g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+              } finally {
+                (g as any).wordSpacing = savedWordSpacing;
+                (g as any).letterSpacing = savedLetterSpacing;
+              }
+              y += this.options.lineHeight;
+              lineIndex++;
+              return;
+            }
           }
-          break;
-        case "right": {
-          x += width;
-          g.textAlign = "right";
-          for (const { text, shift } of lines) {
-            g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
-            y += this.options.lineHeight;
+
+          // Fallback to normal alignment for this line
+          switch (resolvePhysicalTextAlign(this.options)) {
+            case "left":
+              g.textAlign = "left";
+              g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+              break;
+            case "right":
+              g.textAlign = "right";
+              g.fillText(layout.text, x + width, y + (this.options.lineHeight + layout.shift) / 2);
+              break;
+            case "center":
+              g.textAlign = "center";
+              g.fillText(layout.text, x + width / 2, y + (this.options.lineHeight + layout.shift) / 2);
+              break;
           }
-          break;
-        }
-        case "center": {
-          x += width / 2;
-          g.textAlign = "center";
-          for (const { text, shift } of lines) {
-            g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
-            y += this.options.lineHeight;
+          y += this.options.lineHeight;
+          lineIndex++;
+        });
+      } else {
+        switch (resolvePhysicalTextAlign(this.options)) {
+          case "left":
+            for (const { text, shift } of lines) {
+              g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
+              y += this.options.lineHeight;
+            }
+            break;
+          case "right": {
+            x += width;
+            g.textAlign = "right";
+            for (const { text, shift } of lines) {
+              g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
+              y += this.options.lineHeight;
+            }
+            break;
           }
-          break;
+          case "center": {
+            x += width / 2;
+            g.textAlign = "center";
+            for (const { text, shift } of lines) {
+              g.fillText(text, x, y + (this.options.lineHeight + shift) / 2);
+              y += this.options.lineHeight;
+            }
+            break;
+          }
         }
       }
       return false;
