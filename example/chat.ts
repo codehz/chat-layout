@@ -1,8 +1,8 @@
 import {
-  ChatRenderer,
   Flex,
   FlexItem,
   Fixed,
+  ListRenderer,
   ListState,
   MultilineText,
   PaddingBox,
@@ -499,7 +499,8 @@ const list = new ListState<ChatItem>([
   },
   { id: 9, kind: "message", sender: "B", content: randomText(5) },
 ]);
-const renderer = new ChatRenderer(ctx, {
+const renderer = new ListRenderer(ctx, {
+  anchorMode: "bottom",
   renderItem,
   list,
 });

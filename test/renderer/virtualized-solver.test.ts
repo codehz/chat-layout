@@ -1,31 +1,36 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  normalizeChatState,
-  normalizeTimelineState,
-  resolveChatVisibleWindow,
+  normalizeVisibleState,
+  resolveListLayoutOptions,
   resolveVisibleWindow,
-  resolveTimelineVisibleWindow,
 } from "../../src/renderer/virtualized/solver";
 
 describe("virtualized solvers", () => {
   test("normalization uses explicit undefined position instead of NaN sentinels", () => {
     expect(
-      normalizeTimelineState(3, { position: undefined, offset: 5 }),
+      normalizeVisibleState(
+        3,
+        { position: undefined, offset: 5 },
+        resolveListLayoutOptions({ anchorMode: "top" }),
+      ),
     ).toEqual({
       position: 0,
       offset: 5,
     });
-    expect(normalizeChatState(3, { position: undefined, offset: -5 })).toEqual({
-      position: 2,
-      offset: -5,
-    });
+    expect(
+      normalizeVisibleState(
+        3,
+        { position: undefined, offset: -5 },
+        resolveListLayoutOptions({ anchorMode: "bottom" }),
+      ),
+    ).toEqual({ position: 2, offset: -5 });
   });
 
-  test("timeline solver returns normalized state and leaves the input state untouched", () => {
+  test("top-anchor solver returns normalized state and leaves the input state untouched", () => {
     const state = { position: undefined, offset: 0 };
 
-    const solution = resolveTimelineVisibleWindow(
+    const solution = resolveVisibleWindow(
       [20, 30, 40],
       state,
       45,
@@ -33,6 +38,7 @@ describe("virtualized solvers", () => {
         value: height,
         height,
       }),
+      resolveListLayoutOptions({ anchorMode: "top" }),
     );
 
     expect(state).toEqual({ position: undefined, offset: 0 });
@@ -40,10 +46,10 @@ describe("virtualized solvers", () => {
     expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([0, 1]);
   });
 
-  test("chat solver returns normalized state and leaves the input state untouched", () => {
+  test("bottom-anchor solver returns normalized state and leaves the input state untouched", () => {
     const state = { position: undefined, offset: 0 };
 
-    const solution = resolveChatVisibleWindow(
+    const solution = resolveVisibleWindow(
       [20, 30, 40],
       state,
       45,
@@ -51,6 +57,7 @@ describe("virtualized solvers", () => {
         value: height,
         height,
       }),
+      resolveListLayoutOptions({ anchorMode: "bottom" }),
     );
 
     expect(state).toEqual({ position: undefined, offset: 0 });
@@ -58,7 +65,7 @@ describe("virtualized solvers", () => {
     expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([2, 1]);
   });
 
-  test("core solver matches the direction-specific wrappers", () => {
+  test("core solver defaults to top anchor and supports both anchor modes", () => {
     const items = [20, 30, 40];
     const state = { position: undefined, offset: 0 };
     const resolveItem = (height: number) => ({
@@ -67,14 +74,42 @@ describe("virtualized solvers", () => {
     });
 
     expect(
-      resolveVisibleWindow(items, state, 45, resolveItem, "forward"),
-    ).toEqual(resolveTimelineVisibleWindow(items, state, 45, resolveItem));
+      resolveVisibleWindow(
+        items,
+        state,
+        45,
+        resolveItem,
+        resolveListLayoutOptions(),
+      ),
+    ).toEqual(
+      resolveVisibleWindow(
+        items,
+        state,
+        45,
+        resolveItem,
+        resolveListLayoutOptions({ anchorMode: "top" }),
+      ),
+    );
     expect(
-      resolveVisibleWindow(items, state, 45, resolveItem, "backward"),
-    ).toEqual(resolveChatVisibleWindow(items, state, 45, resolveItem));
+      resolveVisibleWindow(
+        items,
+        state,
+        45,
+        resolveItem,
+        resolveListLayoutOptions({ anchorMode: "bottom" }),
+      ),
+    ).not.toEqual(
+      resolveVisibleWindow(
+        items,
+        state,
+        45,
+        resolveItem,
+        resolveListLayoutOptions({ anchorMode: "top" }),
+      ),
+    );
   });
 
-  test("core solver backfills the viewport in both directions", () => {
+  test("core solver backfills the viewport in both anchor modes", () => {
     const items = [40, 40, 40];
     const state = { position: 1, offset: 0 };
     const resolveItem = (height: number) => ({
@@ -87,7 +122,7 @@ describe("virtualized solvers", () => {
       state,
       100,
       resolveItem,
-      "forward",
+      resolveListLayoutOptions({ anchorMode: "top" }),
     );
     expect(forward.normalizedState).toEqual({ position: 1, offset: 20 });
     expect(forward.window.shift).toBe(20);
@@ -98,7 +133,7 @@ describe("virtualized solvers", () => {
       state,
       100,
       resolveItem,
-      "backward",
+      resolveListLayoutOptions({ anchorMode: "bottom" }),
     );
     expect(backward.normalizedState).toEqual({ position: 2, offset: 20 });
     expect(backward.window.shift).toBe(-20);

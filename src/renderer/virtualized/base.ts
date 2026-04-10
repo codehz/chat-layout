@@ -26,6 +26,7 @@ import {
 } from "./base-transition";
 import type {
   NormalizedListState,
+  ResolvedListLayoutOptions,
   VisibleListState,
   VisibleWindow,
   VisibleWindowResult,
@@ -367,6 +368,7 @@ export abstract class VirtualizedRenderer<
       this.items,
       this.graphics.canvas.clientHeight,
       normalizedState,
+      this._getLayoutOptions(),
       extraShift,
       this._readVisibleRange.bind(this),
     );
@@ -488,6 +490,7 @@ export abstract class VirtualizedRenderer<
   protected abstract _normalizeListState(
     state: VisibleListState,
   ): NormalizedListState;
+  protected abstract _getLayoutOptions(): ResolvedListLayoutOptions;
   protected abstract _resolveVisibleWindow(
     now: number,
   ): VisibleWindowResult<VirtualizedResolvedItem>;
@@ -531,6 +534,7 @@ export abstract class VirtualizedRenderer<
       items: this.items,
       position: this.position,
       offset: this.offset,
+      layout: this._getLayoutOptions(),
       readListState: this._readListState.bind(this),
       readVisibleRange: this._readVisibleRange.bind(this),
       resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),

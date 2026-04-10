@@ -1,11 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  ChatRenderer,
-  ListState,
-  TimelineRenderer,
-  memoRenderItem,
-} from "../../src/renderer";
+import { ListRenderer, ListState, memoRenderItem } from "../../src/renderer";
 import type { Box, Context, HitTest, Node } from "../../src/types";
 import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
 import {
@@ -55,34 +50,36 @@ function createProbeNode(
   };
 }
 
-function createTimelineRenderer(
+function createTopRenderer(
   items: Item[],
   draws: DrawProbe[],
   hits: string[] = [],
   viewportHeight = 120,
-): { list: ListState<Item>; renderer: TimelineRenderer<C, Item> } {
+): { list: ListState<Item>; renderer: ListRenderer<C, Item> } {
   const list = new ListState<Item>(items);
   const renderItem = memoRenderItem<C, Item>((item) =>
     createProbeNode(item, draws, hits),
   );
-  const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
+  const renderer = new ListRenderer(createGraphics(viewportHeight), {
+    anchorMode: "top",
     list,
     renderItem,
   });
   return { list, renderer };
 }
 
-function createChatRenderer(
+function createBottomRenderer(
   items: Item[],
   draws: DrawProbe[],
   hits: string[] = [],
   viewportHeight = 120,
-): { list: ListState<Item>; renderer: ChatRenderer<C, Item> } {
+): { list: ListState<Item>; renderer: ListRenderer<C, Item> } {
   const list = new ListState<Item>(items);
   const renderItem = memoRenderItem<C, Item>((item) =>
     createProbeNode(item, draws, hits),
   );
-  const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+  const renderer = new ListRenderer(createGraphics(viewportHeight), {
+    anchorMode: "bottom",
     list,
     renderItem,
   });
@@ -93,7 +90,7 @@ describe("update animation", () => {
   test("ListState.update hard-cuts by default", () => {
     const draws: DrawProbe[] = [];
     const before = { id: "before", height: 20 };
-    const { list, renderer } = createTimelineRenderer([before], draws);
+    const { list, renderer } = createTopRenderer([before], draws);
 
     const afterDefault = { id: "after-default", height: 30 };
     list.update(before, afterDefault);
@@ -110,13 +107,13 @@ describe("update animation", () => {
     expect(draws.map((draw) => draw.id)).toEqual(["after-zero"]);
   });
 
-  test("TimelineRenderer crossfades updates and transitions slot height", () => {
+  test("top-anchor crossfades updates and transitions slot height", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
       const oldItem = { id: "old", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [oldItem, { id: "tail", height: 10 }],
         draws,
       );
@@ -159,7 +156,7 @@ describe("update animation", () => {
       const itemA = { id: "a", height: 20 };
       const itemB = { id: "b", height: 60 };
       const itemC = { id: "c", height: 40 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [itemA, { id: "tail", height: 10 }],
         draws,
       );
@@ -191,7 +188,7 @@ describe("update animation", () => {
       const draws: DrawProbe[] = [];
       const hits: string[] = [];
       const animatedOld = { id: "animated-old", height: 30, hit: true };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [animatedOld, { id: "neighbor", height: 30, hit: true }],
         draws,
         hits,
@@ -218,7 +215,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const oldItem = { id: "old", height: 20, innerAlpha: 0.4 };
-      const { list, renderer } = createTimelineRenderer([oldItem], draws);
+      const { list, renderer } = createTopRenderer([oldItem], draws);
 
       list.update(
         oldItem,
@@ -241,7 +238,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const tailOld = { id: "tail-old", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [{ id: "head", height: 20 }, tailOld],
         draws,
       );
@@ -267,7 +264,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const hiddenOld = { id: "hidden-old", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [{ id: "head", height: 20 }, { id: "middle", height: 20 }, hiddenOld],
         draws,
         [],
@@ -300,7 +297,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const animatedOld = { id: "animated-old", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [animatedOld, { id: "middle", height: 20 }, { id: "tail", height: 20 }],
         draws,
         [],
@@ -343,7 +340,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const middleOld = { id: "middle-old", height: 30 };
-      const { list, renderer } = createChatRenderer(
+      const { list, renderer } = createBottomRenderer(
         [{ id: "top", height: 20 }, middleOld, { id: "bottom", height: 20 }],
         draws,
         [],
@@ -387,7 +384,7 @@ describe("update animation", () => {
       const draws: DrawProbe[] = [];
       const oldItem = { id: "old", height: 160 };
       const newItem = { id: "new", height: 80 };
-      const { list, renderer } = createChatRenderer(
+      const { list, renderer } = createBottomRenderer(
         [
           { id: "head", height: 20 },
           oldItem,
@@ -416,12 +413,12 @@ describe("update animation", () => {
     }
   });
 
-  test("TimelineRenderer animates pushAll on short lists", () => {
+  test("top-anchor animates pushAll on short lists", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [
           { id: "head", height: 20 },
           { id: "tail", height: 20 },
@@ -458,12 +455,12 @@ describe("update animation", () => {
     }
   });
 
-  test("TimelineRenderer animates unshiftAll on short lists as a whole-window slide", () => {
+  test("top-anchor animates unshiftAll on short lists as a whole-window slide", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [
           { id: "head", height: 20 },
           { id: "tail", height: 30 },
@@ -501,12 +498,12 @@ describe("update animation", () => {
     }
   });
 
-  test("TimelineRenderer keeps unshiftAll item spacing fixed across mixed heights", () => {
+  test("top-anchor keeps unshiftAll item spacing fixed across mixed heights", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [
           { id: "head", height: 20 },
           { id: "middle", height: 35 },
@@ -548,12 +545,12 @@ describe("update animation", () => {
     }
   });
 
-  test("TimelineRenderer keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
+  test("top-anchor keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [
           { id: "head", height: 20 },
           { id: "tail", height: 60 },
@@ -593,12 +590,12 @@ describe("update animation", () => {
     }
   });
 
-  test("ChatRenderer animates unshiftAll on short lists as a whole-window slide", () => {
+  test("bottom-anchor animates unshiftAll on short lists as a whole-window slide", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createChatRenderer(
+      const { list, renderer } = createBottomRenderer(
         [
           { id: "head", height: 20 },
           { id: "tail", height: 20 },
@@ -636,12 +633,12 @@ describe("update animation", () => {
     }
   });
 
-  test("ChatRenderer keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
+  test("bottom-anchor keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createChatRenderer(
+      const { list, renderer } = createBottomRenderer(
         [
           { id: "head", height: 20 },
           { id: "tail", height: 60 },
@@ -681,12 +678,12 @@ describe("update animation", () => {
     }
   });
 
-  test("ChatRenderer animates pushAll on short lists with the default duration", () => {
+  test("bottom-anchor animates pushAll on short lists with the default duration", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createChatRenderer(
+      const { list, renderer } = createBottomRenderer(
         [
           { id: "head", height: 20 },
           { id: "tail", height: 20 },
@@ -726,7 +723,7 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const hits: string[] = [];
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [{ id: "head", height: 20, hit: true }],
         draws,
         hits,
@@ -752,7 +749,7 @@ describe("update animation", () => {
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [
           { id: "first", height: 40 },
           { id: "second", height: 40 },
@@ -783,7 +780,7 @@ describe("update animation", () => {
     const restoreNow = mockPerformanceNow(now);
     try {
       const noSnapshotDraws: DrawProbe[] = [];
-      const noSnapshot = createTimelineRenderer(
+      const noSnapshot = createTopRenderer(
         [{ id: "head", height: 20 }],
         noSnapshotDraws,
       );
@@ -801,7 +798,7 @@ describe("update animation", () => {
       ).toBeCloseTo(1);
 
       const zeroDurationDraws: DrawProbe[] = [];
-      const zeroDuration = createTimelineRenderer(
+      const zeroDuration = createTopRenderer(
         [{ id: "head", height: 20 }],
         zeroDurationDraws,
       );
@@ -828,7 +825,7 @@ describe("delete animation", () => {
   test("ListState.delete hard-cuts by default", () => {
     const draws: DrawProbe[] = [];
     const item = { id: "item", height: 20 };
-    const { list, renderer } = createTimelineRenderer(
+    const { list, renderer } = createTopRenderer(
       [item, { id: "tail", height: 10 }],
       draws,
     );
@@ -841,13 +838,13 @@ describe("delete animation", () => {
     expect(list.items.map((i) => i.id)).toEqual(["tail"]);
   });
 
-  test("TimelineRenderer fades out and shrinks slot height when deleting", () => {
+  test("top-anchor fades out and shrinks slot height when deleting", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
       const item = { id: "item", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [item, { id: "tail", height: 10 }],
         draws,
       );
@@ -892,7 +889,7 @@ describe("delete animation", () => {
       const draws: DrawProbe[] = [];
       const hits: string[] = [];
       const item = { id: "item", height: 30, hit: true };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [item, { id: "neighbor", height: 30, hit: true }],
         draws,
         hits,
@@ -916,7 +913,7 @@ describe("delete animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const hidden = { id: "hidden", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [{ id: "head", height: 20 }, { id: "middle", height: 20 }, hidden],
         draws,
         [],
@@ -941,7 +938,7 @@ describe("delete animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const item = { id: "item", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [item, { id: "middle", height: 20 }, { id: "tail", height: 20 }],
         draws,
         [],
@@ -972,7 +969,7 @@ describe("delete animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const item = { id: "item", height: 20 };
-      const { list, renderer } = createTimelineRenderer(
+      const { list, renderer } = createTopRenderer(
         [item, { id: "tail", height: 10 }],
         draws,
       );

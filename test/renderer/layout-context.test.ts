@@ -3,10 +3,9 @@ import { describe, expect, test } from "bun:test";
 import { Fixed, Flex, FlexItem, MultilineText, Place } from "../../src/nodes";
 import {
   BaseRenderer,
-  ChatRenderer,
   DebugRenderer,
+  ListRenderer,
   ListState,
-  TimelineRenderer,
 } from "../../src/renderer";
 import type { Node } from "../../src/types";
 import {
@@ -75,16 +74,17 @@ describe("layout context", () => {
   });
 
   test("virtualized renderers measure items with viewport maxWidth", () => {
-    const timelineWidths: Array<number | undefined> = [];
-    const chatWidths: Array<number | undefined> = [];
-    const list = new ListState<number>();
-    list.push(1);
+    const topWidths: Array<number | undefined> = [];
+    const bottomWidths: Array<number | undefined> = [];
+    const topList = new ListState<number>();
+    topList.push(1);
 
-    const timeline = new TimelineRenderer(createTextGraphics(180, 100), {
-      list,
+    const topRenderer = new ListRenderer(createTextGraphics(180, 100), {
+      anchorMode: "top",
+      list: topList,
       renderItem: () => ({
         measure(ctx) {
-          timelineWidths.push(ctx.constraints?.maxWidth);
+          topWidths.push(ctx.constraints?.maxWidth);
           return { width: 0, height: 20 };
         },
         draw() {
@@ -96,13 +96,14 @@ describe("layout context", () => {
       }),
     });
 
-    const chatList = new ListState<number>();
-    chatList.push(1);
-    const chat = new ChatRenderer(createTextGraphics(220, 100), {
-      list: chatList,
+    const bottomList = new ListState<number>();
+    bottomList.push(1);
+    const bottomRenderer = new ListRenderer(createTextGraphics(220, 100), {
+      anchorMode: "bottom",
+      list: bottomList,
       renderItem: () => ({
         measure(ctx) {
-          chatWidths.push(ctx.constraints?.maxWidth);
+          bottomWidths.push(ctx.constraints?.maxWidth);
           return { width: 0, height: 20 };
         },
         draw() {
@@ -114,11 +115,11 @@ describe("layout context", () => {
       }),
     });
 
-    timeline.render();
-    chat.render();
+    topRenderer.render();
+    bottomRenderer.render();
 
-    expect(timelineWidths).toContain(180);
-    expect(chatWidths).toContain(220);
+    expect(topWidths).toContain(180);
+    expect(bottomWidths).toContain(220);
   });
 
   test("place layout results stay isolated across repeated constraint measurements", () => {

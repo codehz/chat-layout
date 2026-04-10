@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import { ChatRenderer, ListState, TimelineRenderer } from "../../src/renderer";
-import type { Box, Context, HitTest, RenderFeedback } from "../../src/types";
+import { ListAnchorMode, ListRenderer, ListState } from "../../src/renderer";
+import type {
+  Box,
+  Context,
+  HitTest,
+  Node,
+  RenderFeedback,
+} from "../../src/types";
 import { createGraphics } from "../helpers/graphics";
 import {
   createFeedback,
@@ -14,13 +20,25 @@ import {
 
 type C = CanvasRenderingContext2D;
 
+function createRenderer<T extends {}>(
+  viewportHeight: number,
+  options: {
+    anchorMode: ListAnchorMode;
+    list: ListState<T>;
+    renderItem: (item: T) => Node<C>;
+  },
+): ListRenderer<C, T> {
+  return new ListRenderer(createGraphics(viewportHeight), options);
+}
+
 describe("virtualized visible window", () => {
-  test("TimelineRenderer hittest is stable before the first render", () => {
+  test("top-anchor hittest is stable before the first render", () => {
     const hits: ProbeHit[] = [];
     const list = new ListState<number>();
     list.push(20);
     const node = createHitNode(20, hits);
-    const renderer = new TimelineRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
       list,
       renderItem: () => node,
     });
@@ -40,12 +58,13 @@ describe("virtualized visible window", () => {
     expect(renderer.hittest({ x: 12, y: 40, type: "click" })).toBe(false);
   });
 
-  test("ChatRenderer hittest is stable before the first render", () => {
+  test("bottom-anchor hittest is stable before the first render", () => {
     const hits: ProbeHit[] = [];
     const list = new ListState<number>();
     list.push(20);
     const node = createHitNode(20, hits);
-    const renderer = new ChatRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "bottom",
       list,
       renderItem: () => node,
     });
@@ -65,12 +84,13 @@ describe("virtualized visible window", () => {
     expect(renderer.hittest({ x: 16, y: 40, type: "click" })).toBe(false);
   });
 
-  test("TimelineRenderer render and hittest inspect the same visible window", () => {
+  test("top-anchor render and hittest inspect the same visible window", () => {
     const list = new ListState<number>();
     list.push(0, 1, 2, 3, 4, 5);
 
     const renderSeen: number[] = [];
-    const renderRenderer = new TimelineRenderer(createGraphics(60), {
+    const renderRenderer = createRenderer(60, {
+      anchorMode: "top",
       list,
       renderItem: (item) => {
         renderSeen.push(item);
@@ -80,7 +100,8 @@ describe("virtualized visible window", () => {
     renderRenderer.render();
 
     const hittestSeen: number[] = [];
-    const hittestRenderer = new TimelineRenderer(createGraphics(60), {
+    const hittestRenderer = createRenderer(60, {
+      anchorMode: "top",
       list,
       renderItem: (item) => {
         hittestSeen.push(item);
@@ -92,13 +113,14 @@ describe("virtualized visible window", () => {
     expect(hittestSeen).toEqual(renderSeen);
   });
 
-  test("ChatRenderer hittest scales with the visible window instead of the full history", () => {
+  test("bottom-anchor hittest scales with the visible window instead of the full history", () => {
     const items = Array.from({ length: 1000 }, (_, idx) => idx);
     const measureCount = { count: 0 };
     const list = new ListState<number>();
     list.pushAll(items);
 
-    const renderer = new ChatRenderer(createGraphics(120), {
+    const renderer = createRenderer(120, {
+      anchorMode: "bottom",
       list,
       renderItem: () => ({
         measure(_ctx: Context<C>): Box {
@@ -119,11 +141,12 @@ describe("virtualized visible window", () => {
     expect(measureCount.count).toBeLessThan(20);
   });
 
-  test("TimelineRenderer reports a monotonic visible range for an oversized item", () => {
+  test("top-anchor reports a monotonic visible range for an oversized item", () => {
     const list = new ListState<number>();
     list.push(200);
 
-    const renderer = new TimelineRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -138,11 +161,12 @@ describe("virtualized visible window", () => {
     expect(feedback.max).toBeGreaterThanOrEqual(feedback.min);
   });
 
-  test("ChatRenderer reports a monotonic visible range for an oversized item", () => {
+  test("bottom-anchor reports a monotonic visible range for an oversized item", () => {
     const list = new ListState<number>();
     list.push(200);
 
-    const renderer = new ChatRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -157,11 +181,12 @@ describe("virtualized visible window", () => {
     expect(feedback.max).toBeGreaterThanOrEqual(feedback.min);
   });
 
-  test("TimelineRenderer keeps feedback finite and smooth while crossing into an oversized item", () => {
+  test("top-anchor keeps feedback finite and smooth while crossing into an oversized item", () => {
     const list = new ListState<number>();
     list.push(40, 300, 40);
 
-    const renderer = new TimelineRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -188,11 +213,12 @@ describe("virtualized visible window", () => {
     }
   });
 
-  test("ChatRenderer keeps feedback finite and smooth while crossing into an oversized item", () => {
+  test("bottom-anchor keeps feedback finite and smooth while crossing into an oversized item", () => {
     const list = new ListState<number>();
     list.push(40, 300, 40);
 
-    const renderer = new ChatRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -219,12 +245,13 @@ describe("virtualized visible window", () => {
     }
   });
 
-  test("TimelineRenderer reports edge indices for mixed partially visible items", () => {
+  test("top-anchor reports edge indices for mixed partially visible items", () => {
     const list = new ListState<number>();
     list.push(50, 50, 50);
     list.applyScroll(-25);
 
-    const renderer = new TimelineRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -238,12 +265,13 @@ describe("virtualized visible window", () => {
     expect(feedback.max).toBeCloseTo(2.5);
   });
 
-  test("ChatRenderer reports edge indices for mixed partially visible items", () => {
+  test("bottom-anchor reports edge indices for mixed partially visible items", () => {
     const list = new ListState<number>();
     list.push(50, 50, 50);
     list.applyScroll(25);
 
-    const renderer = new ChatRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -261,7 +289,8 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(200);
 
-    const renderer = new TimelineRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -279,7 +308,8 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(50, 0, 100);
 
-    const renderer = new TimelineRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });

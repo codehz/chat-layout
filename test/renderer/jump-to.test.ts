@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  ChatRenderer,
+  ListAnchorMode,
+  ListRenderer,
   ListState,
-  TimelineRenderer,
   memoRenderItem,
 } from "../../src/renderer";
 import type {
@@ -17,13 +17,22 @@ import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
 import {
   createFeedback,
   createNode,
-  expectedChatAnchor,
-  expectedTimelineAnchor,
-  readChatAnchor,
-  readTimelineAnchor,
+  expectedAnchor,
+  readAnchor,
 } from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
+
+function createRenderer<T extends {}>(
+  viewportHeight: number,
+  options: {
+    anchorMode: ListAnchorMode;
+    list: ListState<T>;
+    renderItem: (item: T) => Node<C>;
+  },
+): ListRenderer<C, T> {
+  return new ListRenderer(createGraphics(viewportHeight), options);
+}
 
 function smoothstep(value: number): number {
   return value * value * (3 - 2 * value);
@@ -77,11 +86,12 @@ describe("jumpTo", () => {
     expect(list.offset).toBe(0);
   });
 
-  test("TimelineRenderer jumpTo without animation matches direct positioning", () => {
+  test("ListRenderer top-anchor jumpTo without animation matches direct positioning", () => {
     const heights = [40, 50, 60, 70, 80];
     const jumpedList = new ListState<number>();
     jumpedList.pushAll(heights);
-    const jumpedRenderer = new TimelineRenderer(createGraphics(100), {
+    const jumpedRenderer = createRenderer(100, {
+      anchorMode: "top",
       list: jumpedList,
       renderItem: (height) => createNode(height),
     });
@@ -94,7 +104,8 @@ describe("jumpTo", () => {
     manualList.pushAll(heights);
     manualList.position = 3;
     manualList.offset = 0;
-    const manualRenderer = new TimelineRenderer(createGraphics(100), {
+    const manualRenderer = createRenderer(100, {
+      anchorMode: "top",
       list: manualList,
       renderItem: (height) => createNode(height),
     });
@@ -106,11 +117,12 @@ describe("jumpTo", () => {
     expect(jumpedFeedback).toEqual(manualFeedback);
   });
 
-  test("ChatRenderer jumpTo without animation matches direct positioning", () => {
+  test("ListRenderer bottom-anchor jumpTo without animation matches direct positioning", () => {
     const heights = [40, 50, 60, 70, 80];
     const jumpedList = new ListState<number>();
     jumpedList.pushAll(heights);
-    const jumpedRenderer = new ChatRenderer(createGraphics(100), {
+    const jumpedRenderer = createRenderer(100, {
+      anchorMode: "bottom",
       list: jumpedList,
       renderItem: (height) => createNode(height),
     });
@@ -123,7 +135,8 @@ describe("jumpTo", () => {
     manualList.pushAll(heights);
     manualList.position = 1;
     manualList.offset = 0;
-    const manualRenderer = new ChatRenderer(createGraphics(100), {
+    const manualRenderer = createRenderer(100, {
+      anchorMode: "bottom",
       list: manualList,
       renderItem: (height) => createNode(height),
     });
@@ -137,7 +150,8 @@ describe("jumpTo", () => {
 
   test("jumpTo clamps indices and ignores empty lists", () => {
     const emptyTimelineList = new ListState<number>();
-    const emptyTimeline = new TimelineRenderer(createGraphics(100), {
+    const emptyTimeline = createRenderer(100, {
+      anchorMode: "top",
       list: emptyTimelineList,
       renderItem: (height) => createNode(height),
     });
@@ -146,7 +160,8 @@ describe("jumpTo", () => {
 
     const timelineList = new ListState<number>();
     timelineList.push(20, 20, 20);
-    const timeline = new TimelineRenderer(createGraphics(100), {
+    const timeline = createRenderer(100, {
+      anchorMode: "top",
       list: timelineList,
       renderItem: (height) => createNode(height),
     });
@@ -156,7 +171,8 @@ describe("jumpTo", () => {
 
     const chatList = new ListState<number>();
     chatList.push(20, 20, 20);
-    const chat = new ChatRenderer(createGraphics(100), {
+    const chat = createRenderer(100, {
+      anchorMode: "bottom",
       list: chatList,
       renderItem: (height) => createNode(height),
     });
@@ -165,52 +181,50 @@ describe("jumpTo", () => {
     expect(chatList.position).toBe(2);
   });
 
-  test("TimelineRenderer block start matches the default jump target", () => {
+  test("top-anchor block start matches the default jump target", () => {
     const heights = [40, 50, 60, 70];
     const viewportHeight = 100;
     const defaultList = new ListState<number>();
     defaultList.pushAll(heights);
-    const defaultRenderer = new TimelineRenderer(
-      createGraphics(viewportHeight),
-      {
-        list: defaultList,
-        renderItem: (height) => createNode(height),
-      },
-    );
-
-    const explicitList = new ListState<number>();
-    explicitList.pushAll(heights);
-    const explicitRenderer = new TimelineRenderer(
-      createGraphics(viewportHeight),
-      {
-        list: explicitList,
-        renderItem: (height) => createNode(height),
-      },
-    );
-
-    defaultRenderer.jumpTo(2, { animated: false });
-    explicitRenderer.jumpTo(2, { animated: false, block: "start" });
-    defaultRenderer.render();
-    explicitRenderer.render();
-
-    expect(readTimelineAnchor(defaultList, heights)).toBeCloseTo(
-      readTimelineAnchor(explicitList, heights),
-    );
-  });
-
-  test("ChatRenderer block end matches the default jump target", () => {
-    const heights = [40, 50, 60, 70];
-    const viewportHeight = 100;
-    const defaultList = new ListState<number>();
-    defaultList.pushAll(heights);
-    const defaultRenderer = new ChatRenderer(createGraphics(viewportHeight), {
+    const defaultRenderer = createRenderer(viewportHeight, {
+      anchorMode: "top",
       list: defaultList,
       renderItem: (height) => createNode(height),
     });
 
     const explicitList = new ListState<number>();
     explicitList.pushAll(heights);
-    const explicitRenderer = new ChatRenderer(createGraphics(viewportHeight), {
+    const explicitRenderer = createRenderer(viewportHeight, {
+      anchorMode: "top",
+      list: explicitList,
+      renderItem: (height) => createNode(height),
+    });
+
+    defaultRenderer.jumpTo(2, { animated: false });
+    explicitRenderer.jumpTo(2, { animated: false, block: "start" });
+    defaultRenderer.render();
+    explicitRenderer.render();
+
+    expect(readAnchor(defaultList, heights, "top")).toBeCloseTo(
+      readAnchor(explicitList, heights, "top"),
+    );
+  });
+
+  test("bottom-anchor block end matches the default jump target", () => {
+    const heights = [40, 50, 60, 70];
+    const viewportHeight = 100;
+    const defaultList = new ListState<number>();
+    defaultList.pushAll(heights);
+    const defaultRenderer = createRenderer(viewportHeight, {
+      anchorMode: "bottom",
+      list: defaultList,
+      renderItem: (height) => createNode(height),
+    });
+
+    const explicitList = new ListState<number>();
+    explicitList.pushAll(heights);
+    const explicitRenderer = createRenderer(viewportHeight, {
+      anchorMode: "bottom",
       list: explicitList,
       renderItem: (height) => createNode(height),
     });
@@ -220,17 +234,18 @@ describe("jumpTo", () => {
     defaultRenderer.render();
     explicitRenderer.render();
 
-    expect(readChatAnchor(defaultList, heights)).toBeCloseTo(
-      readChatAnchor(explicitList, heights),
+    expect(readAnchor(defaultList, heights, "bottom")).toBeCloseTo(
+      readAnchor(explicitList, heights, "bottom"),
     );
   });
 
-  test("TimelineRenderer block center aligns the item center to the viewport center", () => {
+  test("top-anchor block center aligns the item center to the viewport center", () => {
     const heights = [30, 40, 120, 50];
     const viewportHeight = 100;
     const list = new ListState<number>();
     list.pushAll(heights);
-    const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
+    const renderer = createRenderer(viewportHeight, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -238,17 +253,18 @@ describe("jumpTo", () => {
     renderer.jumpTo(2, { animated: false, block: "center" });
     renderer.render();
 
-    expect(readTimelineAnchor(list, heights)).toBeCloseTo(
-      expectedTimelineAnchor(heights, viewportHeight, 2, "center"),
+    expect(readAnchor(list, heights, "top")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 2, "center", "top"),
     );
   });
 
-  test("ChatRenderer block center aligns the item center to the viewport center", () => {
+  test("bottom-anchor block center aligns the item center to the viewport center", () => {
     const heights = [30, 120, 40, 50];
     const viewportHeight = 100;
     const list = new ListState<number>();
     list.pushAll(heights);
-    const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+    const renderer = createRenderer(viewportHeight, {
+      anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -256,17 +272,18 @@ describe("jumpTo", () => {
     renderer.jumpTo(1, { animated: false, block: "center" });
     renderer.render();
 
-    expect(readChatAnchor(list, heights)).toBeCloseTo(
-      expectedChatAnchor(heights, viewportHeight, 1, "center"),
+    expect(readAnchor(list, heights, "bottom")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 1, "center", "bottom"),
     );
   });
 
-  test("TimelineRenderer block end aligns the item bottom to the viewport bottom", () => {
+  test("top-anchor block end aligns the item bottom to the viewport bottom", () => {
     const heights = [40, 60, 80, 50];
     const viewportHeight = 100;
     const list = new ListState<number>();
     list.pushAll(heights);
-    const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
+    const renderer = createRenderer(viewportHeight, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -274,17 +291,18 @@ describe("jumpTo", () => {
     renderer.jumpTo(2, { animated: false, block: "end" });
     renderer.render();
 
-    expect(readTimelineAnchor(list, heights)).toBeCloseTo(
-      expectedTimelineAnchor(heights, viewportHeight, 2, "end"),
+    expect(readAnchor(list, heights, "top")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 2, "end", "top"),
     );
   });
 
-  test("ChatRenderer block start aligns the item top to the viewport top", () => {
+  test("bottom-anchor block start aligns the item top to the viewport top", () => {
     const heights = [40, 60, 80, 50];
     const viewportHeight = 100;
     const list = new ListState<number>();
     list.pushAll(heights);
-    const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+    const renderer = createRenderer(viewportHeight, {
+      anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -292,8 +310,8 @@ describe("jumpTo", () => {
     renderer.jumpTo(1, { animated: false, block: "start" });
     renderer.render();
 
-    expect(readChatAnchor(list, heights)).toBeCloseTo(
-      expectedChatAnchor(heights, viewportHeight, 1, "start"),
+    expect(readAnchor(list, heights, "bottom")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 1, "start", "bottom"),
     );
   });
 
@@ -303,26 +321,28 @@ describe("jumpTo", () => {
 
     const timelineList = new ListState<number>();
     timelineList.pushAll(heights);
-    const timeline = new TimelineRenderer(createGraphics(viewportHeight), {
+    const timeline = createRenderer(viewportHeight, {
+      anchorMode: "top",
       list: timelineList,
       renderItem: (height) => createNode(height),
     });
     timeline.jumpTo(1, { animated: false, block: "center" });
     timeline.render();
-    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(
-      expectedTimelineAnchor(heights, viewportHeight, 1, "center"),
+    expect(readAnchor(timelineList, heights, "top")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 1, "center", "top"),
     );
 
     const chatList = new ListState<number>();
     chatList.pushAll(heights);
-    const chat = new ChatRenderer(createGraphics(viewportHeight), {
+    const chat = createRenderer(viewportHeight, {
+      anchorMode: "bottom",
       list: chatList,
       renderItem: (height) => createNode(height),
     });
     chat.jumpTo(1, { animated: false, block: "center" });
     chat.render();
-    expect(readChatAnchor(chatList, heights)).toBeCloseTo(
-      expectedChatAnchor(heights, viewportHeight, 1, "center"),
+    expect(readAnchor(chatList, heights, "bottom")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 1, "center", "bottom"),
     );
   });
 
@@ -332,28 +352,30 @@ describe("jumpTo", () => {
 
     const timelineList = new ListState<number>();
     timelineList.pushAll(heights);
-    const timeline = new TimelineRenderer(createGraphics(viewportHeight), {
+    const timeline = createRenderer(viewportHeight, {
+      anchorMode: "top",
       list: timelineList,
       renderItem: (height) => createNode(height),
     });
     timeline.jumpTo(0, { animated: false, block: "end" });
     timeline.render();
-    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(
-      expectedTimelineAnchor(heights, viewportHeight, 0, "end"),
+    expect(readAnchor(timelineList, heights, "top")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 0, "end", "top"),
     );
     expect(Number.isFinite(timelineList.position)).toBe(true);
     expect(Number.isFinite(timelineList.offset)).toBe(true);
 
     const chatList = new ListState<number>();
     chatList.pushAll(heights);
-    const chat = new ChatRenderer(createGraphics(viewportHeight), {
+    const chat = createRenderer(viewportHeight, {
+      anchorMode: "bottom",
       list: chatList,
       renderItem: (height) => createNode(height),
     });
     chat.jumpTo(2, { animated: false, block: "start" });
     chat.render();
-    expect(readChatAnchor(chatList, heights)).toBeCloseTo(
-      expectedChatAnchor(heights, viewportHeight, 2, "start"),
+    expect(readAnchor(chatList, heights, "bottom")).toBeCloseTo(
+      expectedAnchor(heights, viewportHeight, 2, "start", "bottom"),
     );
     expect(Number.isFinite(chatList.position)).toBe(true);
     expect(Number.isFinite(chatList.offset)).toBe(true);
@@ -362,7 +384,8 @@ describe("jumpTo", () => {
   test("jumpTo onComplete runs immediately for non-animated success", () => {
     const list = new ListState<number>();
     list.push(40, 50, 60);
-    const renderer = new TimelineRenderer(createGraphics(100), {
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
     });
@@ -381,14 +404,15 @@ describe("jumpTo", () => {
     expect(list.offset).toBe(0);
   });
 
-  test("TimelineRenderer default jumpTo animates smoothly and settles", () => {
+  test("top-anchor default jumpTo animates smoothly and settles", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const heights = [40, 40, 40, 40, 40, 40, 40, 40];
       const list = new ListState<number>();
       list.pushAll(heights);
-      const renderer = new TimelineRenderer(createGraphics(100), {
+      const renderer = createRenderer(100, {
+        anchorMode: "top",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -404,7 +428,7 @@ describe("jumpTo", () => {
         now.current = time;
         const feedback = createFeedback();
         returns.push(renderer.render(feedback));
-        anchors.push(readTimelineAnchor(list, heights));
+        anchors.push(readAnchor(list, heights, "top"));
         feedbacks.push({ ...feedback });
       }
 
@@ -421,14 +445,15 @@ describe("jumpTo", () => {
     }
   });
 
-  test("ChatRenderer default jumpTo animates smoothly and settles", () => {
+  test("bottom-anchor default jumpTo animates smoothly and settles", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const heights = [40, 40, 40, 40, 40, 40, 40, 40];
       const list = new ListState<number>();
       list.pushAll(heights);
-      const renderer = new ChatRenderer(createGraphics(100), {
+      const renderer = createRenderer(100, {
+        anchorMode: "bottom",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -444,7 +469,7 @@ describe("jumpTo", () => {
         now.current = time;
         const feedback = createFeedback();
         returns.push(renderer.render(feedback));
-        anchors.push(readChatAnchor(list, heights));
+        anchors.push(readAnchor(list, heights, "bottom"));
         feedbacks.push({ ...feedback });
       }
 
@@ -467,7 +492,8 @@ describe("jumpTo", () => {
     try {
       const list = new ListState<number>();
       list.push(40, 40, 40, 40, 40);
-      const renderer = new TimelineRenderer(createGraphics(100), {
+      const renderer = createRenderer(100, {
+        anchorMode: "top",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -502,7 +528,8 @@ describe("jumpTo", () => {
       const heights = [40, 40, 40, 40, 40, 40, 40, 40];
       const list = new ListState<number>();
       list.pushAll(heights);
-      const renderer = new TimelineRenderer(createGraphics(100), {
+      const renderer = createRenderer(100, {
+        anchorMode: "top",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -522,7 +549,8 @@ describe("jumpTo", () => {
       expectedList.pushAll(heights);
       expectedList.position = 2;
       expectedList.offset = 0;
-      const expected = new TimelineRenderer(createGraphics(100), {
+      const expected = createRenderer(100, {
+        anchorMode: "top",
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
@@ -541,7 +569,8 @@ describe("jumpTo", () => {
     try {
       const list = new ListState<number>();
       list.push(40, 40, 40, 40, 40, 40, 40, 40);
-      const renderer = new TimelineRenderer(createGraphics(100), {
+      const renderer = createRenderer(100, {
+        anchorMode: "top",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -585,7 +614,8 @@ describe("jumpTo", () => {
       const heights = [40, 40, 40, 40, 40, 40, 40, 40];
       const list = new ListState<number>();
       list.pushAll(heights);
-      const renderer = new ChatRenderer(createGraphics(100), {
+      const renderer = createRenderer(100, {
+        anchorMode: "bottom",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -604,7 +634,8 @@ describe("jumpTo", () => {
       expectedList.pushAll(heights);
       expectedList.position = 6;
       expectedList.offset = 5;
-      const expected = new ChatRenderer(createGraphics(100), {
+      const expected = createRenderer(100, {
+        anchorMode: "bottom",
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
@@ -625,7 +656,8 @@ describe("jumpTo", () => {
     try {
       const list = new ListState<number>();
       list.push(40, 40, 40, 40, 40, 40, 40, 40);
-      const renderer = new ChatRenderer(createGraphics(100), {
+      const renderer = createRenderer(100, {
+        anchorMode: "bottom",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -673,7 +705,8 @@ describe("jumpTo", () => {
 
     const list = new ListState<Item>();
     list.pushAll(makeItems());
-    const renderer = new TimelineRenderer(createGraphics(120), {
+    const renderer = createRenderer(120, {
+      anchorMode: "top",
       list,
       renderItem,
     });
@@ -692,7 +725,8 @@ describe("jumpTo", () => {
       const viewportHeight = 100;
       const list = new ListState<number>();
       list.pushAll(heights);
-      const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -705,8 +739,8 @@ describe("jumpTo", () => {
         renderer.render();
       }
 
-      expect(readChatAnchor(list, heights)).toBeCloseTo(
-        expectedChatAnchor(heights, viewportHeight, 1, "start"),
+      expect(readAnchor(list, heights, "bottom")).toBeCloseTo(
+        expectedAnchor(heights, viewportHeight, 1, "start", "bottom"),
       );
     } finally {
       restoreNow();
@@ -720,7 +754,8 @@ describe("jumpTo", () => {
       const shortHeights = [40, 40, 40, 40];
       const shortList = new ListState<number>();
       shortList.pushAll(shortHeights);
-      const shortRenderer = new TimelineRenderer(createGraphics(100), {
+      const shortRenderer = createRenderer(100, {
+        anchorMode: "top",
         list: shortList,
         renderItem: (height) => createNode(height),
       });
@@ -728,7 +763,8 @@ describe("jumpTo", () => {
       const tallHeights = [80, 80, 80, 80];
       const tallList = new ListState<number>();
       tallList.pushAll(tallHeights);
-      const tallRenderer = new TimelineRenderer(createGraphics(100), {
+      const tallRenderer = createRenderer(100, {
+        anchorMode: "top",
         list: tallList,
         renderItem: (height) => createNode(height),
       });
@@ -740,20 +776,20 @@ describe("jumpTo", () => {
 
       now.current = 200;
       expect(shortRenderer.render()).toBe(false);
-      expect(readTimelineAnchor(shortList, shortHeights)).toBeCloseTo(1);
+      expect(readAnchor(shortList, shortHeights, "top")).toBeCloseTo(1);
 
       expect(tallRenderer.render()).toBe(true);
-      expect(readTimelineAnchor(tallList, tallHeights)).toBeLessThan(1);
+      expect(readAnchor(tallList, tallHeights, "top")).toBeLessThan(1);
 
       now.current = 240;
       expect(tallRenderer.render()).toBe(false);
-      expect(readTimelineAnchor(tallList, tallHeights)).toBeCloseTo(1);
+      expect(readAnchor(tallList, tallHeights, "top")).toBeCloseTo(1);
     } finally {
       restoreNow();
     }
   });
 
-  test("TimelineRenderer animated jumps follow eased pixel travel across mixed heights", () => {
+  test("top-anchor animated jumps follow eased pixel travel across mixed heights", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -761,7 +797,8 @@ describe("jumpTo", () => {
       const viewportHeight = 40;
       const list = new ListState<number>();
       list.pushAll(heights);
-      const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
         list,
         renderItem: (height) => createNode(height),
       });
@@ -769,19 +806,19 @@ describe("jumpTo", () => {
       renderer.render();
       const startPixel = pixelAtAnchor(
         heights,
-        readTimelineAnchor(list, heights),
+        readAnchor(list, heights, "top"),
       );
       renderer.jumpTo(1, { block: "end", duration: 200 });
       const targetPixel = pixelAtAnchor(
         heights,
-        expectedTimelineAnchor(heights, viewportHeight, 1, "end"),
+        expectedAnchor(heights, viewportHeight, 1, "end", "top"),
       );
 
       for (const time of [0, 50, 100, 150, 200]) {
         now.current = time;
         renderer.render();
         expect(
-          pixelAtAnchor(heights, readTimelineAnchor(list, heights)),
+          pixelAtAnchor(heights, readAnchor(list, heights, "top")),
         ).toBeCloseTo(expectedPixelAtTime(startPixel, targetPixel, time, 200));
       }
     } finally {
@@ -789,7 +826,7 @@ describe("jumpTo", () => {
     }
   });
 
-  test("ChatRenderer animated jumps follow eased pixel travel across mixed heights", () => {
+  test("bottom-anchor animated jumps follow eased pixel travel across mixed heights", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -797,24 +834,28 @@ describe("jumpTo", () => {
       const viewportHeight = 40;
       const list = new ListState<number>();
       list.pushAll(heights);
-      const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
         list,
         renderItem: (height) => createNode(height),
       });
 
       renderer.render();
-      const startPixel = pixelAtAnchor(heights, readChatAnchor(list, heights));
+      const startPixel = pixelAtAnchor(
+        heights,
+        readAnchor(list, heights, "bottom"),
+      );
       renderer.jumpTo(1, { block: "start", duration: 200 });
       const targetPixel = pixelAtAnchor(
         heights,
-        expectedChatAnchor(heights, viewportHeight, 1, "start"),
+        expectedAnchor(heights, viewportHeight, 1, "start", "bottom"),
       );
 
       for (const time of [0, 50, 100, 150, 200]) {
         now.current = time;
         renderer.render();
         expect(
-          pixelAtAnchor(heights, readChatAnchor(list, heights)),
+          pixelAtAnchor(heights, readAnchor(list, heights, "bottom")),
         ).toBeCloseTo(expectedPixelAtTime(startPixel, targetPixel, time, 200));
       }
     } finally {

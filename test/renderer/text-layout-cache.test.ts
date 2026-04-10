@@ -7,8 +7,8 @@ import type {
   TextOptions,
 } from "../../src/types";
 import {
-  ChatRenderer,
   DebugRenderer,
+  ListRenderer,
   ListState,
   memoRenderItem,
 } from "../../src/renderer";
@@ -126,11 +126,12 @@ describe("text layout cache", () => {
         text: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-chat-repeat",
       },
     ]);
-    const renderer = new ChatRenderer(
+    const renderer = new ListRenderer(
       createTextGraphics(80, 100, () => {
         graphicsMeasures += 1;
       }),
       {
+        anchorMode: "bottom",
         list,
         renderItem: memoRenderItem<C, { text: string }>(
           (item) =>

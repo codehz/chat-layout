@@ -9,7 +9,7 @@ The current v2-style APIs are:
 - `Place`: place a single child at `start` / `center` / `end`
 - `ShrinkWrap`: search the narrowest width that keeps the current height stable
 - `MultilineText`: text layout with logical `align` or physical `physicalAlign`
-- `ChatRenderer` + `ListState`: virtualized chat rendering
+- `ListRenderer` + `ListState`: virtualized chat or timeline rendering
 - `memoRenderItem` / `memoRenderItemBy`: item render memoization
 
 ## Quick example

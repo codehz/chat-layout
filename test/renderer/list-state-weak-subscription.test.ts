@@ -1,10 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  ListState,
-  TimelineRenderer,
-  memoRenderItem,
-} from "../../src/renderer";
+import { ListRenderer, ListState, memoRenderItem } from "../../src/renderer";
 import type { Box, Context, HitTest, Node } from "../../src/types";
 import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
 
@@ -31,14 +27,15 @@ function createProbeNode(item: Item, draws: string[]): Node<C> {
 }
 
 describe("ListState weak subscriptions", () => {
-  test("TimelineRenderer still responds to update, delete, push, set, and reset changes", () => {
+  test("ListRenderer still responds to update, delete, push, set, and reset changes", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: string[] = [];
       const oldItem = { id: "old", height: 20 };
       const list = new ListState<Item>([oldItem, { id: "tail", height: 10 }]);
-      const renderer = new TimelineRenderer(createGraphics(120), {
+      const renderer = new ListRenderer(createGraphics(120), {
+        anchorMode: "top",
         list,
         renderItem: memoRenderItem<C, Item>((item) =>
           createProbeNode(item, draws),

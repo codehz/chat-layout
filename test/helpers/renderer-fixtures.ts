@@ -2,6 +2,7 @@ import { expect } from "bun:test";
 
 import { Text } from "../../src/nodes";
 import { BaseRenderer, ListState } from "../../src/renderer";
+import type { ListAnchorMode } from "../../src/renderer";
 import type {
   Box,
   Context,
@@ -109,34 +110,24 @@ function clampIndex(index: number, length: number): number {
   return Math.min(Math.max(index, 0), length - 1);
 }
 
-export function readTimelineAnchor(
+export function readAnchor(
   list: ListState<number>,
   heights: number[],
+  anchorMode: ListAnchorMode,
 ): number {
   const currentPosition = list.position;
   const position = clampIndex(
     typeof currentPosition === "number" && Number.isFinite(currentPosition)
       ? Math.trunc(currentPosition)
-      : 0,
+      : anchorMode === "top"
+        ? 0
+        : heights.length - 1,
     heights.length,
   );
   const height = heights[position];
-  return height > 0 ? position - list.offset / height : position;
-}
-
-export function readChatAnchor(
-  list: ListState<number>,
-  heights: number[],
-): number {
-  const fallback = heights.length - 1;
-  const currentPosition = list.position;
-  const position = clampIndex(
-    typeof currentPosition === "number" && Number.isFinite(currentPosition)
-      ? Math.trunc(currentPosition)
-      : fallback,
-    heights.length,
-  );
-  const height = heights[position];
+  if (anchorMode === "top") {
+    return height > 0 ? position - list.offset / height : position;
+  }
   return height > 0 ? position + 1 - list.offset / height : position + 1;
 }
 
@@ -178,34 +169,29 @@ function readAnchorAtOffset(
   }
 }
 
-export function expectedTimelineAnchor(
+export function expectedAnchor(
   heights: number[],
   viewportHeight: number,
   index: number,
   block: "start" | "center" | "end",
+  anchorMode: ListAnchorMode,
 ): number {
   const height = heights[index];
-  switch (block) {
-    case "start":
-      return readAnchorAtOffset(heights, index, 0);
-    case "center":
-      return readAnchorAtOffset(
-        heights,
-        index,
-        height / 2 - viewportHeight / 2,
-      );
-    case "end":
-      return readAnchorAtOffset(heights, index, height - viewportHeight);
+  if (anchorMode === "top") {
+    switch (block) {
+      case "start":
+        return readAnchorAtOffset(heights, index, 0);
+      case "center":
+        return readAnchorAtOffset(
+          heights,
+          index,
+          height / 2 - viewportHeight / 2,
+        );
+      case "end":
+        return readAnchorAtOffset(heights, index, height - viewportHeight);
+    }
   }
-}
 
-export function expectedChatAnchor(
-  heights: number[],
-  viewportHeight: number,
-  index: number,
-  block: "start" | "center" | "end",
-): number {
-  const height = heights[index];
   switch (block) {
     case "start":
       return readAnchorAtOffset(heights, index, viewportHeight);

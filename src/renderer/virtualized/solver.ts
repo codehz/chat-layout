@@ -1,3 +1,17 @@
+export type ListAnchorMode = "top" | "bottom";
+
+export type ListUnderflowAlign = "top";
+
+export interface ListLayoutOptions {
+  anchorMode?: ListAnchorMode;
+  underflowAlign?: ListUnderflowAlign;
+}
+
+export interface ResolvedListLayoutOptions {
+  anchorMode: ListAnchorMode;
+  underflowAlign: ListUnderflowAlign;
+}
+
 export interface VisibleListState {
   position?: number;
   offset: number;
@@ -30,8 +44,6 @@ type ResolvedItem<T> = {
   height: number;
 };
 
-export type VisibleDirection = "forward" | "backward";
-
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -40,17 +52,26 @@ function normalizeOffset(offset: number): number {
   return Number.isFinite(offset) ? offset : 0;
 }
 
+export function resolveListLayoutOptions(
+  options: ListLayoutOptions = {},
+): ResolvedListLayoutOptions {
+  return {
+    anchorMode: options.anchorMode ?? "top",
+    underflowAlign: options.underflowAlign ?? "top",
+  };
+}
+
 export function normalizeVisibleState(
   itemCount: number,
   state: VisibleListState,
-  direction: VisibleDirection,
+  layout: ResolvedListLayoutOptions,
 ): NormalizedListState {
   if (itemCount <= 0) {
     return { position: 0, offset: 0 };
   }
 
   const position = state.position;
-  const fallbackPosition = direction === "forward" ? 0 : itemCount - 1;
+  const fallbackPosition = layout.anchorMode === "top" ? 0 : itemCount - 1;
   if (typeof position !== "number" || !Number.isFinite(position)) {
     return {
       position: fallbackPosition,
@@ -64,28 +85,14 @@ export function normalizeVisibleState(
   };
 }
 
-export function normalizeTimelineState(
-  itemCount: number,
-  state: VisibleListState,
-): NormalizedListState {
-  return normalizeVisibleState(itemCount, state, "forward");
-}
-
-export function normalizeChatState(
-  itemCount: number,
-  state: VisibleListState,
-): NormalizedListState {
-  return normalizeVisibleState(itemCount, state, "backward");
-}
-
 export function resolveVisibleWindow<T, V>(
   items: readonly T[],
   state: VisibleListState,
   viewportHeight: number,
   resolveItem: (item: T, idx: number) => ResolvedItem<V>,
-  direction: VisibleDirection,
+  layout: ResolvedListLayoutOptions,
 ): VisibleWindowResult<V> {
-  const normalizedState = normalizeVisibleState(items.length, state, direction);
+  const normalizedState = normalizeVisibleState(items.length, state, layout);
   if (items.length === 0) {
     return {
       normalizedState,
@@ -93,7 +100,7 @@ export function resolveVisibleWindow<T, V>(
     };
   }
 
-  if (direction === "forward") {
+  if (layout.anchorMode === "top") {
     let { position, offset } = normalizedState;
     let drawLength = 0;
 
@@ -225,34 +232,4 @@ export function resolveVisibleWindow<T, V>(
     normalizedState: { position, offset },
     window: { drawList, shift },
   };
-}
-
-export function resolveTimelineVisibleWindow<T, V>(
-  items: readonly T[],
-  state: VisibleListState,
-  viewportHeight: number,
-  resolveItem: (item: T, idx: number) => ResolvedItem<V>,
-): VisibleWindowResult<V> {
-  return resolveVisibleWindow(
-    items,
-    state,
-    viewportHeight,
-    resolveItem,
-    "forward",
-  );
-}
-
-export function resolveChatVisibleWindow<T, V>(
-  items: readonly T[],
-  state: VisibleListState,
-  viewportHeight: number,
-  resolveItem: (item: T, idx: number) => ResolvedItem<V>,
-): VisibleWindowResult<V> {
-  return resolveVisibleWindow(
-    items,
-    state,
-    viewportHeight,
-    resolveItem,
-    "backward",
-  );
 }

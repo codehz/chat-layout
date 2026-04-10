@@ -1,6 +1,10 @@
 import type { Box, Context, Node } from "../../types";
 import type { ListStateChange } from "../list-state";
-import type { VisibleWindow, VisibleWindowResult } from "./solver";
+import type {
+  ResolvedListLayoutOptions,
+  VisibleWindow,
+  VisibleWindowResult,
+} from "./solver";
 import {
   clamp,
   getNow,
@@ -57,6 +61,7 @@ export type TransitionContext<
   items: readonly T[];
   position: number | undefined;
   offset: number;
+  layout: ResolvedListLayoutOptions;
   readListState: () => ControlledState;
   readVisibleRange: (
     top: number,
@@ -90,6 +95,7 @@ export class TransitionController<
     items: readonly T[],
     viewportHeight: number,
     snapshotState: ControlledState,
+    layout: ResolvedListLayoutOptions,
     extraShift: number,
     readVisibleRange: (
       top: number,
@@ -133,10 +139,10 @@ export class TransitionController<
       maxVisibleIndex === items.length - 1 &&
       topMostY >= -Number.EPSILON &&
       bottomMostY < viewportHeight - Number.EPSILON;
-    this.#visibilitySnapshotTrailingGap = this
-      .#visibilitySnapshotCoversShortList
-      ? Math.max(0, viewportHeight - bottomMostY)
-      : 0;
+    this.#visibilitySnapshotTrailingGap =
+      this.#visibilitySnapshotCoversShortList && layout.underflowAlign === "top"
+        ? Math.max(0, viewportHeight - bottomMostY)
+        : 0;
   }
 
   /**

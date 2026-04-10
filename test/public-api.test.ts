@@ -100,8 +100,7 @@ describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {
     expect(api.BaseRenderer).toBeDefined();
     expect(api.DebugRenderer).toBeDefined();
-    expect(api.ChatRenderer).toBeDefined();
-    expect(api.TimelineRenderer).toBeDefined();
+    expect(api.ListRenderer).toBeDefined();
     expect(api.ListState).toBeDefined();
     expect(api.memoRenderItem).toBeDefined();
     expect(api.memoRenderItemBy).toBeDefined();
