@@ -57,7 +57,7 @@ type ReplacementAnimation<C extends CanvasRenderingContext2D> = {
   duration: number;
 };
 
-type VirtualizedResolvedItem<C extends CanvasRenderingContext2D> = {
+type VirtualizedResolvedItem = {
   draw: (y: number) => boolean;
   hittest: (test: HitTest, y: number) => boolean;
 };
@@ -312,7 +312,7 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _renderDrawList(
-    list: VisibleWindow<VirtualizedResolvedItem<C>>["drawList"],
+    list: VisibleWindow<VirtualizedResolvedItem>["drawList"],
     shift: number,
     feedback?: RenderFeedback,
   ): boolean {
@@ -336,7 +336,7 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _renderVisibleWindow(
-    window: VisibleWindow<VirtualizedResolvedItem<C>>,
+    window: VisibleWindow<VirtualizedResolvedItem>,
     feedback?: RenderFeedback,
   ): boolean {
     this._resetRenderFeedback(feedback);
@@ -380,7 +380,7 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _hittestVisibleWindow(
-    window: VisibleWindow<VirtualizedResolvedItem<C>>,
+    window: VisibleWindow<VirtualizedResolvedItem>,
     test: HitTest,
   ): boolean {
     for (const { value: item, offset, height } of window.drawList) {
@@ -480,7 +480,7 @@ export abstract class VirtualizedRenderer<
     item: T,
     _index: number,
     now: number,
-  ): { value: VirtualizedResolvedItem<C>; height: number } {
+  ): { value: VirtualizedResolvedItem; height: number } {
     const replacement = this.#readReplacementAnimation(item, now);
     if (replacement == null) {
       const node = this.options.renderItem(item);
@@ -551,7 +551,7 @@ export abstract class VirtualizedRenderer<
   ): NormalizedListState;
   protected abstract _resolveVisibleWindow(
     now: number,
-  ): VisibleWindowResult<VirtualizedResolvedItem<C>>;
+  ): VisibleWindowResult<VirtualizedResolvedItem>;
   protected abstract _readAnchor(state: NormalizedListState): number;
   protected abstract _applyAnchor(anchor: number): void;
   protected abstract _getDefaultJumpBlock(): NonNullable<
