@@ -37,6 +37,37 @@ const sampleWords = [
   "history",
 ];
 
+const sampleChinesePhrases = [
+  "你好",
+  "收到",
+  "没问题",
+  "等一下",
+  "马上来",
+  "这个效果不错",
+  "刚刚更新了",
+  "看起来可以",
+  "再确认一下",
+  "这里有点奇怪",
+  "我先试试",
+  "辛苦了",
+  "已经修好了",
+  "周会上再聊",
+  "我发你截图",
+];
+
+const sampleMixedPhrases = [
+  "hello 这条消息现在支持中文了",
+  "chat layout 这里需要再看一下",
+  "render 完成后记得刷新 preview",
+  "这段 mixed text 会测试自动换行 behavior",
+  "reply preview 里也放一点中文 content",
+  "今天的 build 已经 green 了",
+  "这个 bubble 的 spacing 感觉更自然",
+  "virtualized 列表滚动起来还是很顺",
+  "先 push 一个 demo message 看效果",
+  "中文 English mixed 排版更接近真实聊天",
+];
+
 type C = CanvasRenderingContext2D;
 
 class RoundedBox extends PaddingBox<C> {
@@ -512,12 +543,58 @@ canvas.addEventListener("click", (e) => {
   }
 });
 
-function randomText(words: number): string {
+function randomEnglishText(words: number): string {
   const out: string[] = [];
   for (let i = 0; i < words; i += 1) {
     out.push(sampleWords[Math.floor(Math.random() * sampleWords.length)]);
   }
   return out.join(" ");
+}
+
+function randomChineseText(words: number): string {
+  const out: string[] = [];
+  for (let i = 0; i < words; i += 1) {
+    out.push(
+      sampleChinesePhrases[
+        Math.floor(Math.random() * sampleChinesePhrases.length)
+      ],
+    );
+  }
+  return out.join("");
+}
+
+function randomMixedText(words: number): string {
+  const out: string[] = [];
+  for (let i = 0; i < words; i += 1) {
+    const mode = Math.random();
+    if (mode < 0.35) {
+      out.push(sampleWords[Math.floor(Math.random() * sampleWords.length)]);
+      continue;
+    }
+    if (mode < 0.7) {
+      out.push(
+        sampleChinesePhrases[
+          Math.floor(Math.random() * sampleChinesePhrases.length)
+        ],
+      );
+      continue;
+    }
+    out.push(
+      sampleMixedPhrases[Math.floor(Math.random() * sampleMixedPhrases.length)],
+    );
+  }
+  return out.join(Math.random() < 0.5 ? " " : "");
+}
+
+function randomText(words: number): string {
+  const mode = Math.random();
+  if (mode < 0.3) {
+    return randomEnglishText(words);
+  }
+  if (mode < 0.6) {
+    return randomChineseText(words);
+  }
+  return randomMixedText(words);
 }
 
 button("unshift", () => {
