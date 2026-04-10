@@ -8,6 +8,8 @@ export interface ReplaceListItemAnimationOptions {
   duration?: number;
 }
 
+export type ReplaceListItemUpdater<T extends {}> = (prevItem: T) => T;
+
 type ListReplaceChange<T extends {}> = {
   type: "replace";
   index: number;
@@ -169,19 +171,29 @@ export class ListState<T extends {}> {
   /**
    * Replaces an existing item by index.
    */
-  replace(index: number, item: T, animation?: ReplaceListItemAnimationOptions): void {
+  replace(index: number, item: T, animation?: ReplaceListItemAnimationOptions): void;
+  replace(index: number, updater: ReplaceListItemUpdater<T>, animation?: ReplaceListItemAnimationOptions): void;
+  replace(
+    index: number,
+    itemOrUpdater: T | ReplaceListItemUpdater<T>,
+    animation?: ReplaceListItemAnimationOptions,
+  ): void {
     const normalizedIndex = Number.isFinite(index) ? Math.trunc(index) : Number.NaN;
     if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0 || normalizedIndex >= this.#items.length) {
       throw new RangeError(`replace() index ${index} is out of range for list length ${this.#items.length}.`);
     }
 
     const prevItem = this.#items[normalizedIndex]!;
-    this.#items[normalizedIndex] = item;
+    const nextItem =
+      typeof itemOrUpdater === "function"
+        ? (itemOrUpdater as ReplaceListItemUpdater<T>)(prevItem)
+        : itemOrUpdater;
+    this.#items[normalizedIndex] = nextItem;
     emitListStateChange(this, {
       type: "replace",
       index: normalizedIndex,
       prevItem,
-      nextItem: item,
+      nextItem,
       animation:
         animation != null && Number.isFinite(animation.duration)
           ? { duration: animation.duration }

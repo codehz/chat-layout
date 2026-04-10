@@ -81,6 +81,26 @@ describe("replacement animation", () => {
     expect(() => list.replace(1, { id: "bad", height: 10 })).toThrow(RangeError);
   });
 
+  test("ListState.replace accepts updater functions", () => {
+    const draws: DrawProbe[] = [];
+    const { list, renderer } = createRenderer(
+      [
+        { id: "before", height: 20 },
+      ],
+      draws,
+    );
+
+    list.replace(0, (prevItem) => ({
+      ...prevItem,
+      id: `${prevItem.id}-next`,
+      height: prevItem.height + 10,
+    }));
+
+    renderer.render();
+    expect(list.items[0]).toEqual({ id: "before-next", height: 30 });
+    expect(draws.map((draw) => draw.id)).toEqual(["before-next"]);
+  });
+
   test("TimelineRenderer crossfades replacement and transitions slot height", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
