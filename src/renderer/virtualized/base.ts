@@ -124,6 +124,9 @@ export abstract class VirtualizedRenderer<
   #jumpAnimation: JumpAnimation | undefined;
   #replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
   #activeReplacementItems = new Set<T>();
+  #visibleItems = new Set<T>();
+  #hasVisibleItemSnapshot = false;
+  #visibleSnapshotState: ControlledState | undefined;
 
   constructor(
     graphics: C,
@@ -176,6 +179,7 @@ export abstract class VirtualizedRenderer<
       this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     const solution = this._resolveVisibleWindow(now);
+    this._captureVisibleItemSnapshot(solution.window);
     const requestSettleRedraw = this._pruneReplacementAnimations(
       solution.window,
     );
@@ -193,6 +197,7 @@ export abstract class VirtualizedRenderer<
     type: "click" | "auxclick" | "hover";
   }): boolean {
     const solution = this._resolveVisibleWindow(getNow());
+    this._captureVisibleItemSnapshot(solution.window);
     this._pruneReplacementAnimations(solution.window);
     return this._hittestVisibleWindow(solution.window, test);
   }
@@ -362,20 +367,9 @@ export abstract class VirtualizedRenderer<
   protected _pruneReplacementAnimations(
     window: VisibleWindow<unknown>,
   ): boolean {
-    const nextVisibleItems = new Set<T>();
-    for (const { idx, offset, height } of window.drawList) {
-      if (this._readVisibleRange(offset + window.shift, height) == null) {
-        continue;
-      }
-      const item = this.items[idx];
-      if (item != null) {
-        nextVisibleItems.add(item);
-      }
-    }
-
     let canceled = false;
     for (const item of [...this.#activeReplacementItems]) {
-      if (nextVisibleItems.has(item)) {
+      if (this.#visibleItems.has(item)) {
         continue;
       }
       this.#replacementAnimations.delete(item);
@@ -397,6 +391,22 @@ export abstract class VirtualizedRenderer<
       return item.hittest(test, y);
     }
     return false;
+  }
+
+  protected _captureVisibleItemSnapshot(window: VisibleWindow<unknown>): void {
+    const nextVisibleItems = new Set<T>();
+    for (const { idx, offset, height } of window.drawList) {
+      if (this._readVisibleRange(offset + window.shift, height) == null) {
+        continue;
+      }
+      const item = this.items[idx];
+      if (item != null) {
+        nextVisibleItems.add(item);
+      }
+    }
+    this.#visibleItems = nextVisibleItems;
+    this.#hasVisibleItemSnapshot = true;
+    this.#visibleSnapshotState = this._readListState();
   }
 
   protected _prepareRender(now: number): boolean {
@@ -694,6 +704,9 @@ export abstract class VirtualizedRenderer<
       case "set":
         this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
         this.#activeReplacementItems.clear();
+        this.#visibleItems.clear();
+        this.#hasVisibleItemSnapshot = false;
+        this.#visibleSnapshotState = undefined;
         break;
     }
   }
@@ -719,6 +732,23 @@ export abstract class VirtualizedRenderer<
     return false;
   }
 
+  #canAnimateUpdate(nextIndex: number, prevItem: T): boolean {
+    if (nextIndex < 0) {
+      return false;
+    }
+    if (
+      this.#hasVisibleItemSnapshot &&
+      this.#visibleSnapshotState != null &&
+      sameState(this.#visibleSnapshotState, this.position, this.offset)
+    ) {
+      return (
+        this.#visibleItems.has(prevItem) ||
+        this.#activeReplacementItems.has(prevItem)
+      );
+    }
+    return this.#isIndexVisible(nextIndex);
+  }
+
   #handleUpdate(prevItem: T, nextItem: T, duration: number | undefined): void {
     const normalizedDuration = Math.max(
       0,
@@ -728,7 +758,7 @@ export abstract class VirtualizedRenderer<
     if (
       normalizedDuration <= 0 ||
       nextIndex < 0 ||
-      !this.#isIndexVisible(nextIndex)
+      !this.#canAnimateUpdate(nextIndex, prevItem)
     ) {
       this.#replacementAnimations.delete(prevItem);
       this.#activeReplacementItems.delete(prevItem);

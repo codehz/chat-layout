@@ -379,4 +379,40 @@ describe("update animation", () => {
       restoreNow();
     }
   });
+
+  test("chat shrink updates keep animating when the previous visible slot snapshot says the item is visible", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 160 };
+      const newItem = { id: "new", height: 80 };
+      const { list, renderer } = createChatRenderer(
+        [
+          { id: "head", height: 20 },
+          oldItem,
+          { id: "tail-a", height: 20 },
+          { id: "tail-b", height: 20 },
+        ],
+        draws,
+        [],
+        80,
+      );
+
+      list.setAnchor(1, 100);
+      renderer.render();
+
+      draws.length = 0;
+      list.update(oldItem, newItem, { duration: 100 });
+
+      now.current = 50;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toContain("old");
+      expect(draws.map((draw) => draw.id)).toContain("new");
+      expect(draws.find((draw) => draw.id === "old")?.alpha).toBeCloseTo(0.5);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+    } finally {
+      restoreNow();
+    }
+  });
 });
