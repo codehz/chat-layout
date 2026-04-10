@@ -240,7 +240,7 @@ class ItemDetector extends Wrapper<C> {
       }
       const nextItem = this.item.kind === "revoked" ? this.item.original : revokeMessage(this.item);
       currentHover = nextItem;
-      list.replace(index, nextItem, {
+      list.update(index, nextItem, {
         duration: REPLACE_ANIMATION_DURATION,
       });
     }
@@ -637,7 +637,7 @@ button("revoke first", () => {
     return;
   }
   const index = list.items.indexOf(item);
-  list.replace(index, revokeMessage(item), {
+  list.update(index, revokeMessage(item), {
     duration: REPLACE_ANIMATION_DURATION,
   });
 });

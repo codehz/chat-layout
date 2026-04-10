@@ -6,7 +6,6 @@ import type {
   FlexItemOptions,
   MultilineTextOptions,
   Node,
-  ReplaceListItemAnimationOptions,
   TextEllipsisPosition,
   TextJustifyMode,
   TextJustifyOptions,
@@ -14,6 +13,7 @@ import type {
   TextOverflowMode,
   TextOverflowWrapMode,
   TextWhiteSpaceMode,
+  UpdateListItemAnimationOptions,
 } from "../src/index";
 
 type C = CanvasRenderingContext2D;
@@ -75,7 +75,7 @@ const justifyOptionsTypecheck: TextJustifyOptions = {
   justifyGapThreshold: 1.5,
 };
 
-const replaceAnimationOptionsTypecheck: ReplaceListItemAnimationOptions = {
+const updateAnimationOptionsTypecheck: UpdateListItemAnimationOptions = {
   duration: 180,
 };
 
@@ -89,7 +89,7 @@ void textOptionsTypecheck;
 void multilineTextOptionsTypecheck;
 void justifyModeTypecheck;
 void justifyOptionsTypecheck;
-void replaceAnimationOptionsTypecheck;
+void updateAnimationOptionsTypecheck;
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {

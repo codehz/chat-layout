@@ -529,8 +529,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
   #handleListStateChange(change: ListStateChange<T>): void {
     switch (change.type) {
-      case "replace":
-        this.#handleReplace(change.index, change.prevItem, change.nextItem, change.animation?.duration);
+      case "update":
+        this.#handleUpdate(change.index, change.prevItem, change.nextItem, change.animation?.duration);
         break;
       case "unshift": {
         if (change.count <= 0 || this.#replacementAnimations.size === 0) {
@@ -552,7 +552,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     }
   }
 
-  #handleReplace(index: number, prevItem: T, nextItem: T, duration: number | undefined): void {
+  #handleUpdate(index: number, prevItem: T, nextItem: T, duration: number | undefined): void {
     const normalizedDuration = Number.isFinite(duration) ? Math.max(0, duration!) : 0;
     if (normalizedDuration <= 0) {
       this.#replacementAnimations.delete(index);

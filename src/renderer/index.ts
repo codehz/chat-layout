@@ -1,6 +1,6 @@
 export { BaseRenderer, DebugRenderer } from "./base";
 export { ListState } from "./list-state";
-export type { ReplaceListItemAnimationOptions, ReplaceListItemUpdater } from "./list-state";
+export type { UpdateListItemAnimationOptions, UpdateListItemUpdater } from "./list-state";
 export { memoRenderItem, memoRenderItemBy } from "./memo";
 export { VirtualizedRenderer } from "./virtualized/base";
 export type { JumpToOptions } from "./virtualized/base";

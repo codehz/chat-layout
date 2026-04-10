@@ -58,8 +58,8 @@ function createRenderer(
   return { list, renderer };
 }
 
-describe("replacement animation", () => {
-  test("ListState.replace validates indices and hard-cuts by default", () => {
+describe("update animation", () => {
+  test("ListState.update validates indices and hard-cuts by default", () => {
     const draws: DrawProbe[] = [];
     const { list, renderer } = createRenderer(
       [
@@ -68,20 +68,20 @@ describe("replacement animation", () => {
       draws,
     );
 
-    list.replace(0, { id: "after-default", height: 30 });
+    list.update(0, { id: "after-default", height: 30 });
     renderer.render();
     expect(draws.map((draw) => draw.id)).toEqual(["after-default"]);
 
     draws.length = 0;
-    list.replace(0, { id: "after-zero", height: 40 }, { duration: 0 });
+    list.update(0, { id: "after-zero", height: 40 }, { duration: 0 });
     renderer.render();
     expect(draws.map((draw) => draw.id)).toEqual(["after-zero"]);
 
-    expect(() => list.replace(-1, { id: "bad", height: 10 })).toThrow(RangeError);
-    expect(() => list.replace(1, { id: "bad", height: 10 })).toThrow(RangeError);
+    expect(() => list.update(-1, { id: "bad", height: 10 })).toThrow(RangeError);
+    expect(() => list.update(1, { id: "bad", height: 10 })).toThrow(RangeError);
   });
 
-  test("ListState.replace accepts updater functions", () => {
+  test("ListState.update accepts updater functions", () => {
     const draws: DrawProbe[] = [];
     const { list, renderer } = createRenderer(
       [
@@ -90,7 +90,7 @@ describe("replacement animation", () => {
       draws,
     );
 
-    list.replace(0, (prevItem) => ({
+    list.update(0, (prevItem) => ({
       ...prevItem,
       id: `${prevItem.id}-next`,
       height: prevItem.height + 10,
@@ -101,7 +101,7 @@ describe("replacement animation", () => {
     expect(draws.map((draw) => draw.id)).toEqual(["before-next"]);
   });
 
-  test("TimelineRenderer crossfades replacement and transitions slot height", () => {
+  test("TimelineRenderer crossfades updates and transitions slot height", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -114,7 +114,7 @@ describe("replacement animation", () => {
         draws,
       );
 
-      list.replace(0, { id: "new", height: 60 }, { duration: 100 });
+      list.update(0, { id: "new", height: 60 }, { duration: 100 });
 
       const feedbackAtStart = createFeedback();
       expect(renderer.render(feedbackAtStart)).toBe(true);
@@ -144,7 +144,7 @@ describe("replacement animation", () => {
     }
   });
 
-  test("same slot supports overlapping replacement layers", () => {
+  test("same slot supports overlapping update layers", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -156,9 +156,9 @@ describe("replacement animation", () => {
         draws,
       );
 
-      list.replace(0, { id: "b", height: 20 }, { duration: 100 });
+      list.update(0, { id: "b", height: 20 }, { duration: 100 });
       now.current = 50;
-      list.replace(0, { id: "c", height: 20 }, { duration: 100 });
+      list.update(0, { id: "c", height: 20 }, { duration: 100 });
 
       now.current = 75;
       renderer.render();
@@ -191,7 +191,7 @@ describe("replacement animation", () => {
         hits,
       );
 
-      list.replace(0, { id: "animated-new", height: 30, hit: true }, { duration: 100 });
+      list.update(0, { id: "animated-new", height: 30, hit: true }, { duration: 100 });
       now.current = 50;
 
       expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(false);
@@ -202,7 +202,7 @@ describe("replacement animation", () => {
     }
   });
 
-  test("replacement alpha proxies through node-owned globalAlpha", () => {
+  test("update alpha proxies through node-owned globalAlpha", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -214,7 +214,7 @@ describe("replacement animation", () => {
         draws,
       );
 
-      list.replace(0, { id: "new", height: 20, innerAlpha: 0.25 }, { duration: 100 });
+      list.update(0, { id: "new", height: 20, innerAlpha: 0.25 }, { duration: 100 });
       now.current = 50;
       renderer.render();
 
@@ -238,7 +238,7 @@ describe("replacement animation", () => {
         draws,
       );
 
-      list.replace(1, { id: "tail-new", height: 20 }, { duration: 100 });
+      list.update(1, { id: "tail-new", height: 20 }, { duration: 100 });
       list.unshift({ id: "prefix", height: 5 });
       list.push({ id: "suffix", height: 15 });
 

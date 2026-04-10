@@ -3,19 +3,19 @@ import { emitWeakListeners, pruneWeakListenerMap, type WeakListenerRecord } from
 /**
  * Mutable list state shared with virtualized renderers.
  */
-export interface ReplaceListItemAnimationOptions {
+export interface UpdateListItemAnimationOptions {
   /** Animation duration in milliseconds. */
   duration?: number;
 }
 
-export type ReplaceListItemUpdater<T extends {}> = (prevItem: T) => T;
+export type UpdateListItemUpdater<T extends {}> = (prevItem: T) => T;
 
-type ListReplaceChange<T extends {}> = {
-  type: "replace";
+type ListUpdateChange<T extends {}> = {
+  type: "update";
   index: number;
   prevItem: T;
   nextItem: T;
-  animation: ReplaceListItemAnimationOptions | undefined;
+  animation: UpdateListItemAnimationOptions | undefined;
 };
 
 type ListUnshiftChange = {
@@ -37,7 +37,7 @@ type ListSetChange = {
 };
 
 export type ListStateChange<T extends {}> =
-  | ListReplaceChange<T>
+  | ListUpdateChange<T>
   | ListUnshiftChange
   | ListPushChange
   | ListResetChange
@@ -169,28 +169,28 @@ export class ListState<T extends {}> {
   }
 
   /**
-   * Replaces an existing item by index.
+   * Updates an existing item by index.
    */
-  replace(index: number, item: T, animation?: ReplaceListItemAnimationOptions): void;
-  replace(index: number, updater: ReplaceListItemUpdater<T>, animation?: ReplaceListItemAnimationOptions): void;
-  replace(
+  update(index: number, item: T, animation?: UpdateListItemAnimationOptions): void;
+  update(index: number, updater: UpdateListItemUpdater<T>, animation?: UpdateListItemAnimationOptions): void;
+  update(
     index: number,
-    itemOrUpdater: T | ReplaceListItemUpdater<T>,
-    animation?: ReplaceListItemAnimationOptions,
+    itemOrUpdater: T | UpdateListItemUpdater<T>,
+    animation?: UpdateListItemAnimationOptions,
   ): void {
     const normalizedIndex = Number.isFinite(index) ? Math.trunc(index) : Number.NaN;
     if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0 || normalizedIndex >= this.#items.length) {
-      throw new RangeError(`replace() index ${index} is out of range for list length ${this.#items.length}.`);
+      throw new RangeError(`update() index ${index} is out of range for list length ${this.#items.length}.`);
     }
 
     const prevItem = this.#items[normalizedIndex]!;
     const nextItem =
       typeof itemOrUpdater === "function"
-        ? (itemOrUpdater as ReplaceListItemUpdater<T>)(prevItem)
+        ? (itemOrUpdater as UpdateListItemUpdater<T>)(prevItem)
         : itemOrUpdater;
     this.#items[normalizedIndex] = nextItem;
     emitListStateChange(this, {
-      type: "replace",
+      type: "update",
       index: normalizedIndex,
       prevItem,
       nextItem,
