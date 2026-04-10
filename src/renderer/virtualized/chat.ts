@@ -1,4 +1,3 @@
-import type { HitTest, RenderFeedback } from "../../types";
 import { VirtualizedRenderer } from "./base";
 import type { JumpToOptions } from "./base";
 import {
@@ -19,8 +18,7 @@ export class ChatRenderer<
   C extends CanvasRenderingContext2D,
   T extends {},
 > extends VirtualizedRenderer<C, T> {
-  #resolveVisibleWindow() {
-    const now = globalThis.performance?.now() ?? Date.now();
+  protected _resolveVisibleWindow(now: number) {
     return resolveChatVisibleWindow(
       this.items,
       this._readListState(),
@@ -89,27 +87,5 @@ export class ChatRenderer<
     nodeHeight: number,
   ): number {
     return slotHeight - nodeHeight;
-  }
-
-  render(feedback?: RenderFeedback): boolean {
-    const keepAnimating = this._prepareRender();
-    const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
-      this.graphics.canvas;
-    this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
-    const solution = this.#resolveVisibleWindow();
-    const requestSettleRedraw = this._updateVisibleItemSnapshot(
-      solution.window,
-    );
-    const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
-    this._commitListState(solution.normalizedState);
-    return this._finishRender(
-      keepAnimating || requestRedraw || requestSettleRedraw,
-    );
-  }
-
-  hittest(test: HitTest): boolean {
-    const solution = this.#resolveVisibleWindow();
-    this._updateVisibleItemSnapshot(solution.window);
-    return this._hittestVisibleWindow(solution.window, test);
   }
 }

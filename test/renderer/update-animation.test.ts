@@ -151,15 +151,18 @@ describe("update animation", () => {
     }
   });
 
-  test("same slot supports overlapping update layers", () => {
+  test("same slot restarts with only the current outgoing and incoming layers", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
       const itemA = { id: "a", height: 20 };
-      const itemB = { id: "b", height: 20 };
-      const itemC = { id: "c", height: 20 };
-      const { list, renderer } = createTimelineRenderer([itemA], draws);
+      const itemB = { id: "b", height: 60 };
+      const itemC = { id: "c", height: 40 };
+      const { list, renderer } = createTimelineRenderer(
+        [itemA, { id: "tail", height: 10 }],
+        draws,
+      );
 
       list.update(itemA, itemB, { duration: 100 });
       now.current = 50;
@@ -169,13 +172,13 @@ describe("update animation", () => {
       renderer.render();
 
       const ids = draws.map((draw) => draw.id);
-      expect(ids).toEqual(["a", "b", "c"]);
-      const alphaA = draws.find((draw) => draw.id === "a")!.alpha;
+      expect(ids).toEqual(["b", "c", "tail"]);
+      expect(draws.find((draw) => draw.id === "a")).toBeUndefined();
       const alphaB = draws.find((draw) => draw.id === "b")!.alpha;
       const alphaC = draws.find((draw) => draw.id === "c")!.alpha;
-      expect(alphaA).toBeCloseTo(0.15625);
       expect(alphaB).toBeCloseTo(0.421875);
       expect(alphaC).toBeCloseTo(0.15625);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
     } finally {
       restoreNow();
     }
@@ -258,7 +261,7 @@ describe("update animation", () => {
     }
   });
 
-  test("offscreen updates hard-cut once a visible snapshot exists", () => {
+  test("offscreen updates hard-cut without requiring a prior visible snapshot", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -270,9 +273,6 @@ describe("update animation", () => {
         [],
         40,
       );
-
-      renderer.render();
-      draws.length = 0;
 
       list.update(
         hiddenOld,

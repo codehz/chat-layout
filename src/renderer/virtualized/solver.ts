@@ -30,6 +30,8 @@ type ResolvedItem<T> = {
   height: number;
 };
 
+export type VisibleDirection = "forward" | "backward";
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -38,18 +40,20 @@ function normalizeOffset(offset: number): number {
   return Number.isFinite(offset) ? offset : 0;
 }
 
-export function normalizeTimelineState(
+export function normalizeVisibleState(
   itemCount: number,
   state: VisibleListState,
+  direction: VisibleDirection,
 ): NormalizedListState {
   if (itemCount <= 0) {
     return { position: 0, offset: 0 };
   }
 
   const position = state.position;
+  const fallbackPosition = direction === "forward" ? 0 : itemCount - 1;
   if (typeof position !== "number" || !Number.isFinite(position)) {
     return {
-      position: 0,
+      position: fallbackPosition,
       offset: normalizeOffset(state.offset),
     };
   }
@@ -58,37 +62,30 @@ export function normalizeTimelineState(
     position: clamp(Math.trunc(position), 0, itemCount - 1),
     offset: normalizeOffset(state.offset),
   };
+}
+
+export function normalizeTimelineState(
+  itemCount: number,
+  state: VisibleListState,
+): NormalizedListState {
+  return normalizeVisibleState(itemCount, state, "forward");
 }
 
 export function normalizeChatState(
   itemCount: number,
   state: VisibleListState,
 ): NormalizedListState {
-  if (itemCount <= 0) {
-    return { position: 0, offset: 0 };
-  }
-
-  const position = state.position;
-  if (typeof position !== "number" || !Number.isFinite(position)) {
-    return {
-      position: itemCount - 1,
-      offset: normalizeOffset(state.offset),
-    };
-  }
-
-  return {
-    position: clamp(Math.trunc(position), 0, itemCount - 1),
-    offset: normalizeOffset(state.offset),
-  };
+  return normalizeVisibleState(itemCount, state, "backward");
 }
 
-export function resolveTimelineVisibleWindow<T, V>(
+export function resolveVisibleWindow<T, V>(
   items: readonly T[],
   state: VisibleListState,
   viewportHeight: number,
   resolveItem: (item: T, idx: number) => ResolvedItem<V>,
+  direction: VisibleDirection,
 ): VisibleWindowResult<V> {
-  const normalizedState = normalizeTimelineState(items.length, state);
+  const normalizedState = normalizeVisibleState(items.length, state, direction);
   if (items.length === 0) {
     return {
       normalizedState,
@@ -96,88 +93,76 @@ export function resolveTimelineVisibleWindow<T, V>(
     };
   }
 
-  let { position, offset } = normalizedState;
-  let drawLength = 0;
+  if (direction === "forward") {
+    let { position, offset } = normalizedState;
+    let drawLength = 0;
 
-  if (offset > 0) {
-    if (position === 0) {
-      offset = 0;
-    } else {
-      for (let i = position - 1; i >= 0; i -= 1) {
-        const { height } = resolveItem(items[i]!, i);
-        position = i;
-        offset -= height;
-        if (offset <= 0) {
-          break;
+    if (offset > 0) {
+      if (position === 0) {
+        offset = 0;
+      } else {
+        for (let i = position - 1; i >= 0; i -= 1) {
+          const { height } = resolveItem(items[i]!, i);
+          position = i;
+          offset -= height;
+          if (offset <= 0) {
+            break;
+          }
+        }
+        if (position === 0 && offset > 0) {
+          offset = 0;
         }
       }
-      if (position === 0 && offset > 0) {
-        offset = 0;
-      }
     }
-  }
 
-  let y = offset;
-  const drawList: VisibleWindowEntry<V>[] = [];
-  for (let i = position; i < items.length; i += 1) {
-    const { value, height } = resolveItem(items[i]!, i);
-    if (y + height > 0) {
-      drawList.push({ idx: i, value, offset: y, height });
-      drawLength += height;
-    } else {
-      offset += height;
-      position = i + 1;
-    }
-    y += height;
-    if (y >= viewportHeight) {
-      break;
-    }
-  }
-
-  let shift = 0;
-  if (y < viewportHeight) {
-    if (position === 0 && drawLength < viewportHeight) {
-      shift = -offset;
-      offset = 0;
-    } else {
-      shift = viewportHeight - y;
-      y = offset += shift;
-      let lastIdx = -1;
-      for (let i = position - 1; i >= 0; i -= 1) {
-        const { value, height } = resolveItem(items[i]!, i);
+    let y = offset;
+    const drawList: VisibleWindowEntry<V>[] = [];
+    for (let i = position; i < items.length; i += 1) {
+      const { value, height } = resolveItem(items[i]!, i);
+      if (y + height > 0) {
+        drawList.push({ idx: i, value, offset: y, height });
         drawLength += height;
-        y -= height;
-        drawList.push({ idx: i, value, offset: y - shift, height });
-        lastIdx = i;
-        if (y < 0) {
-          break;
-        }
+      } else {
+        offset += height;
+        position = i + 1;
       }
-      if (lastIdx === 0 && drawLength < viewportHeight) {
-        shift = drawList.at(-1)?.offset == null ? 0 : -drawList.at(-1)!.offset;
-        position = 0;
-        offset = 0;
+      y += height;
+      if (y >= viewportHeight) {
+        break;
       }
     }
-  }
 
-  return {
-    normalizedState: { position, offset },
-    window: { drawList, shift },
-  };
-}
+    let shift = 0;
+    if (y < viewportHeight) {
+      if (position === 0 && drawLength < viewportHeight) {
+        shift = -offset;
+        offset = 0;
+      } else {
+        shift = viewportHeight - y;
+        y = offset += shift;
+        let lastIdx = -1;
+        for (let i = position - 1; i >= 0; i -= 1) {
+          const { value, height } = resolveItem(items[i]!, i);
+          drawLength += height;
+          y -= height;
+          drawList.push({ idx: i, value, offset: y - shift, height });
+          lastIdx = i;
+          if (y < 0) {
+            break;
+          }
+        }
+        if (lastIdx === 0 && drawLength < viewportHeight) {
+          shift =
+            drawList.at(-1)?.offset == null ? 0 : -drawList.at(-1)!.offset;
+          position = 0;
+          offset = 0;
+        }
+      }
+    }
 
-export function resolveChatVisibleWindow<T, V>(
-  items: readonly T[],
-  state: VisibleListState,
-  viewportHeight: number,
-  resolveItem: (item: T, idx: number) => ResolvedItem<V>,
-): VisibleWindowResult<V> {
-  const normalizedState = normalizeChatState(items.length, state);
-  if (items.length === 0) {
     return {
-      normalizedState,
-      window: { drawList: [], shift: 0 },
+      normalizedState: { position, offset },
+      window: { drawList, shift },
     };
   }
 
@@ -240,4 +225,34 @@ export function resolveChatVisibleWindow<T, V>(
     normalizedState: { position, offset },
     window: { drawList, shift },
   };
+}
+
+export function resolveTimelineVisibleWindow<T, V>(
+  items: readonly T[],
+  state: VisibleListState,
+  viewportHeight: number,
+  resolveItem: (item: T, idx: number) => ResolvedItem<V>,
+): VisibleWindowResult<V> {
+  return resolveVisibleWindow(
+    items,
+    state,
+    viewportHeight,
+    resolveItem,
+    "forward",
+  );
+}
+
+export function resolveChatVisibleWindow<T, V>(
+  items: readonly T[],
+  state: VisibleListState,
+  viewportHeight: number,
+  resolveItem: (item: T, idx: number) => ResolvedItem<V>,
+): VisibleWindowResult<V> {
+  return resolveVisibleWindow(
+    items,
+    state,
+    viewportHeight,
+    resolveItem,
+    "backward",
+  );
 }
