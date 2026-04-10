@@ -8,6 +8,8 @@ import type {
   Node,
   ReplaceListItemAnimationOptions,
   TextEllipsisPosition,
+  TextJustifyMode,
+  TextJustifyOptions,
   TextOptions,
   TextOverflowMode,
   TextOverflowWrapMode,
@@ -61,6 +63,16 @@ const multilineTextOptionsTypecheck: MultilineTextOptions<C> = {
   overflowWrap: overflowWrapModeTypecheck,
   whiteSpace: whiteSpaceModeTypecheck,
   maxLines: 2,
+  justify: true,
+  justifyLastLine: false,
+  justifyGapThreshold: 2.0,
+};
+
+const justifyModeTypecheck: TextJustifyMode = "inter-word";
+const justifyOptionsTypecheck: TextJustifyOptions = {
+  justify: "inter-character",
+  justifyLastLine: true,
+  justifyGapThreshold: 1.5,
 };
 
 const replaceAnimationOptionsTypecheck: ReplaceListItemAnimationOptions = {
@@ -75,6 +87,8 @@ void ellipsisPositionTypecheck;
 void whiteSpaceModeTypecheck;
 void textOptionsTypecheck;
 void multilineTextOptionsTypecheck;
+void justifyModeTypecheck;
+void justifyOptionsTypecheck;
 void replaceAnimationOptionsTypecheck;
 
 describe("root exports", () => {

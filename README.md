@@ -109,6 +109,32 @@ Notes:
 - `overflowWrap: "break-word"` keeps the current min-content behavior; `overflowWrap: "anywhere"` lets long unspaced strings shrink inside flex layouts such as chat bubbles.
 - Current `measureMinContent()` behavior stays compatibility-first: ellipsis affects constrained measurement/drawing, but does not lower the min-content shrink floor by itself.
 
+## Text justification
+
+`MultilineText` supports two-end justification (justify) as a draw-phase decoration. It does not affect measurement or layout:
+
+```ts
+const justified = new MultilineText(paragraph, {
+  lineHeight: 20,
+  font: "16px system-ui",
+  color: "#111",
+  align: "start",
+  justify: true,               // or "inter-word" | "inter-character"
+  justifyLastLine: false,       // default: last line uses normal alignment
+  justifyGapThreshold: 2.0,    // max gap ratio before fallback
+});
+```
+
+Notes:
+
+- `justify: true` is equivalent to `"inter-word"` mode, which expands spaces between words via `ctx.wordSpacing`.
+- `"inter-character"` mode distributes extra space after every character via `ctx.letterSpacing`.
+- Requires browser support for `CanvasRenderingContext2D.wordSpacing` / `letterSpacing`. When unsupported, justify is silently disabled.
+- Lines that exceed `justifyGapThreshold`, have no expandable gaps, or are the last line (unless `justifyLastLine: true`) fall back to `align` / `physicalAlign`.
+- `overflow: "ellipsis"` truncated lines are never justified.
+- `measure()` and `measureMinContent()` are not affected by justify options.
+- Works with both plain text and `InlineSpan[]` rich text.
+
 ## Shrink behavior
 
 - `FlexItemOptions.shrink` defaults to `0`, so old layouts keep their previous behavior unless you opt in.
