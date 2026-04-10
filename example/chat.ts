@@ -322,7 +322,7 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
       align: "start",
       overflowWrap: "anywhere",
       justify: "inter-character",
-      justifyGapThreshold: 1.5,
+      justifyGapThreshold: 0.2,
     }),
     { alignSelf: "start" },
   );
