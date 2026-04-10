@@ -6,11 +6,13 @@ import {
   type ListStateChange,
 } from "../list-state";
 import {
+  buildJumpPath,
   clamp,
   getNow,
+  getAnchorAtDistance,
   getProgress,
-  interpolate,
   sameState,
+  smoothstep,
 } from "./base-animation";
 import {
   type ControlledState,
@@ -58,7 +60,7 @@ export abstract class VirtualizedRenderer<
 > {
   static readonly MIN_JUMP_DURATION = 160;
   static readonly MAX_JUMP_DURATION = 420;
-  static readonly JUMP_DURATION_PER_ITEM = 28;
+  static readonly JUMP_DURATION_PER_PIXEL = 0.7;
 
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
@@ -189,19 +191,21 @@ export abstract class VirtualizedRenderer<
       return;
     }
 
+    const path = buildJumpPath(
+      this.items.length,
+      this._getItemHeight.bind(this),
+      startAnchor,
+      targetAnchor,
+    );
     const duration = clamp(
       options.duration ??
         VirtualizedRenderer.MIN_JUMP_DURATION +
-          Math.abs(targetAnchor - startAnchor) *
-            VirtualizedRenderer.JUMP_DURATION_PER_ITEM,
+          path.totalDistance * VirtualizedRenderer.JUMP_DURATION_PER_PIXEL,
       0,
       VirtualizedRenderer.MAX_JUMP_DURATION,
     );
 
-    if (
-      duration <= 0 ||
-      Math.abs(targetAnchor - startAnchor) <= Number.EPSILON
-    ) {
+    if (duration <= 0 || path.totalDistance <= Number.EPSILON) {
       this.#cancelJumpAnimation();
       this._applyAnchor(targetAnchor);
       options.onComplete?.();
@@ -209,8 +213,7 @@ export abstract class VirtualizedRenderer<
     }
 
     this.#jumpAnimation = {
-      startAnchor,
-      targetAnchor,
+      path,
       startTime: getNow(),
       duration,
       needsMoreFrames: true,
@@ -360,14 +363,12 @@ export abstract class VirtualizedRenderer<
       return keepReplacing;
     }
 
-    const anchor = interpolate(
-      animation.startAnchor,
-      animation.targetAnchor,
-      animation.startTime,
-      animation.duration,
-      now,
-    );
     const progress = getProgress(animation.startTime, animation.duration, now);
+    const eased = progress >= 1 ? 1 : smoothstep(progress);
+    const anchor = getAnchorAtDistance(
+      animation.path,
+      animation.path.totalDistance * eased,
+    );
     this._applyAnchor(anchor);
     animation.needsMoreFrames = progress < 1;
     return keepReplacing || animation.needsMoreFrames;

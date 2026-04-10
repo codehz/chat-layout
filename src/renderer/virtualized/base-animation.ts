@@ -1,4 +1,4 @@
-import type { ControlledState } from "./base-types";
+import type { ControlledState, JumpPath, JumpPathSegment } from "./base-types";
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -10,6 +10,94 @@ export function sameState(
   offset: number,
 ): boolean {
   return Object.is(state.position, position) && Object.is(state.offset, offset);
+}
+
+function resolveJumpSegmentIndex(
+  anchor: number,
+  direction: -1 | 1,
+  itemCount: number,
+): number | undefined {
+  if (itemCount <= 0) {
+    return undefined;
+  }
+
+  if (direction > 0) {
+    if (anchor >= itemCount) {
+      return undefined;
+    }
+    return clamp(Math.floor(anchor), 0, itemCount - 1);
+  }
+
+  if (anchor <= 0) {
+    return undefined;
+  }
+  return clamp(Math.ceil(anchor) - 1, 0, itemCount - 1);
+}
+
+export function buildJumpPath(
+  itemCount: number,
+  readItemHeight: (index: number) => number,
+  startAnchor: number,
+  targetAnchor: number,
+): JumpPath {
+  const clampedStartAnchor = clamp(startAnchor, 0, itemCount);
+  const clampedTargetAnchor = clamp(targetAnchor, 0, itemCount);
+  if (
+    itemCount <= 0 ||
+    !Number.isFinite(clampedStartAnchor) ||
+    !Number.isFinite(clampedTargetAnchor) ||
+    Math.abs(clampedTargetAnchor - clampedStartAnchor) <= Number.EPSILON
+  ) {
+    return {
+      startAnchor: clampedStartAnchor,
+      targetAnchor: clampedTargetAnchor,
+      totalDistance: 0,
+      segments: [],
+    };
+  }
+
+  const direction: -1 | 1 = clampedTargetAnchor > clampedStartAnchor ? 1 : -1;
+  const segments: JumpPathSegment[] = [];
+  let cursor = clampedStartAnchor;
+  let totalDistance = 0;
+
+  while (
+    direction > 0 ? cursor < clampedTargetAnchor : cursor > clampedTargetAnchor
+  ) {
+    const index = resolveJumpSegmentIndex(cursor, direction, itemCount);
+    if (index == null) {
+      break;
+    }
+
+    const nextCursor =
+      direction > 0
+        ? Math.min(clampedTargetAnchor, index + 1)
+        : Math.max(clampedTargetAnchor, index);
+    if (Math.abs(nextCursor - cursor) <= Number.EPSILON) {
+      cursor = nextCursor;
+      continue;
+    }
+
+    const height = readItemHeight(index);
+    const distance = height > 0 ? Math.abs(nextCursor - cursor) * height : 0;
+    if (distance > 0) {
+      segments.push({
+        anchorStart: cursor,
+        anchorEnd: nextCursor,
+        distanceStart: totalDistance,
+        distanceEnd: totalDistance + distance,
+      });
+      totalDistance += distance;
+    }
+    cursor = nextCursor;
+  }
+
+  return {
+    startAnchor: clampedStartAnchor,
+    targetAnchor: clampedTargetAnchor,
+    totalDistance,
+    segments,
+  };
 }
 
 export function smoothstep(value: number): number {
@@ -37,6 +125,37 @@ export function interpolate(
   const progress = getProgress(startTime, duration, now);
   const eased = progress >= 1 ? 1 : smoothstep(progress);
   return from + (to - from) * eased;
+}
+
+export function getAnchorAtDistance(path: JumpPath, distance: number): number {
+  if (!(path.totalDistance > 0) || path.segments.length === 0) {
+    return path.targetAnchor;
+  }
+
+  const clampedDistance = clamp(distance, 0, path.totalDistance);
+  if (clampedDistance <= 0) {
+    return path.startAnchor;
+  }
+  if (clampedDistance >= path.totalDistance) {
+    return path.targetAnchor;
+  }
+
+  for (const segment of path.segments) {
+    if (clampedDistance >= segment.distanceEnd) {
+      continue;
+    }
+
+    const span = segment.distanceEnd - segment.distanceStart;
+    if (!(span > 0)) {
+      continue;
+    }
+    const ratio = (clampedDistance - segment.distanceStart) / span;
+    return (
+      segment.anchorStart + (segment.anchorEnd - segment.anchorStart) * ratio
+    );
+  }
+
+  return path.targetAnchor;
 }
 
 export function getNow(): number {

@@ -6,10 +6,25 @@ export type ControlledState = {
   offset: number;
 };
 
-/** Tracks an in-progress programmatic jump animation. */
-export type JumpAnimation = {
+/** A positive-length pixel segment within a jump path. */
+export type JumpPathSegment = {
+  anchorStart: number;
+  anchorEnd: number;
+  distanceStart: number;
+  distanceEnd: number;
+};
+
+/** Precomputed mapping between anchor-space and pixel-space for a jump. */
+export type JumpPath = {
   startAnchor: number;
   targetAnchor: number;
+  totalDistance: number;
+  segments: JumpPathSegment[];
+};
+
+/** Tracks an in-progress programmatic jump animation. */
+export type JumpAnimation = {
+  path: JumpPath;
   startTime: number;
   duration: number;
   needsMoreFrames: boolean;

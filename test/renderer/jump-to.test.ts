@@ -25,6 +25,40 @@ import {
 
 type C = CanvasRenderingContext2D;
 
+function smoothstep(value: number): number {
+  return value * value * (3 - 2 * value);
+}
+
+function pixelAtAnchor(heights: number[], anchor: number): number {
+  const clampedAnchor = Math.min(Math.max(anchor, 0), heights.length);
+  let remaining = clampedAnchor;
+  let pixel = 0;
+
+  for (const height of heights) {
+    if (remaining <= 0) {
+      break;
+    }
+    const portion = Math.min(remaining, 1);
+    if (height > 0 && portion > 0) {
+      pixel += portion * height;
+    }
+    remaining -= portion;
+  }
+
+  return pixel;
+}
+
+function expectedPixelAtTime(
+  start: number,
+  target: number,
+  time: number,
+  duration: number,
+): number {
+  const progress = Math.min(Math.max(time / duration, 0), 1);
+  const eased = progress >= 1 ? 1 : smoothstep(progress);
+  return start + (target - start) * eased;
+}
+
 describe("jumpTo", () => {
   test("ListState exposes explicit seed, reset, and anchor helpers", () => {
     const list = new ListState<number>([1, 2, 3]);
@@ -674,6 +708,115 @@ describe("jumpTo", () => {
       expect(readChatAnchor(list, heights)).toBeCloseTo(
         expectedChatAnchor(heights, viewportHeight, 1, "start"),
       );
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("auto-duration uses real pixel distance instead of item span", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const shortHeights = [40, 40, 40, 40];
+      const shortList = new ListState<number>();
+      shortList.pushAll(shortHeights);
+      const shortRenderer = new TimelineRenderer(createGraphics(100), {
+        list: shortList,
+        renderItem: (height) => createNode(height),
+      });
+
+      const tallHeights = [80, 80, 80, 80];
+      const tallList = new ListState<number>();
+      tallList.pushAll(tallHeights);
+      const tallRenderer = new TimelineRenderer(createGraphics(100), {
+        list: tallList,
+        renderItem: (height) => createNode(height),
+      });
+
+      shortRenderer.render();
+      tallRenderer.render();
+      shortRenderer.jumpTo(1);
+      tallRenderer.jumpTo(1);
+
+      now.current = 200;
+      expect(shortRenderer.render()).toBe(false);
+      expect(readTimelineAnchor(shortList, shortHeights)).toBeCloseTo(1);
+
+      expect(tallRenderer.render()).toBe(true);
+      expect(readTimelineAnchor(tallList, tallHeights)).toBeLessThan(1);
+
+      now.current = 240;
+      expect(tallRenderer.render()).toBe(false);
+      expect(readTimelineAnchor(tallList, tallHeights)).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("TimelineRenderer animated jumps follow eased pixel travel across mixed heights", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const heights = [20, 100, 20];
+      const viewportHeight = 40;
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      const startPixel = pixelAtAnchor(
+        heights,
+        readTimelineAnchor(list, heights),
+      );
+      renderer.jumpTo(1, { block: "end", duration: 200 });
+      const targetPixel = pixelAtAnchor(
+        heights,
+        expectedTimelineAnchor(heights, viewportHeight, 1, "end"),
+      );
+
+      for (const time of [0, 50, 100, 150, 200]) {
+        now.current = time;
+        renderer.render();
+        expect(
+          pixelAtAnchor(heights, readTimelineAnchor(list, heights)),
+        ).toBeCloseTo(expectedPixelAtTime(startPixel, targetPixel, time, 200));
+      }
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("ChatRenderer animated jumps follow eased pixel travel across mixed heights", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const heights = [20, 100, 20];
+      const viewportHeight = 40;
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = new ChatRenderer(createGraphics(viewportHeight), {
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      const startPixel = pixelAtAnchor(heights, readChatAnchor(list, heights));
+      renderer.jumpTo(1, { block: "start", duration: 200 });
+      const targetPixel = pixelAtAnchor(
+        heights,
+        expectedChatAnchor(heights, viewportHeight, 1, "start"),
+      );
+
+      for (const time of [0, 50, 100, 150, 200]) {
+        now.current = time;
+        renderer.render();
+        expect(
+          pixelAtAnchor(heights, readChatAnchor(list, heights)),
+        ).toBeCloseTo(expectedPixelAtTime(startPixel, targetPixel, time, 200));
+      }
     } finally {
       restoreNow();
     }
