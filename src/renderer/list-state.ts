@@ -171,24 +171,15 @@ export class ListState<T extends {}> {
   /**
    * Updates an existing item by index.
    */
-  update(index: number, item: T, animation?: UpdateListItemAnimationOptions): void;
-  update(index: number, updater: UpdateListItemUpdater<T>, animation?: UpdateListItemAnimationOptions): void;
-  update(
-    index: number,
-    itemOrUpdater: T | UpdateListItemUpdater<T>,
-    animation?: UpdateListItemAnimationOptions,
-  ): void {
+  update(index: number, item: T, animation?: UpdateListItemAnimationOptions): void {
     const normalizedIndex = Number.isFinite(index) ? Math.trunc(index) : Number.NaN;
     if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0 || normalizedIndex >= this.#items.length) {
       throw new RangeError(`update() index ${index} is out of range for list length ${this.#items.length}.`);
     }
 
     const prevItem = this.#items[normalizedIndex]!;
-    const nextItem =
-      typeof itemOrUpdater === "function"
-        ? (itemOrUpdater as UpdateListItemUpdater<T>)(prevItem)
-        : itemOrUpdater;
-    this.#items[normalizedIndex] = nextItem;
+    this.#items[normalizedIndex] = item;
+    const nextItem = this.#items[normalizedIndex]!;
     emitListStateChange(this, {
       type: "update",
       index: normalizedIndex,
