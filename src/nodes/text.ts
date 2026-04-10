@@ -29,7 +29,7 @@ import {
   shouldJustifyLine,
 } from "../text";
 import { readPreparedText } from "../text/plain-core";
-import { walkPreparedLineRanges } from "../text/inline-engine";
+import { readPreparedInlineLayout, createRichSourceItems, getRichPreparedKey, walkPreparedLineRanges } from "../text/inline-engine";
 import type { Box, Context, InlineSpan, MultilineTextOptions, Node, PhysicalTextAlign, TextOptions } from "../types";
 
 type SingleLineLayout = TextLayout;
@@ -68,6 +68,14 @@ function normalizeTextMaxWidth(maxWidth: number | undefined): number | undefined
     return undefined;
   }
   return Math.max(0, maxWidth);
+}
+
+function countSpaceChars(text: string): number {
+  let count = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 0x20) count++;
+  }
+  return count;
 }
 
 function getTextLayoutContext<C extends CanvasRenderingContext2D>(ctx: Context<C>): Context<C> & TextLayoutCacheAccess<C> {
@@ -426,27 +434,118 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
       const spans = this.text;
       const { width, lines } = getRichMultiLineDrawLayout(this, ctx, spans, this.options);
       const align = resolvePhysicalTextAlign(this.options);
-      const startX = align === "right" ? x + width : align === "center" ? x + width / 2 : x;
-      for (const line of lines) {
-        let cursorX = startX;
-        for (let fi = 0; fi < line.fragments.length; fi++) {
-          const frag = line.fragments[fi]!;
-          cursorX += frag.gapBefore;
-          ctx.with((g) => {
-            g.font = frag.font;
-            g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
-            if (align === "right") {
-              g.textAlign = "right";
-            } else if (align === "center") {
-              g.textAlign = "center";
-            } else {
-              g.textAlign = "left";
+      const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
+      const mode = resolveJustifyMode(this.options.justify);
+      const canJustify = mode != null && maxWidth != null && maxWidth > 0 && isJustifySupported(ctx.graphics);
+      const threshold = this.options.justifyGapThreshold ?? 2.0;
+
+      if (canJustify) {
+        const prepared = readPreparedInlineLayout(
+          getRichPreparedKey(spans, this.options.font, this.options.whiteSpace ?? "normal", this.options.wordBreak ?? "normal"),
+          createRichSourceItems(spans, this.options.font),
+          this.options.whiteSpace ?? "normal",
+          this.options.wordBreak ?? "normal",
+        );
+        let lineIndex = 0;
+        const totalLines = lines.length;
+        walkPreparedLineRanges(prepared, maxWidth, (lineRange) => {
+          if (lineIndex >= totalLines) return false;
+          const line = lines[lineIndex]!;
+          const isLastLine = lineIndex === totalLines - 1;
+          const isOverflowTruncated = isLastLine && shouldUseMultilineOverflowLayout(this.options)
+            && this.options.overflow === "ellipsis";
+          const wantJustify = !isOverflowTruncated
+            && (!isLastLine || this.options.justifyLastLine === true);
+
+          if (wantJustify) {
+            const info = analyzeLineForJustify(prepared, lineRange);
+            if (shouldJustifyLine(lineRange.width, maxWidth, info, mode, threshold)) {
+              const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode);
+              const extraSpace = maxWidth - lineRange.width;
+              const perGapSpacing = mode === "inter-word"
+                ? (info.wordGapCount > 0 ? extraSpace / info.wordGapCount : 0)
+                : (info.charCount > 0 ? extraSpace / info.charCount : 0);
+
+              let cursorX = x;
+              for (let fi = 0; fi < line.fragments.length; fi++) {
+                const frag = line.fragments[fi]!;
+                if (mode === "inter-word") {
+                  // gapBefore is from space atoms; each non-zero gapBefore typically has 1 space
+                  // but count actual space chars for correctness
+                  const gapSpaces = frag.gapBefore > 0 ? 1 : 0;
+                  cursorX += frag.gapBefore + gapSpaces * perGapSpacing;
+                } else {
+                  // inter-character: gapBefore also gets letterSpacing per char
+                  cursorX += frag.gapBefore + (frag.gapBefore > 0 ? perGapSpacing : 0);
+                }
+                ctx.with((g) => {
+                  g.font = frag.font;
+                  g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
+                  g.textAlign = "left";
+                  (g as any).wordSpacing = spacing.wordSpacing;
+                  (g as any).letterSpacing = spacing.letterSpacing;
+                  g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+                });
+                // Advance cursor: original width + extra spacing for spaces/chars in fragment text
+                if (mode === "inter-word") {
+                  cursorX += frag.occupiedWidth + countSpaceChars(frag.text) * perGapSpacing;
+                } else {
+                  // letterSpacing applies after every char including last
+                  cursorX += frag.occupiedWidth + frag.text.length * perGapSpacing;
+                }
+              }
+              y += this.options.lineHeight;
+              lineIndex++;
+              return;
             }
-            g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
-          });
-          cursorX += frag.occupiedWidth;
+          }
+
+          // Fallback: normal alignment
+          const startX = align === "right" ? x + width : align === "center" ? x + width / 2 : x;
+          let cursorX = startX;
+          for (let fi = 0; fi < line.fragments.length; fi++) {
+            const frag = line.fragments[fi]!;
+            cursorX += frag.gapBefore;
+            ctx.with((g) => {
+              g.font = frag.font;
+              g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
+              if (align === "right") {
+                g.textAlign = "right";
+              } else if (align === "center") {
+                g.textAlign = "center";
+              } else {
+                g.textAlign = "left";
+              }
+              g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+            });
+            cursorX += frag.occupiedWidth;
+          }
+          y += this.options.lineHeight;
+          lineIndex++;
+        });
+      } else {
+        const startX = align === "right" ? x + width : align === "center" ? x + width / 2 : x;
+        for (const line of lines) {
+          let cursorX = startX;
+          for (let fi = 0; fi < line.fragments.length; fi++) {
+            const frag = line.fragments[fi]!;
+            cursorX += frag.gapBefore;
+            ctx.with((g) => {
+              g.font = frag.font;
+              g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
+              if (align === "right") {
+                g.textAlign = "right";
+              } else if (align === "center") {
+                g.textAlign = "center";
+              } else {
+                g.textAlign = "left";
+              }
+              g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+            });
+            cursorX += frag.occupiedWidth;
+          }
+          y += this.options.lineHeight;
         }
-        y += this.options.lineHeight;
       }
       return false;
     }
