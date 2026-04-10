@@ -88,10 +88,12 @@ function createJustifyRecordingGraphics(recordedDraws: JustifyRecordedDraw[]): C
 }
 
 function createLineInfo(overrides: Partial<JustifyLineInfo> = {}): JustifyLineInfo {
+  const renderAtomCount = overrides.renderAtomCount ?? 0;
   return {
     wordGapCount: 0,
     wordCount: 0,
-    renderAtomCount: 0,
+    renderAtomCount,
+    letterGapCount: overrides.letterGapCount ?? Math.max(renderAtomCount - 1, 0),
     spaceCount: 0,
     nonSpaceCount: 0,
     cjkCount: 0,
@@ -165,6 +167,7 @@ describe("analyzeLineForJustify", () => {
       wordGapCount: 2,
       wordCount: 3,
       renderAtomCount: 15,
+      letterGapCount: 14,
       spaceCount: 2,
       nonSpaceCount: 13,
       cjkCount: 0,
@@ -181,6 +184,7 @@ describe("analyzeLineForJustify", () => {
       wordGapCount: 0,
       wordCount: 1,
       renderAtomCount: 5,
+      letterGapCount: 4,
       nonSpaceCount: 5,
     });
   });
@@ -291,7 +295,7 @@ describe("computeJustifySpacing", () => {
     const spacing = computeJustifySpacing(info.lineWidth, info.lineWidth + 8, info, "inter-character", 2.0);
     expect(spacing).not.toBeNull();
     expect(spacing?.wordSpacingPx).toBe(0);
-    expect(spacing?.letterSpacingPx).toBe(2);
+    expect(spacing?.letterSpacingPx).toBeCloseTo(8 / info.letterGapCount);
   });
 
   test("mixed CJK and English lines use both spacing channels", () => {
@@ -300,6 +304,20 @@ describe("computeJustifySpacing", () => {
     expect(spacing).not.toBeNull();
     expect(spacing?.wordSpacingPx).toBeGreaterThan(0);
     expect(spacing?.letterSpacingPx).toBeGreaterThan(0);
+    expect(
+      info.wordGapCount * (spacing?.wordSpacingPx ?? 0)
+      + info.letterGapCount * (spacing?.letterSpacingPx ?? 0),
+    ).toBeCloseTo(16);
+  });
+
+  test("single-run lines divide letter spacing by letter gaps instead of atoms", () => {
+    const info = getSingleLineInfo("abcd");
+    const spacing = computeJustifySpacing(info.lineWidth, info.lineWidth + 12, info, "inter-character", 2.0);
+    expect(spacing).not.toBeNull();
+    expect(info.renderAtomCount).toBe(4);
+    expect(info.letterGapCount).toBe(3);
+    expect(spacing?.wordSpacingPx).toBe(0);
+    expect(spacing?.letterSpacingPx).toBe(4);
   });
 
   test("punctuation-heavy lines reduce letter spacing versus the no-space fallback", () => {

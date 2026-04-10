@@ -67,6 +67,8 @@ export interface JustifyLineInfo {
   wordCount: number;
   /** Total number of visible atoms that receive letter spacing. */
   renderAtomCount: number;
+  /** Total number of inter-atom gaps that receive letter spacing. */
+  letterGapCount: number;
   /** Total number of visible space atoms. */
   spaceCount: number;
   /** Total number of visible non-space atoms. */
@@ -132,6 +134,7 @@ export function analyzeLineForJustify(
     wordGapCount,
     wordCount,
     renderAtomCount,
+    letterGapCount: Math.max(renderAtomCount - 1, 0),
     spaceCount,
     nonSpaceCount,
     cjkCount,
@@ -148,6 +151,16 @@ function getAverageWordWidth(info: JustifyLineInfo): number {
 
 function getAverageCharWidth(info: JustifyLineInfo): number {
   return info.renderAtomCount > 0 ? info.lineWidth / info.renderAtomCount : info.lineWidth;
+}
+
+function resolvePerGapSpacing(totalSpace: number, gapCount: number): number | null {
+  if (totalSpace === 0) {
+    return 0;
+  }
+  if (gapCount <= 0) {
+    return null;
+  }
+  return totalSpace / gapCount;
 }
 
 function exceedsThreshold(perGap: number, averageWidth: number, threshold: number): boolean {
@@ -214,7 +227,10 @@ export function computeJustifySpacing(
 
   const avgCharWidth = Math.max(getAverageCharWidth(info), Number.EPSILON);
   if (info.wordGapCount === 0) {
-    const perGap = extraSpace / info.renderAtomCount;
+    const perGap = resolvePerGapSpacing(extraSpace, info.letterGapCount);
+    if (perGap == null) {
+      return null;
+    }
     if (exceedsThreshold(perGap, avgCharWidth, threshold)) {
       return null;
     }
@@ -238,8 +254,13 @@ export function computeJustifySpacing(
     | null = null;
 
   for (const wordShare of HYBRID_WORD_SHARE_CANDIDATES) {
-    const wordSpacingPx = extraSpace * wordShare / info.wordGapCount;
-    const letterSpacingPx = extraSpace * (1 - wordShare) / info.renderAtomCount;
+    const wordExtraSpace = extraSpace * wordShare;
+    const letterExtraSpace = extraSpace - wordExtraSpace;
+    const wordSpacingPx = resolvePerGapSpacing(wordExtraSpace, info.wordGapCount);
+    const letterSpacingPx = resolvePerGapSpacing(letterExtraSpace, info.letterGapCount);
+    if (wordSpacingPx == null || letterSpacingPx == null) {
+      continue;
+    }
     if (
       exceedsThreshold(wordSpacingPx, avgWordWidth, threshold)
       || exceedsThreshold(letterSpacingPx, avgCharWidth, threshold)

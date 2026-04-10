@@ -489,8 +489,10 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
               let cursorX = x;
               for (let fi = 0; fi < line.fragments.length; fi++) {
                 const frag = line.fragments[fi]!;
+                const leadingLetterGapCount = fi > 0 ? frag.gapAtomCount + 1 : 0;
+                const internalLetterGapCount = Math.max(frag.atomCount - 1, 0);
                 cursorX += frag.gapBefore
-                  + frag.gapAtomCount * spacing.letterSpacingPx
+                  + leadingLetterGapCount * spacing.letterSpacingPx
                   + frag.gapSpaceCount * spacing.wordSpacingPx;
                 ctx.with((g) => {
                   g.font = frag.font;
@@ -501,7 +503,7 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
                   });
                 });
                 cursorX += frag.occupiedWidth
-                  + frag.atomCount * spacing.letterSpacingPx
+                  + internalLetterGapCount * spacing.letterSpacingPx
                   + frag.spaceCount * spacing.wordSpacingPx;
               }
               y += this.options.lineHeight;
