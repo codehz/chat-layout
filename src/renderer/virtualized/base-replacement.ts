@@ -47,6 +47,13 @@ type CurrentVisualState<C extends CanvasRenderingContext2D> = {
   translateY: number;
 };
 
+type WindowTranslateAnimation = {
+  fromTranslateY: number;
+  toTranslateY: number;
+  startTime: number;
+  duration: number;
+};
+
 /** State context needed to check whether an update can be animated. */
 export type ReplacementUpdateContext<
   C extends CanvasRenderingContext2D,
@@ -73,6 +80,7 @@ export class ReplacementController<
 > {
   #replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
   #activeReplacementItems = new Set<T>();
+  #windowTranslateAnimation: WindowTranslateAnimation | undefined;
 
   // Visible-item snapshot used to decide whether an update can be animated.
   #drawnItems = new Set<T>();
@@ -86,6 +94,7 @@ export class ReplacementController<
     items: readonly T[],
     viewportHeight: number,
     snapshotState: ControlledState,
+    extraShift: number,
     readVisibleRange: (
       top: number,
       height: number,
@@ -97,17 +106,18 @@ export class ReplacementController<
     let maxVisibleIndex = Number.NEGATIVE_INFINITY;
     let topMostY = Number.POSITIVE_INFINITY;
     let bottomMostY = Number.NEGATIVE_INFINITY;
+    const effectiveShift = window.shift + extraShift;
     for (const { idx, offset, height } of window.drawList) {
       minVisibleIndex = Math.min(minVisibleIndex, idx);
       maxVisibleIndex = Math.max(maxVisibleIndex, idx);
-      const y = offset + window.shift;
+      const y = offset + effectiveShift;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
       const item = items[idx];
       if (item != null) {
         nextDrawnItems.add(item);
       }
-      if (readVisibleRange(offset + window.shift, height) == null) {
+      if (readVisibleRange(offset + effectiveShift, height) == null) {
         continue;
       }
       if (item == null) {
@@ -162,12 +172,31 @@ export class ReplacementController<
     adapter: Pick<ReplacementRendererAdapter<C, T>, "onDeleteComplete">,
   ): boolean {
     let keepAnimating = false;
+    this.#cleanupWindowTranslateAnimation(now);
+    if (this.#windowTranslateAnimation != null) {
+      keepAnimating = true;
+    }
     for (const item of [...this.#activeReplacementItems]) {
       if (this.readAnimation(item, now, adapter) != null) {
         keepAnimating = true;
       }
     }
     return keepAnimating;
+  }
+
+  getWindowTranslateY(now: number): number {
+    this.#cleanupWindowTranslateAnimation(now);
+    const animation = this.#windowTranslateAnimation;
+    if (animation == null) {
+      return 0;
+    }
+    return interpolate(
+      animation.fromTranslateY,
+      animation.toTranslateY,
+      animation.startTime,
+      animation.duration,
+      now,
+    );
   }
 
   /**
@@ -480,30 +509,31 @@ export class ReplacementController<
     }
 
     const now = getNow();
+    let insertedHeight = 0;
     for (let index = 0; index < Math.min(count, ctx.items.length); index += 1) {
       const item = ctx.items[index];
       if (item == null) {
         continue;
       }
       const node = ctx.renderItem(item);
-      const itemHeight = ctx.measureNode(node).height;
-      this.#replacementAnimations.set(item, {
-        kind: "insert",
-        outgoing: undefined,
-        incoming: this.#createLayer(node, 1, 1, now, duration, "start", 0, 0),
-        fromHeight: 0,
-        toHeight: itemHeight,
-        startTime: now,
-        duration,
-      });
-      this.#activeReplacementItems.add(item);
+      insertedHeight += ctx.measureNode(node).height;
     }
+    if (!(insertedHeight > 0) || !Number.isFinite(insertedHeight)) {
+      return;
+    }
+    this.#windowTranslateAnimation = {
+      fromTranslateY: this.getWindowTranslateY(now) - insertedHeight,
+      toTranslateY: 0,
+      startTime: now,
+      duration,
+    };
   }
 
   /** Clears all animation state (e.g., on list reset). */
   reset(): void {
     this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
     this.#activeReplacementItems.clear();
+    this.#windowTranslateAnimation = undefined;
     this.#drawnItems.clear();
     this.#visibleItems.clear();
     this.#hasVisibleItemSnapshot = false;
@@ -742,5 +772,15 @@ export class ReplacementController<
       placement: ctx.defaultAnimatedPlacement,
       translateY: 0,
     };
+  }
+
+  #cleanupWindowTranslateAnimation(now: number): void {
+    const animation = this.#windowTranslateAnimation;
+    if (
+      animation != null &&
+      getProgress(animation.startTime, animation.duration, now) >= 1
+    ) {
+      this.#windowTranslateAnimation = undefined;
+    }
   }
 }

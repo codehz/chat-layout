@@ -458,7 +458,7 @@ describe("update animation", () => {
     }
   });
 
-  test("TimelineRenderer animates unshiftAll on short lists by revealing the new head", () => {
+  test("TimelineRenderer animates unshiftAll on short lists as a whole-window slide", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -481,14 +481,102 @@ describe("update animation", () => {
       expect(renderer.render()).toBe(true);
       expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
-      if (draws.find((draw) => draw.id === "new") != null) {
-        expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
-      }
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-10);
 
       now.current = 50;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-5);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(5);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(25);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
       expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("TimelineRenderer keeps unshiftAll item spacing fixed across mixed heights", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createTimelineRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "middle", height: 35 },
+          { id: "tail", height: 15 },
+        ],
+        draws,
+      );
+
+      renderer.render();
+
+      list.unshiftAll(
+        [
+          { id: "new-a", height: 12 },
+          { id: "new-b", height: 18 },
+        ],
+        { duration: 100 },
+      );
+      const finalY = new Map([
+        ["new-a", 0],
+        ["new-b", 12],
+        ["head", 30],
+        ["middle", 50],
+        ["tail", 85],
+      ]);
+
+      for (const time of [0, 50, 100]) {
+        now.current = time;
+        draws.length = 0;
+        renderer.render();
+
+        const deltas = draws.map((draw) => draw.y - (finalY.get(draw.id) ?? 0));
+        expect(deltas.length).toBeGreaterThan(0);
+        for (const delta of deltas) {
+          expect(delta).toBeCloseTo(deltas[0]!);
+        }
+      }
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("ChatRenderer animates unshiftAll on short lists as a whole-window slide", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createChatRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 20 },
+        ],
+        draws,
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.unshiftAll([{ id: "new", height: 10 }], {
+        duration: 100,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-10);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-5);
       expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(5);
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(25);
 

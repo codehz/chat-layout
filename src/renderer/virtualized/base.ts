@@ -119,15 +119,21 @@ export abstract class VirtualizedRenderer<
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
 
     let solution = this._resolveVisibleWindow(now);
-    this._captureVisibleItemSnapshot(solution.window);
+    let replacementShift = this.#replacementController.getWindowTranslateY(now);
+    this._captureVisibleItemSnapshot(solution.window, replacementShift);
     const requestSettleRedraw = this._pruneReplacementAnimations(
       solution.window,
     );
     if (requestSettleRedraw) {
       solution = this._resolveVisibleWindow(now);
-      this._captureVisibleItemSnapshot(solution.window);
+      replacementShift = this.#replacementController.getWindowTranslateY(now);
+      this._captureVisibleItemSnapshot(solution.window, replacementShift);
     }
-    const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
+    const requestRedraw = this._renderVisibleWindow(
+      solution.window,
+      feedback,
+      replacementShift,
+    );
     this._commitListState(solution.normalizedState);
 
     return this._finishRender(
@@ -141,13 +147,16 @@ export abstract class VirtualizedRenderer<
     y: number;
     type: "click" | "auxclick" | "hover";
   }): boolean {
-    let solution = this._resolveVisibleWindow(getNow());
-    this._captureVisibleItemSnapshot(solution.window);
+    const now = getNow();
+    let solution = this._resolveVisibleWindow(now);
+    let replacementShift = this.#replacementController.getWindowTranslateY(now);
+    this._captureVisibleItemSnapshot(solution.window, replacementShift);
     if (this._pruneReplacementAnimations(solution.window)) {
-      solution = this._resolveVisibleWindow(getNow());
-      this._captureVisibleItemSnapshot(solution.window);
+      solution = this._resolveVisibleWindow(now);
+      replacementShift = this.#replacementController.getWindowTranslateY(now);
+      this._captureVisibleItemSnapshot(solution.window, replacementShift);
     }
-    return this._hittestVisibleWindow(solution.window, test);
+    return this._hittestVisibleWindow(solution.window, test, replacementShift);
   }
 
   protected _readListState(): VisibleListState {
@@ -287,9 +296,14 @@ export abstract class VirtualizedRenderer<
   protected _renderVisibleWindow(
     window: VisibleWindow<VirtualizedResolvedItem>,
     feedback?: RenderFeedback,
+    extraShift = 0,
   ): boolean {
     this._resetRenderFeedback(feedback);
-    return this._renderDrawList(window.drawList, window.shift, feedback);
+    return this._renderDrawList(
+      window.drawList,
+      window.shift + extraShift,
+      feedback,
+    );
   }
 
   protected _readVisibleRange(
@@ -324,9 +338,10 @@ export abstract class VirtualizedRenderer<
   protected _hittestVisibleWindow(
     window: VisibleWindow<VirtualizedResolvedItem>,
     test: HitTest,
+    extraShift = 0,
   ): boolean {
     for (const { value: item, offset, height } of window.drawList) {
-      const y = offset + window.shift;
+      const y = offset + window.shift + extraShift;
       if (test.y < y || test.y >= y + height) {
         continue;
       }
@@ -335,13 +350,17 @@ export abstract class VirtualizedRenderer<
     return false;
   }
 
-  protected _captureVisibleItemSnapshot(window: VisibleWindow<unknown>): void {
+  protected _captureVisibleItemSnapshot(
+    window: VisibleWindow<unknown>,
+    extraShift = 0,
+  ): void {
     const normalizedState = this._normalizeListState(this._readListState());
     this.#replacementController.captureVisibleItemSnapshot(
       window,
       this.items,
       this.graphics.canvas.clientHeight,
       normalizedState,
+      extraShift,
       this._readVisibleRange.bind(this),
     );
   }
