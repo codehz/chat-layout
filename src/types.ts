@@ -120,9 +120,37 @@ export interface InlineSpan<C extends CanvasRenderingContext2D> {
 }
 
 /**
+ * Two-end justification mode for multi-line text.
+ */
+export type TextJustifyMode = "inter-word" | "inter-character";
+
+/**
+ * Options controlling two-end justification behavior.
+ */
+export interface TextJustifyOptions {
+  /**
+   * Enable two-end justification. Default: false.
+   * `true` uses "inter-word" mode.
+   */
+  justify?: boolean | TextJustifyMode;
+
+  /**
+   * Whether to justify the last line as well. Default: false.
+   */
+  justifyLastLine?: boolean;
+
+  /**
+   * Maximum ratio of a single gap relative to the average word/char width.
+   * Lines exceeding this threshold fall back to normal alignment.
+   * Default: 2.0. Set to Infinity to disable.
+   */
+  justifyGapThreshold?: number;
+}
+
+/**
  * Options for multi-line text nodes.
  */
-export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {
+export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C>, TextJustifyOptions {
   /** Logical alignment that matches `Place.align`. */
   align?: TextAlign;
   /** Explicit physical alignment when left/right semantics are required. */
