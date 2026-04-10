@@ -17,6 +17,20 @@ export interface DeleteListItemAnimationOptions {
   duration?: number;
 }
 
+export interface PushListItemsAnimationOptions {
+  /** Animation duration in milliseconds. */
+  duration?: number;
+  /** Enter offset in pixels measured from the final resting position. */
+  distance?: number;
+  /** Whether the inserted items should fade in. Defaults to `true`. */
+  fade?: boolean;
+}
+
+export interface UnshiftListItemsAnimationOptions {
+  /** Animation duration in milliseconds. */
+  duration?: number;
+}
+
 type ListUpdateChange<T extends {}> = {
   type: "update";
   prevItem: T;
@@ -38,11 +52,13 @@ type ListDeleteFinalizeChange<T extends {}> = {
 type ListUnshiftChange = {
   type: "unshift";
   count: number;
+  animation: UnshiftListItemsAnimationOptions | undefined;
 };
 
 type ListPushChange = {
   type: "push";
   count: number;
+  animation: PushListItemsAnimationOptions | undefined;
 };
 
 type ListResetChange = {
@@ -188,6 +204,60 @@ function normalizeDeleteAnimation(
   return normalizeAnimationDuration(animation?.duration);
 }
 
+const DEFAULT_INSERT_ALL_ANIMATION_DURATION = 220;
+
+function normalizeInsertAnimationDuration(
+  duration: number | undefined,
+  hasAnimationOptions: boolean,
+): number | undefined {
+  if (!hasAnimationOptions) {
+    return undefined;
+  }
+  const resolvedDuration =
+    duration == null ? DEFAULT_INSERT_ALL_ANIMATION_DURATION : duration;
+  if (!Number.isFinite(resolvedDuration) || resolvedDuration <= 0) {
+    return undefined;
+  }
+  return resolvedDuration;
+}
+
+function normalizePushAnimation(
+  animation: PushListItemsAnimationOptions | undefined,
+): PushListItemsAnimationOptions | undefined {
+  const duration = normalizeInsertAnimationDuration(
+    animation?.duration,
+    animation != null,
+  );
+  if (duration == null) {
+    return undefined;
+  }
+
+  const normalizedAnimation: PushListItemsAnimationOptions = {
+    duration,
+    fade: animation?.fade ?? true,
+  };
+  if (
+    typeof animation?.distance === "number" &&
+    Number.isFinite(animation.distance)
+  ) {
+    normalizedAnimation.distance = Math.max(0, animation.distance);
+  }
+  return normalizedAnimation;
+}
+
+function normalizeUnshiftAnimation(
+  animation: UnshiftListItemsAnimationOptions | undefined,
+): UnshiftListItemsAnimationOptions | undefined {
+  const duration = normalizeInsertAnimationDuration(
+    animation?.duration,
+    animation != null,
+  );
+  if (duration == null) {
+    return undefined;
+  }
+  return { duration };
+}
+
 export class ListState<T extends {}> {
   #items: T[];
   #pendingDeletes = new Set<T>();
@@ -226,11 +296,12 @@ export class ListState<T extends {}> {
   }
 
   /** Prepends an array of items. */
-  unshiftAll(items: T[]): void {
+  unshiftAll(items: T[], animation?: UnshiftListItemsAnimationOptions): void {
     if (items.length === 0) {
       return;
     }
     assertUniqueItemReferences(items, this.#items);
+    const normalizedAnimation = normalizeUnshiftAnimation(animation);
     if (this.position != null) {
       this.position += items.length;
     }
@@ -238,6 +309,7 @@ export class ListState<T extends {}> {
     emitListStateChange(this, {
       type: "unshift",
       count: items.length,
+      animation: normalizedAnimation,
     });
   }
 
@@ -247,15 +319,17 @@ export class ListState<T extends {}> {
   }
 
   /** Appends an array of items. */
-  pushAll(items: T[]): void {
+  pushAll(items: T[], animation?: PushListItemsAnimationOptions): void {
     if (items.length === 0) {
       return;
     }
     assertUniqueItemReferences(items, this.#items);
+    const normalizedAnimation = normalizePushAnimation(animation);
     this.#items.push(...items);
     emitListStateChange(this, {
       type: "push",
       count: items.length,
+      animation: normalizedAnimation,
     });
   }
 

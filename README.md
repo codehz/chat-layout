@@ -53,6 +53,20 @@ return row;
 
 See [example/chat.ts](./example/chat.ts) for a full chat example.
 
+## List insert animation
+
+`pushAll()` and `unshiftAll()` can opt into short-list insertion animations. They only animate when the previous rendered frame still had spare space below the last item; otherwise they fall back to the normal hard cut:
+
+```ts
+list.pushAll([nextMessage], {
+  distance: 24, // duration defaults to 220ms when animation options are present
+});
+
+list.unshiftAll([olderMessage], {
+  duration: 220,
+});
+```
+
 ## Layout notes
 
 - `Flex` handles the main axis only. It shrink-wraps on the cross axis unless you opt into stretch behavior.

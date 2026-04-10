@@ -10,6 +10,7 @@ import {
 } from "./base-animation";
 import {
   ALPHA_EPSILON,
+  type AnimatedLayerPlacement,
   type ControlledState,
   type ReplacementAnimation,
   type ReplacementLayer,
@@ -26,8 +27,24 @@ export type ReplacementRendererAdapter<
   drawNode: (node: Node<C>, x: number, y: number) => boolean;
   getRootContext: () => Context<C>;
   graphics: C;
-  getAnimatedLayerOffset: (slotHeight: number, nodeHeight: number) => number;
+  defaultAnimatedPlacement: AnimatedLayerPlacement;
   onDeleteComplete: (item: T) => void;
+};
+
+type SampledLayer<C extends CanvasRenderingContext2D> = {
+  alpha: number;
+  node: Node<C>;
+  nodeHeight: number;
+  placement: AnimatedLayerPlacement;
+  translateY: number;
+};
+
+type CurrentVisualState<C extends CanvasRenderingContext2D> = {
+  node: Node<C>;
+  alpha: number;
+  height: number;
+  placement: AnimatedLayerPlacement;
+  translateY: number;
 };
 
 /** State context needed to check whether an update can be animated. */
@@ -58,32 +75,58 @@ export class ReplacementController<
   #activeReplacementItems = new Set<T>();
 
   // Visible-item snapshot used to decide whether an update can be animated.
+  #drawnItems = new Set<T>();
   #visibleItems = new Set<T>();
   #hasVisibleItemSnapshot = false;
   #visibleSnapshotState: ControlledState | undefined;
+  #visibleSnapshotShowsShortList = false;
 
   captureVisibleItemSnapshot(
     window: VisibleWindow<unknown>,
     items: readonly T[],
+    viewportHeight: number,
+    snapshotState: ControlledState,
     readVisibleRange: (
       top: number,
       height: number,
     ) => { top: number; bottom: number } | undefined,
-    readListState: () => ControlledState,
   ): void {
+    const nextDrawnItems = new Set<T>();
     const nextVisibleItems = new Set<T>();
+    let minVisibleIndex = Number.POSITIVE_INFINITY;
+    let maxVisibleIndex = Number.NEGATIVE_INFINITY;
+    let topMostY = Number.POSITIVE_INFINITY;
+    let bottomMostY = Number.NEGATIVE_INFINITY;
     for (const { idx, offset, height } of window.drawList) {
+      minVisibleIndex = Math.min(minVisibleIndex, idx);
+      maxVisibleIndex = Math.max(maxVisibleIndex, idx);
+      const y = offset + window.shift;
+      topMostY = Math.min(topMostY, y);
+      bottomMostY = Math.max(bottomMostY, y + height);
+      const item = items[idx];
+      if (item != null) {
+        nextDrawnItems.add(item);
+      }
       if (readVisibleRange(offset + window.shift, height) == null) {
         continue;
       }
-      const item = items[idx];
-      if (item != null) {
-        nextVisibleItems.add(item);
+      if (item == null) {
+        continue;
       }
+      nextVisibleItems.add(item);
     }
+    this.#drawnItems = nextDrawnItems;
     this.#visibleItems = nextVisibleItems;
     this.#hasVisibleItemSnapshot = true;
-    this.#visibleSnapshotState = readListState();
+    this.#visibleSnapshotState = snapshotState;
+    this.#visibleSnapshotShowsShortList =
+      window.drawList.length > 0 &&
+      items.length > 0 &&
+      window.drawList.length === items.length &&
+      minVisibleIndex === 0 &&
+      maxVisibleIndex === items.length - 1 &&
+      topMostY >= -Number.EPSILON &&
+      bottomMostY < viewportHeight - Number.EPSILON;
   }
 
   /**
@@ -95,10 +138,14 @@ export class ReplacementController<
   ): boolean {
     let changed = false;
     for (const item of [...this.#activeReplacementItems]) {
-      if (this.#visibleItems.has(item)) {
+      const animation = this.#replacementAnimations.get(item);
+      const isTracked =
+        animation?.kind === "insert"
+          ? this.#drawnItems.has(item)
+          : this.#visibleItems.has(item);
+      if (isTracked) {
         continue;
       }
-      const animation = this.#replacementAnimations.get(item);
       this.#replacementAnimations.delete(item);
       this.#activeReplacementItems.delete(item);
       if (animation?.kind === "delete") {
@@ -221,7 +268,16 @@ export class ReplacementController<
         this.#activeReplacementItems.delete(change.item);
         break;
       case "unshift":
+        this.handleUnshift(change.count, change.animation?.duration, ctx);
+        break;
       case "push":
+        this.handlePush(
+          change.count,
+          change.animation?.duration,
+          change.animation?.distance,
+          change.animation?.fade ?? true,
+          ctx,
+        );
         break;
       case "reset":
       case "set":
@@ -255,37 +311,43 @@ export class ReplacementController<
     const nextNode = ctx.renderItem(nextItem);
     const nextHeight = ctx.measureNode(nextNode).height;
     const animation = this.readAnimation(prevItem, now, ctx);
-
-    let currentNode: Node<C>;
-    let currentAlpha = 1;
-    let fromHeight: number;
-    if (animation == null || animation.incoming == null) {
-      currentNode = ctx.renderItem(prevItem);
-      fromHeight = ctx.measureNode(currentNode).height;
-    } else {
-      currentNode = animation.incoming.node;
-      currentAlpha = this.#sampleLayerAlpha(animation.incoming, now);
-      fromHeight = this.#sampleReplacementHeight(animation, now);
-    }
+    const currentVisualState = this.#readCurrentVisualState(
+      prevItem,
+      animation,
+      now,
+      ctx,
+    );
 
     const outgoing =
-      currentAlpha > ALPHA_EPSILON
+      currentVisualState.alpha > ALPHA_EPSILON
         ? this.#createLayer(
-            currentNode,
-            currentAlpha,
+            currentVisualState.node,
+            currentVisualState.alpha,
             0,
             now,
             normalizedDuration,
+            currentVisualState.placement,
+            currentVisualState.translateY,
+            0,
           )
         : undefined;
-    const incoming = this.#createLayer(nextNode, 0, 1, now, normalizedDuration);
+    const incoming = this.#createLayer(
+      nextNode,
+      0,
+      1,
+      now,
+      normalizedDuration,
+      currentVisualState.placement,
+      currentVisualState.translateY,
+      0,
+    );
 
     this.#replacementAnimations.delete(prevItem);
     this.#replacementAnimations.set(nextItem, {
       kind: "update",
       outgoing,
       incoming,
-      fromHeight,
+      fromHeight: currentVisualState.height,
       toHeight: nextHeight,
       startTime: now,
       duration: normalizedDuration,
@@ -317,34 +379,24 @@ export class ReplacementController<
 
     const now = getNow();
     const animation = this.readAnimation(item, now, ctx);
-
-    let currentNode: Node<C>;
-    let currentAlpha = 1;
-    let fromHeight: number;
-    if (animation == null) {
-      currentNode = ctx.renderItem(item);
-      fromHeight = ctx.measureNode(currentNode).height;
-    } else if (animation.incoming != null) {
-      currentNode = animation.incoming.node;
-      currentAlpha = this.#sampleLayerAlpha(animation.incoming, now);
-      fromHeight = this.#sampleReplacementHeight(animation, now);
-    } else if (animation.outgoing != null) {
-      currentNode = animation.outgoing.node;
-      currentAlpha = this.#sampleLayerAlpha(animation.outgoing, now);
-      fromHeight = this.#sampleReplacementHeight(animation, now);
-    } else {
-      currentNode = ctx.renderItem(item);
-      fromHeight = ctx.measureNode(currentNode).height;
-    }
+    const currentVisualState = this.#readCurrentVisualState(
+      item,
+      animation,
+      now,
+      ctx,
+    );
 
     const outgoing =
-      currentAlpha > ALPHA_EPSILON
+      currentVisualState.alpha > ALPHA_EPSILON
         ? this.#createLayer(
-            currentNode,
-            currentAlpha,
+            currentVisualState.node,
+            currentVisualState.alpha,
             0,
             now,
             normalizedDuration,
+            currentVisualState.placement,
+            currentVisualState.translateY,
+            0,
           )
         : undefined;
 
@@ -352,7 +404,7 @@ export class ReplacementController<
       kind: "delete",
       outgoing,
       incoming: undefined,
-      fromHeight,
+      fromHeight: currentVisualState.height,
       toHeight: 0,
       startTime: now,
       duration: normalizedDuration,
@@ -360,13 +412,103 @@ export class ReplacementController<
     this.#activeReplacementItems.add(item);
   }
 
+  handlePush(
+    count: number,
+    duration: number | undefined,
+    distance: number | undefined,
+    fade: boolean,
+    ctx: ReplacementUpdateContext<C, T>,
+  ): void {
+    if (
+      count <= 0 ||
+      !(typeof duration === "number" && duration > 0) ||
+      !this.#canAnimateInsert("push", count, ctx)
+    ) {
+      return;
+    }
+
+    const start = ctx.items.length - count;
+    if (start < 0) {
+      return;
+    }
+
+    const now = getNow();
+    for (let index = start; index < ctx.items.length; index += 1) {
+      const item = ctx.items[index];
+      if (item == null) {
+        continue;
+      }
+      const node = ctx.renderItem(item);
+      const itemHeight = ctx.measureNode(node).height;
+      const resolvedDistance =
+        typeof distance === "number" && Number.isFinite(distance)
+          ? Math.max(0, distance)
+          : Math.min(24, itemHeight);
+      this.#replacementAnimations.set(item, {
+        kind: "insert",
+        outgoing: undefined,
+        incoming: this.#createLayer(
+          node,
+          fade ? 0 : 1,
+          1,
+          now,
+          duration,
+          "start",
+          resolvedDistance,
+          0,
+        ),
+        fromHeight: itemHeight,
+        toHeight: itemHeight,
+        startTime: now,
+        duration,
+      });
+      this.#activeReplacementItems.add(item);
+    }
+  }
+
+  handleUnshift(
+    count: number,
+    duration: number | undefined,
+    ctx: ReplacementUpdateContext<C, T>,
+  ): void {
+    if (
+      count <= 0 ||
+      !(typeof duration === "number" && duration > 0) ||
+      !this.#canAnimateInsert("unshift", count, ctx)
+    ) {
+      return;
+    }
+
+    const now = getNow();
+    for (let index = 0; index < Math.min(count, ctx.items.length); index += 1) {
+      const item = ctx.items[index];
+      if (item == null) {
+        continue;
+      }
+      const node = ctx.renderItem(item);
+      const itemHeight = ctx.measureNode(node).height;
+      this.#replacementAnimations.set(item, {
+        kind: "insert",
+        outgoing: undefined,
+        incoming: this.#createLayer(node, 1, 1, now, duration, "start", 0, 0),
+        fromHeight: 0,
+        toHeight: itemHeight,
+        startTime: now,
+        duration,
+      });
+      this.#activeReplacementItems.add(item);
+    }
+  }
+
   /** Clears all animation state (e.g., on list reset). */
   reset(): void {
     this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
     this.#activeReplacementItems.clear();
+    this.#drawnItems.clear();
     this.#visibleItems.clear();
     this.#hasVisibleItemSnapshot = false;
     this.#visibleSnapshotState = undefined;
+    this.#visibleSnapshotShowsShortList = false;
   }
 
   #createLayer(
@@ -375,14 +517,36 @@ export class ReplacementController<
     toAlpha: number,
     startTime: number,
     duration: number,
+    placement: AnimatedLayerPlacement,
+    fromTranslateY: number,
+    toTranslateY: number,
   ): ReplacementLayer<C> {
-    return { node, fromAlpha, toAlpha, startTime, duration };
+    return {
+      node,
+      fromAlpha,
+      toAlpha,
+      fromTranslateY,
+      toTranslateY,
+      placement,
+      startTime,
+      duration,
+    };
   }
 
   #sampleLayerAlpha(layer: ReplacementLayer<C>, now: number): number {
     return interpolate(
       layer.fromAlpha,
       layer.toAlpha,
+      layer.startTime,
+      layer.duration,
+      now,
+    );
+  }
+
+  #sampleLayerTranslateY(layer: ReplacementLayer<C>, now: number): number {
+    return interpolate(
+      layer.fromTranslateY,
+      layer.toTranslateY,
       layer.startTime,
       layer.duration,
       now,
@@ -406,19 +570,21 @@ export class ReplacementController<
     animation: ReplacementAnimation<C>,
     now: number,
     measureNode: (node: Node<C>) => Box,
-  ): { alpha: number; node: Node<C>; nodeHeight: number }[] {
+  ): SampledLayer<C>[] {
     return [animation.outgoing, animation.incoming]
       .filter((layer): layer is ReplacementLayer<C> => layer != null)
       .map((layer) => ({
         alpha: this.#sampleLayerAlpha(layer, now),
         node: layer.node,
         nodeHeight: measureNode(layer.node).height,
+        placement: layer.placement,
+        translateY: this.#sampleLayerTranslateY(layer, now),
       }))
       .filter((layer) => layer.alpha > ALPHA_EPSILON);
   }
 
   #drawReplacementLayers(
-    layers: { alpha: number; node: Node<C>; nodeHeight: number }[],
+    layers: SampledLayer<C>[],
     slotHeight: number,
     y: number,
     adapter: ReplacementRendererAdapter<C, T>,
@@ -444,7 +610,13 @@ export class ReplacementController<
           adapter.graphics.globalAlpha *= alpha;
         }
         const layerY =
-          y + adapter.getAnimatedLayerOffset(slotHeight, layer.nodeHeight);
+          y +
+          this.#getPlacementOffset(
+            layer.placement,
+            slotHeight,
+            layer.nodeHeight,
+          ) +
+          layer.translateY;
         if (adapter.drawNode(layer.node, 0, layerY)) {
           result = true;
         }
@@ -453,6 +625,14 @@ export class ReplacementController<
       }
     }
     return result;
+  }
+
+  #getPlacementOffset(
+    placement: AnimatedLayerPlacement,
+    slotHeight: number,
+    nodeHeight: number,
+  ): number {
+    return placement === "end" ? slotHeight - nodeHeight : 0;
   }
 
   #isIndexVisible(
@@ -504,5 +684,67 @@ export class ReplacementController<
       ctx.resolveVisibleWindow,
       ctx.readVisibleRange,
     );
+  }
+
+  #canAnimateInsert(
+    direction: "push" | "unshift",
+    count: number,
+    ctx: ReplacementUpdateContext<C, T>,
+  ): boolean {
+    if (
+      !this.#hasVisibleItemSnapshot ||
+      this.#visibleSnapshotState == null ||
+      !this.#visibleSnapshotShowsShortList
+    ) {
+      return false;
+    }
+
+    const expectedPosition =
+      direction === "unshift" && this.#visibleSnapshotState.position != null
+        ? this.#visibleSnapshotState.position + count
+        : this.#visibleSnapshotState.position;
+    return sameState(
+      {
+        position: expectedPosition,
+        offset: this.#visibleSnapshotState.offset,
+      },
+      ctx.position,
+      ctx.offset,
+    );
+  }
+
+  #readCurrentVisualState(
+    item: T,
+    animation: ReplacementAnimation<C> | undefined,
+    now: number,
+    ctx: ReplacementUpdateContext<C, T>,
+  ): CurrentVisualState<C> {
+    if (animation?.incoming != null) {
+      return {
+        node: animation.incoming.node,
+        alpha: this.#sampleLayerAlpha(animation.incoming, now),
+        height: this.#sampleReplacementHeight(animation, now),
+        placement: animation.incoming.placement,
+        translateY: this.#sampleLayerTranslateY(animation.incoming, now),
+      };
+    }
+    if (animation?.outgoing != null) {
+      return {
+        node: animation.outgoing.node,
+        alpha: this.#sampleLayerAlpha(animation.outgoing, now),
+        height: this.#sampleReplacementHeight(animation, now),
+        placement: animation.outgoing.placement,
+        translateY: this.#sampleLayerTranslateY(animation.outgoing, now),
+      };
+    }
+
+    const node = ctx.renderItem(item);
+    return {
+      node,
+      alpha: 1,
+      height: ctx.measureNode(node).height,
+      placement: ctx.defaultAnimatedPlacement,
+      translateY: 0,
+    };
   }
 }

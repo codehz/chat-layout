@@ -149,4 +149,96 @@ describe("ListState item identity", () => {
     expect(() => list.push(item)).toThrow("unique object references");
     expect(() => list.unshift(item)).toThrow("unique object references");
   });
+
+  test("pushAll and unshiftAll keep hard-cut behavior by default", () => {
+    const existing = { id: "existing" };
+    const list = new ListState<Item>([existing]);
+    const owner = {};
+    const changes: object[] = [];
+
+    subscribeListState(list, owner, (_owner, change) => {
+      changes.push(change);
+    });
+
+    list.pushAll([{ id: "tail" }]);
+    list.unshiftAll([{ id: "head" }]);
+
+    expect(changes).toEqual([
+      {
+        type: "push",
+        count: 1,
+        animation: undefined,
+      },
+      {
+        type: "unshift",
+        count: 1,
+        animation: undefined,
+      },
+    ]);
+  });
+
+  test("pushAll and unshiftAll normalize animated insertion options", () => {
+    const list = new ListState<Item>([{ id: "existing" }]);
+    const owner = {};
+    const changes: object[] = [];
+
+    subscribeListState(list, owner, (_owner, change) => {
+      changes.push(change);
+    });
+
+    list.pushAll([{ id: "tail" }], {
+      duration: 180,
+      distance: -5,
+    });
+    list.unshiftAll([{ id: "head" }], {});
+
+    expect(changes).toEqual([
+      {
+        type: "push",
+        count: 1,
+        animation: {
+          duration: 180,
+          distance: 0,
+          fade: true,
+        },
+      },
+      {
+        type: "unshift",
+        count: 1,
+        animation: {
+          duration: 220,
+        },
+      },
+    ]);
+  });
+
+  test("pushAll and unshiftAll drop animation payloads when duration is non-positive", () => {
+    const list = new ListState<Item>([{ id: "existing" }]);
+    const owner = {};
+    const changes: object[] = [];
+
+    subscribeListState(list, owner, (_owner, change) => {
+      changes.push(change);
+    });
+
+    list.pushAll([{ id: "tail" }], {
+      duration: 0,
+      distance: 12,
+      fade: false,
+    });
+    list.unshiftAll([{ id: "head" }], { duration: -1 });
+
+    expect(changes).toEqual([
+      {
+        type: "push",
+        count: 1,
+        animation: undefined,
+      },
+      {
+        type: "unshift",
+        count: 1,
+        animation: undefined,
+      },
+    ]);
+  });
 });

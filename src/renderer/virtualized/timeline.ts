@@ -1,5 +1,6 @@
 import { VirtualizedRenderer } from "./base";
 import type { JumpToOptions } from "./base";
+import type { AnimatedLayerPlacement } from "./base-types";
 import {
   normalizeTimelineState,
   resolveTimelineVisibleWindow,
@@ -76,10 +77,7 @@ export class TimelineRenderer<
     }
   }
 
-  protected _getAnimatedLayerOffset(
-    _slotHeight: number,
-    _nodeHeight: number,
-  ): number {
-    return 0;
+  protected _getDefaultAnimatedPlacement(): AnimatedLayerPlacement {
+    return "start";
   }
 }

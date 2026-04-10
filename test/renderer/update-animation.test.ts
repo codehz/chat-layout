@@ -415,6 +415,235 @@ describe("update animation", () => {
       restoreNow();
     }
   });
+
+  test("TimelineRenderer animates pushAll on short lists", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createTimelineRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 20 },
+        ],
+        draws,
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.pushAll([{ id: "new", height: 30 }], {
+        duration: 100,
+        distance: 24,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(52);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("TimelineRenderer animates unshiftAll on short lists by revealing the new head", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createTimelineRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 30 },
+        ],
+        draws,
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.unshiftAll([{ id: "new", height: 10 }], {
+        duration: 100,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+      if (draws.find((draw) => draw.id === "new") != null) {
+        expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
+      }
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(5);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(25);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("ChatRenderer animates pushAll on short lists with the default duration", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createChatRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 20 },
+        ],
+        draws,
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.pushAll([{ id: "new", height: 30 }], {
+        distance: 24,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
+
+      now.current = 110;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(52);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+
+      now.current = 220;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("insert animation disables hittest for the animated slot while neighbors stay interactive", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const hits: string[] = [];
+      const { list, renderer } = createTimelineRenderer(
+        [{ id: "head", height: 20, hit: true }],
+        draws,
+        hits,
+      );
+
+      renderer.render();
+      list.pushAll([{ id: "new", height: 30, hit: true }], {
+        duration: 100,
+        distance: 24,
+      });
+      now.current = 50;
+
+      expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(true);
+      expect(renderer.hittest({ x: 10, y: 60, type: "click" })).toBe(false);
+      expect(hits).toEqual(["head"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("pushAll and unshiftAll hard-cut when the previous frame already filled the viewport", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createTimelineRenderer(
+        [
+          { id: "first", height: 40 },
+          { id: "second", height: 40 },
+          { id: "third", height: 40 },
+        ],
+        draws,
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.unshiftAll([{ id: "new-head", height: 20 }], { duration: 100 });
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).not.toContain("new-head");
+      expect(draws.find((draw) => draw.id === "first")?.y).toBeCloseTo(0);
+
+      draws.length = 0;
+      list.pushAll([{ id: "new-tail", height: 20 }], { duration: 100 });
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).not.toContain("new-tail");
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("pushAll and unshiftAll hard-cut without a prior visible snapshot or with zero duration", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const noSnapshotDraws: DrawProbe[] = [];
+      const noSnapshot = createTimelineRenderer(
+        [{ id: "head", height: 20 }],
+        noSnapshotDraws,
+      );
+
+      noSnapshot.list.pushAll([{ id: "new", height: 30 }], {
+        duration: 100,
+        distance: 24,
+      });
+      expect(noSnapshot.renderer.render()).toBe(false);
+      expect(noSnapshotDraws.find((draw) => draw.id === "new")?.y).toBeCloseTo(
+        20,
+      );
+      expect(
+        noSnapshotDraws.find((draw) => draw.id === "new")?.alpha,
+      ).toBeCloseTo(1);
+
+      const zeroDurationDraws: DrawProbe[] = [];
+      const zeroDuration = createTimelineRenderer(
+        [{ id: "head", height: 20 }],
+        zeroDurationDraws,
+      );
+      zeroDuration.renderer.render();
+
+      zeroDurationDraws.length = 0;
+      zeroDuration.list.unshiftAll([{ id: "new-head", height: 10 }], {
+        duration: 0,
+      });
+      expect(zeroDuration.renderer.render()).toBe(false);
+      expect(
+        zeroDurationDraws.find((draw) => draw.id === "new-head")?.y,
+      ).toBeCloseTo(0);
+      expect(
+        zeroDurationDraws.find((draw) => draw.id === "head")?.y,
+      ).toBeCloseTo(10);
+    } finally {
+      restoreNow();
+    }
+  });
 });
 
 describe("delete animation", () => {

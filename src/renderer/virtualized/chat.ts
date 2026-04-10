@@ -1,5 +1,6 @@
 import { VirtualizedRenderer } from "./base";
 import type { JumpToOptions } from "./base";
+import type { AnimatedLayerPlacement } from "./base-types";
 import {
   normalizeChatState,
   resolveChatVisibleWindow,
@@ -82,10 +83,7 @@ export class ChatRenderer<
     }
   }
 
-  protected _getAnimatedLayerOffset(
-    slotHeight: number,
-    nodeHeight: number,
-  ): number {
-    return slotHeight - nodeHeight;
+  protected _getDefaultAnimatedPlacement(): AnimatedLayerPlacement {
+    return "end";
   }
 }

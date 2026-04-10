@@ -2,6 +2,8 @@ export { BaseRenderer, DebugRenderer } from "./base";
 export { ListState } from "./list-state";
 export type {
   DeleteListItemAnimationOptions,
+  PushListItemsAnimationOptions,
+  UnshiftListItemsAnimationOptions,
   UpdateListItemAnimationOptions,
 } from "./list-state";
 export { memoRenderItem, memoRenderItemBy } from "./memo";

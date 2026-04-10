@@ -221,6 +221,7 @@ const richReplyPreview: InlineSpan<C>[] = [
 
 let currentHover: ChatItem | undefined;
 const REPLACE_ANIMATION_DURATION = 320;
+const INSERT_ANIMATION_DURATION = 220;
 
 function revokeMessage(item: MessageItem): RevokedItem {
   return {
@@ -630,21 +631,35 @@ function randomText(words: number): string {
 }
 
 button("unshift", () => {
-  list.unshift({
-    id: nextMessageId++,
-    kind: "message",
-    sender: Math.random() < 0.5 ? "A" : "B",
-    content: randomText(10 + Math.floor(200 * Math.random())),
-  });
+  list.unshiftAll(
+    [
+      {
+        id: nextMessageId++,
+        kind: "message",
+        sender: Math.random() < 0.5 ? "A" : "B",
+        content: randomText(10 + Math.floor(200 * Math.random())),
+      },
+    ],
+    {
+      duration: INSERT_ANIMATION_DURATION,
+    },
+  );
 });
 
 button("push", () => {
-  list.push({
-    id: nextMessageId++,
-    kind: "message",
-    sender: Math.random() < 0.5 ? "A" : "B",
-    content: randomText(10 + Math.floor(200 * Math.random())),
-  });
+  list.pushAll(
+    [
+      {
+        id: nextMessageId++,
+        kind: "message",
+        sender: Math.random() < 0.5 ? "A" : "B",
+        content: randomText(10 + Math.floor(200 * Math.random())),
+      },
+    ],
+    {
+      distance: 24,
+    },
+  );
 });
 
 button("jump middle", () => {

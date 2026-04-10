@@ -15,6 +15,7 @@ import {
   smoothstep,
 } from "./base-animation";
 import {
+  type AnimatedLayerPlacement,
   type ControlledState,
   type JumpAnimation,
   type VirtualizedResolvedItem,
@@ -335,11 +336,13 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _captureVisibleItemSnapshot(window: VisibleWindow<unknown>): void {
+    const normalizedState = this._normalizeListState(this._readListState());
     this.#replacementController.captureVisibleItemSnapshot(
       window,
       this.items,
+      this.graphics.canvas.clientHeight,
+      normalizedState,
       this._readVisibleRange.bind(this),
-      this._readListState.bind(this),
     );
   }
 
@@ -471,10 +474,7 @@ export abstract class VirtualizedRenderer<
     index: number,
     block: NonNullable<JumpToOptions["block"]>,
   ): number;
-  protected abstract _getAnimatedLayerOffset(
-    slotHeight: number,
-    nodeHeight: number,
-  ): number;
+  protected abstract _getDefaultAnimatedPlacement(): AnimatedLayerPlacement;
 
   // ── Jump animation ─────────────────────────────────────────────────────────
 
@@ -496,7 +496,7 @@ export abstract class VirtualizedRenderer<
       drawNode: this.drawRootNode.bind(this),
       getRootContext: this.getRootContext.bind(this),
       graphics: this.graphics,
-      getAnimatedLayerOffset: this._getAnimatedLayerOffset.bind(this),
+      defaultAnimatedPlacement: this._getDefaultAnimatedPlacement(),
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
     };
   }
