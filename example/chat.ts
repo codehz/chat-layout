@@ -567,11 +567,11 @@ function randomMixedText(words: number): string {
   const out: string[] = [];
   for (let i = 0; i < words; i += 1) {
     const mode = Math.random();
-    if (mode < 0.35) {
+    if (mode < 0.2) {
       out.push(sampleWords[Math.floor(Math.random() * sampleWords.length)]);
       continue;
     }
-    if (mode < 0.7) {
+    if (mode < 0.65) {
       out.push(
         sampleChinesePhrases[
           Math.floor(Math.random() * sampleChinesePhrases.length)
