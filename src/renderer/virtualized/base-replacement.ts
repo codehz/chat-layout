@@ -594,7 +594,6 @@ export class ReplacementController<
     }
 
     let result = false;
-    const width = adapter.graphics.canvas.clientWidth;
     for (const layer of layers) {
       const alpha = clamp(layer.alpha, 0, 1);
       if (alpha <= ALPHA_EPSILON) {
@@ -603,9 +602,6 @@ export class ReplacementController<
 
       adapter.graphics.save();
       try {
-        adapter.graphics.beginPath?.();
-        adapter.graphics.rect?.(0, y, width, slotHeight);
-        adapter.graphics.clip?.();
         if (typeof adapter.graphics.globalAlpha === "number") {
           adapter.graphics.globalAlpha *= alpha;
         }
