@@ -548,6 +548,51 @@ describe("update animation", () => {
     }
   });
 
+  test("TimelineRenderer keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createTimelineRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 60 },
+        ],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.unshiftAll([{ id: "new", height: 50 }], {
+        duration: 100,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-50);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-40);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-30);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("ChatRenderer animates unshiftAll on short lists as a whole-window slide", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -586,6 +631,51 @@ describe("update animation", () => {
       expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
       expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("ChatRenderer keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createChatRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 60 },
+        ],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.unshiftAll([{ id: "new", height: 50 }], {
+        duration: 100,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-50);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-40);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-30);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
     } finally {
       restoreNow();
     }

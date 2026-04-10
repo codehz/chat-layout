@@ -88,6 +88,7 @@ export class ReplacementController<
   #hasVisibleItemSnapshot = false;
   #visibleSnapshotState: ControlledState | undefined;
   #visibleSnapshotShowsShortList = false;
+  #visibleSnapshotTrailingGap = 0;
 
   captureVisibleItemSnapshot(
     window: VisibleWindow<unknown>,
@@ -137,6 +138,9 @@ export class ReplacementController<
       maxVisibleIndex === items.length - 1 &&
       topMostY >= -Number.EPSILON &&
       bottomMostY < viewportHeight - Number.EPSILON;
+    this.#visibleSnapshotTrailingGap = this.#visibleSnapshotShowsShortList
+      ? Math.max(0, viewportHeight - bottomMostY)
+      : 0;
   }
 
   /**
@@ -521,8 +525,12 @@ export class ReplacementController<
     if (!(insertedHeight > 0) || !Number.isFinite(insertedHeight)) {
       return;
     }
+    const travel = Math.min(insertedHeight, this.#visibleSnapshotTrailingGap);
+    if (!(travel > 0) || !Number.isFinite(travel)) {
+      return;
+    }
     this.#windowTranslateAnimation = {
-      fromTranslateY: this.getWindowTranslateY(now) - insertedHeight,
+      fromTranslateY: this.getWindowTranslateY(now) - travel,
       toTranslateY: 0,
       startTime: now,
       duration,
@@ -539,6 +547,7 @@ export class ReplacementController<
     this.#hasVisibleItemSnapshot = false;
     this.#visibleSnapshotState = undefined;
     this.#visibleSnapshotShowsShortList = false;
+    this.#visibleSnapshotTrailingGap = 0;
   }
 
   #createLayer(
