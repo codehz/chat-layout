@@ -253,6 +253,13 @@ class ItemDetector extends Wrapper<C> {
       list.update(this.item, nextItem, {
         duration: REPLACE_ANIMATION_DURATION,
       });
+    } else if (test.type === "auxclick") {
+      if (!list.items.includes(this.item)) {
+        return true;
+      }
+      list.delete(this.item, {
+        duration: REPLACE_ANIMATION_DURATION,
+      });
     }
     return true;
   }
@@ -549,6 +556,19 @@ canvas.addEventListener("click", (e) => {
     x: e.clientX - left,
     y: e.clientY - top,
     type: "click",
+  });
+  if (!result) {
+    currentHover = undefined;
+  }
+});
+
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  const { top, left } = canvas.getBoundingClientRect();
+  const result = renderer.hittest({
+    x: e.clientX - left,
+    y: e.clientY - top,
+    type: "auxclick",
   });
   if (!result) {
     currentHover = undefined;

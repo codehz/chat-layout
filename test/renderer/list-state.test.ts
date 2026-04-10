@@ -32,6 +32,82 @@ describe("ListState item identity", () => {
     expect("index" in changes[0]!).toBe(false);
   });
 
+  test("delete emits an index-free change and defers removal while animated", () => {
+    const first = { id: "first" };
+    const second = { id: "second" };
+    const list = new ListState<Item>([first, second]);
+    const owner = {};
+    const changes: object[] = [];
+
+    subscribeListState(list, owner, (_owner, change) => {
+      changes.push(change);
+    });
+
+    list.delete(first, { duration: 180 });
+
+    expect(list.items).toEqual([first, second]);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toEqual({
+      type: "delete",
+      item: first,
+      animation: { duration: 180 },
+    });
+    expect("index" in changes[0]!).toBe(false);
+  });
+
+  test("delete with zero duration removes immediately and emits finalize change", () => {
+    const first = { id: "first" };
+    const second = { id: "second" };
+    const list = new ListState<Item>([first, second]);
+    const owner = {};
+    const changes: object[] = [];
+
+    subscribeListState(list, owner, (_owner, change) => {
+      changes.push(change);
+    });
+
+    list.delete(first, { duration: 0 });
+
+    expect(list.items).toEqual([second]);
+    expect(changes).toEqual([
+      {
+        type: "delete-finalize",
+        item: first,
+      },
+    ]);
+  });
+
+  test("delete rejects missing items and non-object items", () => {
+    const first = { id: "first" };
+    const missing = { id: "missing" };
+    const list = new ListState<Item>([first]);
+
+    expect(() => list.delete(missing)).toThrow("item is not present");
+    expect(() => new ListState<number>([1, 2, 3]).delete(1)).toThrow(
+      "only supports object items",
+    );
+  });
+
+  test("delete is idempotent for pending items and pending deletes cannot be updated", () => {
+    const first = { id: "first" };
+    const second = { id: "second" };
+    const list = new ListState<Item>([first, second]);
+    const owner = {};
+    const changes: object[] = [];
+
+    subscribeListState(list, owner, (_owner, change) => {
+      changes.push(change);
+    });
+
+    list.delete(first, { duration: 180 });
+    list.delete(first, { duration: 180 });
+
+    expect(changes).toHaveLength(1);
+    expect(() => list.update(first, { id: "next" })).toThrow(
+      "pending deletion",
+    );
+  });
+
   test("update rejects missing targets, reused identities, and duplicate replacements", () => {
     const first = { id: "first" };
     const second = { id: "second" };

@@ -27,8 +27,10 @@ export type ReplacementLayer<C extends CanvasRenderingContext2D> = {
 
 /** Full state for an item replacement (cross-fade + height) animation. */
 export type ReplacementAnimation<C extends CanvasRenderingContext2D> = {
+  kind: "update" | "delete";
   outgoing: ReplacementLayer<C> | undefined;
-  incoming: ReplacementLayer<C>;
+  /** undefined for delete animations where the slot shrinks to nothing. */
+  incoming: ReplacementLayer<C> | undefined;
   fromHeight: number;
   toHeight: number;
   startTime: number;

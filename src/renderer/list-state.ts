@@ -12,11 +12,27 @@ export interface UpdateListItemAnimationOptions {
   duration?: number;
 }
 
+export interface DeleteListItemAnimationOptions {
+  /** Animation duration in milliseconds. */
+  duration?: number;
+}
+
 type ListUpdateChange<T extends {}> = {
   type: "update";
   prevItem: T;
   nextItem: T;
   animation: UpdateListItemAnimationOptions | undefined;
+};
+
+type ListDeleteChange<T extends {}> = {
+  type: "delete";
+  item: T;
+  animation: DeleteListItemAnimationOptions | undefined;
+};
+
+type ListDeleteFinalizeChange<T extends {}> = {
+  type: "delete-finalize";
+  item: T;
 };
 
 type ListUnshiftChange = {
@@ -39,6 +55,8 @@ type ListSetChange = {
 
 export type ListStateChange<T extends {}> =
   | ListUpdateChange<T>
+  | ListDeleteChange<T>
+  | ListDeleteFinalizeChange<T>
   | ListUnshiftChange
   | ListPushChange
   | ListResetChange
@@ -149,19 +167,30 @@ function assertUniqueItemReferences<T extends {}>(
   }
 }
 
+function normalizeAnimationDuration(
+  duration: number | undefined,
+): { duration?: number } | undefined {
+  if (duration == null) {
+    return undefined;
+  }
+  return Number.isFinite(duration) ? { duration } : {};
+}
+
 function normalizeUpdateAnimation(
   animation: UpdateListItemAnimationOptions | undefined,
 ): UpdateListItemAnimationOptions | undefined {
-  if (animation == null) {
-    return undefined;
-  }
-  return Number.isFinite(animation.duration)
-    ? { duration: animation.duration }
-    : {};
+  return normalizeAnimationDuration(animation?.duration);
+}
+
+function normalizeDeleteAnimation(
+  animation: DeleteListItemAnimationOptions | undefined,
+): DeleteListItemAnimationOptions | undefined {
+  return normalizeAnimationDuration(animation?.duration);
 }
 
 export class ListState<T extends {}> {
   #items: T[];
+  #pendingDeletes = new Set<T>();
 
   /** Pixel offset from the anchored item edge. */
   offset = 0;
@@ -178,6 +207,7 @@ export class ListState<T extends {}> {
     const nextItems = [...value];
     assertUniqueItemReferences(nextItems);
     this.#items = nextItems;
+    this.#pendingDeletes.clear();
     emitListStateChange(this, { type: "set" });
   }
 
@@ -252,6 +282,9 @@ export class ListState<T extends {}> {
     if (index < 0) {
       throw new Error("update() targetItem is not present in the list.");
     }
+    if (this.#pendingDeletes.has(targetItem)) {
+      throw new Error("update() targetItem is pending deletion.");
+    }
     if (this.#items.includes(nextItem)) {
       throw new Error("update() nextItem is already present in the list.");
     }
@@ -262,6 +295,64 @@ export class ListState<T extends {}> {
       prevItem,
       nextItem,
       animation: normalizeUpdateAnimation(animation),
+    });
+  }
+
+  /**
+   * Starts deleting an existing item by object identity.
+   */
+  delete(item: T, animation?: DeleteListItemAnimationOptions): void {
+    if (!isObjectIdentityCandidate(item)) {
+      throw new TypeError("delete() only supports object items.");
+    }
+    const index = this.#items.indexOf(item);
+    if (index < 0) {
+      throw new Error("delete() item is not present in the list.");
+    }
+    if (this.#pendingDeletes.has(item)) {
+      return;
+    }
+    const normalizedAnimation = normalizeDeleteAnimation(animation);
+    const duration = normalizedAnimation?.duration ?? 0;
+    if (!(duration > 0)) {
+      this.#pendingDeletes.add(item);
+      this.finalizeDelete(item);
+      return;
+    }
+    this.#pendingDeletes.add(item);
+    emitListStateChange(this, {
+      type: "delete",
+      item,
+      animation: normalizedAnimation,
+    });
+  }
+
+  /**
+   * Finalizes a pending delete by removing the item from the list.
+   */
+  finalizeDelete(item: T): void {
+    if (!this.#pendingDeletes.has(item)) {
+      return;
+    }
+    const index = this.#items.indexOf(item);
+    this.#pendingDeletes.delete(item);
+    if (index < 0) {
+      return;
+    }
+    this.#items.splice(index, 1);
+    if (this.#items.length === 0) {
+      this.position = undefined;
+      this.offset = 0;
+    } else if (this.position != null) {
+      if (this.position > index) {
+        this.position -= 1;
+      } else if (this.position === index) {
+        this.position = Math.min(index, this.#items.length - 1);
+      }
+    }
+    emitListStateChange(this, {
+      type: "delete-finalize",
+      item,
     });
   }
 
@@ -282,6 +373,7 @@ export class ListState<T extends {}> {
     const nextItems = [...items];
     assertUniqueItemReferences(nextItems);
     this.#items = nextItems;
+    this.#pendingDeletes.clear();
     this.offset = 0;
     this.position = undefined;
     emitListStateChange(this, { type: "reset" });

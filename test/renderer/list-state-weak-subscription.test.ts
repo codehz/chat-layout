@@ -31,7 +31,7 @@ function createProbeNode(item: Item, draws: string[]): Node<C> {
 }
 
 describe("ListState weak subscriptions", () => {
-  test("TimelineRenderer still responds to update, push, set, and reset changes", () => {
+  test("TimelineRenderer still responds to update, delete, push, set, and reset changes", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -51,9 +51,15 @@ describe("ListState weak subscriptions", () => {
       expect(draws).toEqual(["old", "new", "tail"]);
 
       draws.length = 0;
+      list.delete(list.items[0]!, { duration: 100 });
+      now.current = 150;
+      renderer.render();
+      expect(draws).toEqual(["tail"]);
+
+      draws.length = 0;
       list.push({ id: "pushed", height: 15 });
       renderer.render();
-      expect(draws).toEqual(["old", "new", "tail", "pushed"]);
+      expect(draws).toEqual(["tail", "pushed"]);
 
       draws.length = 0;
       list.items = [{ id: "set", height: 25 }];
@@ -66,7 +72,7 @@ describe("ListState weak subscriptions", () => {
         { id: "set-next", height: 35 },
         { duration: 100 },
       );
-      now.current = 75;
+      now.current = 200;
       renderer.render();
       expect(draws).toEqual(["set", "set-next"]);
 

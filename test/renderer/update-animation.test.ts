@@ -416,3 +416,170 @@ describe("update animation", () => {
     }
   });
 });
+
+describe("delete animation", () => {
+  test("ListState.delete hard-cuts by default", () => {
+    const draws: DrawProbe[] = [];
+    const item = { id: "item", height: 20 };
+    const { list, renderer } = createTimelineRenderer(
+      [item, { id: "tail", height: 10 }],
+      draws,
+    );
+    renderer.render();
+    draws.length = 0;
+
+    list.delete(item);
+    renderer.render();
+    expect(draws.map((d) => d.id)).toEqual(["tail"]);
+    expect(list.items.map((i) => i.id)).toEqual(["tail"]);
+  });
+
+  test("TimelineRenderer fades out and shrinks slot height when deleting", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 20 };
+      const { list, renderer } = createTimelineRenderer(
+        [item, { id: "tail", height: 10 }],
+        draws,
+      );
+
+      renderer.render();
+      draws.length = 0;
+      list.delete(item, { duration: 100 });
+
+      const feedbackAtStart = createFeedback();
+      expect(renderer.render(feedbackAtStart)).toBe(true);
+      expect(draws.map((d) => d.id)).toEqual(["item", "tail"]);
+      expect(draws.find((d) => d.id === "item")?.alpha).toBeCloseTo(1);
+      expect(draws.find((d) => d.id === "tail")?.y).toBeCloseTo(20);
+      expectFiniteFeedback(feedbackAtStart);
+      expect(list.items.map((i) => i.id)).toEqual(["item", "tail"]);
+
+      now.current = 50;
+      draws.length = 0;
+      const feedbackAtMid = createFeedback();
+      expect(renderer.render(feedbackAtMid)).toBe(true);
+      expect(draws.map((d) => d.id)).toEqual(["item", "tail"]);
+      expect(draws.find((d) => d.id === "item")?.alpha).toBeCloseTo(0.5);
+      expect(draws.find((d) => d.id === "tail")?.y).toBeCloseTo(10);
+      expectFiniteFeedback(feedbackAtMid);
+      expect(list.items.map((i) => i.id)).toEqual(["item", "tail"]);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((d) => d.id)).toEqual(["tail"]);
+      expect(draws.find((d) => d.id === "tail")?.y).toBeCloseTo(0);
+      expect(list.items.map((i) => i.id)).toEqual(["tail"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("delete animation disables hittest on the ghost slot", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const hits: string[] = [];
+      const item = { id: "item", height: 30, hit: true };
+      const { list, renderer } = createTimelineRenderer(
+        [item, { id: "neighbor", height: 30, hit: true }],
+        draws,
+        hits,
+      );
+
+      renderer.render();
+      list.delete(item, { duration: 100 });
+      now.current = 50;
+
+      expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(false);
+      expect(renderer.hittest({ x: 10, y: 40, type: "click" })).toBe(true);
+      expect(hits).toEqual(["neighbor"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("offscreen delete hard-removes without leaving a pending ghost", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const hidden = { id: "hidden", height: 20 };
+      const { list, renderer } = createTimelineRenderer(
+        [{ id: "head", height: 20 }, { id: "middle", height: 20 }, hidden],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.render();
+      draws.length = 0;
+      list.delete(hidden, { duration: 100 });
+
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((d) => d.id)).toEqual(["head", "middle"]);
+      expect(list.items.map((i) => i.id)).toEqual(["head", "middle"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("delete animation finalizes when the slot scrolls out of the viewport", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 20 };
+      const { list, renderer } = createTimelineRenderer(
+        [item, { id: "middle", height: 20 }, { id: "tail", height: 20 }],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.render();
+      list.delete(item, { duration: 100 });
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((d) => d.id)).toContain("item");
+
+      list.applyScroll(-20);
+      draws.length = 0;
+      renderer.render();
+      expect(draws.map((d) => d.id)).not.toContain("item");
+      expect(list.items.map((i) => i.id)).not.toContain("item");
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("list-state weak subscriptions: renderer responds to delete and delete-finalize", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 20 };
+      const { list, renderer } = createTimelineRenderer(
+        [item, { id: "tail", height: 10 }],
+        draws,
+      );
+
+      renderer.render();
+      list.delete(item, { duration: 100 });
+
+      now.current = 100;
+      draws.length = 0;
+      renderer.render();
+      expect(draws.map((d) => d.id)).toEqual(["tail"]);
+      expect(list.items.map((i) => i.id)).toEqual(["tail"]);
+    } finally {
+      restoreNow();
+    }
+  });
+});

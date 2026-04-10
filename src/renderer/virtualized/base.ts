@@ -115,11 +115,15 @@ export abstract class VirtualizedRenderer<
       this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
 
-    const solution = this._resolveVisibleWindow(now);
+    let solution = this._resolveVisibleWindow(now);
     this._captureVisibleItemSnapshot(solution.window);
     const requestSettleRedraw = this._pruneReplacementAnimations(
       solution.window,
     );
+    if (requestSettleRedraw) {
+      solution = this._resolveVisibleWindow(now);
+      this._captureVisibleItemSnapshot(solution.window);
+    }
     const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
     this._commitListState(solution.normalizedState);
 
@@ -134,9 +138,12 @@ export abstract class VirtualizedRenderer<
     y: number;
     type: "click" | "auxclick" | "hover";
   }): boolean {
-    const solution = this._resolveVisibleWindow(getNow());
+    let solution = this._resolveVisibleWindow(getNow());
     this._captureVisibleItemSnapshot(solution.window);
-    this._pruneReplacementAnimations(solution.window);
+    if (this._pruneReplacementAnimations(solution.window)) {
+      solution = this._resolveVisibleWindow(getNow());
+      this._captureVisibleItemSnapshot(solution.window);
+    }
     return this._hittestVisibleWindow(solution.window, test);
   }
 
@@ -305,7 +312,9 @@ export abstract class VirtualizedRenderer<
   protected _pruneReplacementAnimations(
     _window: VisibleWindow<unknown>,
   ): boolean {
-    return this.#replacementController.pruneInvisible();
+    return this.#replacementController.pruneInvisible({
+      onDeleteComplete: this.#handleDeleteComplete.bind(this),
+    });
   }
 
   protected _hittestVisibleWindow(
@@ -332,7 +341,9 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _prepareRender(now: number): boolean {
-    const keepReplacing = this.#replacementController.prepare(now);
+    const keepReplacing = this.#replacementController.prepare(now, {
+      onDeleteComplete: this.#handleDeleteComplete.bind(this),
+    });
     const animation = this.#jumpAnimation;
     if (animation == null) {
       return keepReplacing;
@@ -473,6 +484,10 @@ export abstract class VirtualizedRenderer<
 
   // ── Replacement animation delegation ───────────────────────────────────────
 
+  #handleDeleteComplete(item: T): void {
+    this.options.list.finalizeDelete(item);
+  }
+
   #getReplacementRendererAdapter(): ReplacementRendererAdapter<C, T> {
     return {
       renderItem: this.options.renderItem,
@@ -481,6 +496,7 @@ export abstract class VirtualizedRenderer<
       getRootContext: this.getRootContext.bind(this),
       graphics: this.graphics,
       getAnimatedLayerOffset: this._getAnimatedLayerOffset.bind(this),
+      onDeleteComplete: this.#handleDeleteComplete.bind(this),
     };
   }
 

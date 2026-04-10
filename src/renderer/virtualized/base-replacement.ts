@@ -1,4 +1,4 @@
-import type { Box, Context, HitTest, Node } from "../../types";
+import type { Box, Context, Node } from "../../types";
 import type { ListStateChange } from "../list-state";
 import type { VisibleWindow, VisibleWindowResult } from "./solver";
 import {
@@ -27,6 +27,7 @@ export type ReplacementRendererAdapter<
   getRootContext: () => Context<C>;
   graphics: C;
   getAnimatedLayerOffset: (slotHeight: number, nodeHeight: number) => number;
+  onDeleteComplete: (item: T) => void;
 };
 
 /** State context needed to check whether an update can be animated. */
@@ -53,8 +54,6 @@ export class ReplacementController<
   C extends CanvasRenderingContext2D,
   T extends {},
 > {
-  // ── State ──────────────────────────────────────────────────────────────────
-
   #replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
   #activeReplacementItems = new Set<T>();
 
@@ -62,8 +61,6 @@ export class ReplacementController<
   #visibleItems = new Set<T>();
   #hasVisibleItemSnapshot = false;
   #visibleSnapshotState: ControlledState | undefined;
-
-  // ── Snapshot management ────────────────────────────────────────────────────
 
   captureVisibleItemSnapshot(
     window: VisibleWindow<unknown>,
@@ -91,28 +88,35 @@ export class ReplacementController<
 
   /**
    * Removes animations for items that are no longer visible.
-   * Returns true if any animation was canceled (requesting a settle redraw).
+   * Returns true if any animation was canceled or finalized.
    */
-  pruneInvisible(): boolean {
-    let canceled = false;
+  pruneInvisible(
+    adapter: Pick<ReplacementRendererAdapter<C, T>, "onDeleteComplete">,
+  ): boolean {
+    let changed = false;
     for (const item of [...this.#activeReplacementItems]) {
       if (this.#visibleItems.has(item)) {
         continue;
       }
+      const animation = this.#replacementAnimations.get(item);
       this.#replacementAnimations.delete(item);
       this.#activeReplacementItems.delete(item);
-      canceled = true;
+      if (animation?.kind === "delete") {
+        adapter.onDeleteComplete(item);
+      }
+      changed = true;
     }
-    return canceled;
+    return changed;
   }
 
-  // ── Frame lifecycle ────────────────────────────────────────────────────────
-
   /** Advance all active animations and return true if any are still running. */
-  prepare(now: number): boolean {
+  prepare(
+    now: number,
+    adapter: Pick<ReplacementRendererAdapter<C, T>, "onDeleteComplete">,
+  ): boolean {
     let keepAnimating = false;
     for (const item of [...this.#activeReplacementItems]) {
-      if (this.readAnimation(item, now) != null) {
+      if (this.readAnimation(item, now, adapter) != null) {
         keepAnimating = true;
       }
     }
@@ -123,7 +127,11 @@ export class ReplacementController<
    * Returns the active animation for an item, or undefined if none / already
    * completed (and cleans up completed animations as a side effect).
    */
-  readAnimation(item: T, now: number): ReplacementAnimation<C> | undefined {
+  readAnimation(
+    item: T,
+    now: number,
+    adapter?: Pick<ReplacementRendererAdapter<C, T>, "onDeleteComplete">,
+  ): ReplacementAnimation<C> | undefined {
     const animation = this.#replacementAnimations.get(item);
     if (animation == null) {
       return undefined;
@@ -131,12 +139,13 @@ export class ReplacementController<
     if (getProgress(animation.startTime, animation.duration, now) >= 1) {
       this.#replacementAnimations.delete(item);
       this.#activeReplacementItems.delete(item);
+      if (animation.kind === "delete") {
+        adapter?.onDeleteComplete(item);
+      }
       return undefined;
     }
     return animation;
   }
-
-  // ── Item resolution ────────────────────────────────────────────────────────
 
   /** Returns the effective rendered height for an item, accounting for animations. */
   getItemHeight(
@@ -161,7 +170,7 @@ export class ReplacementController<
     now: number,
     adapter: ReplacementRendererAdapter<C, T>,
   ): { value: VirtualizedResolvedItem; height: number } {
-    const replacement = this.readAnimation(item, now);
+    const replacement = this.readAnimation(item, now, adapter);
     if (replacement == null) {
       const node = adapter.renderItem(item);
       return {
@@ -191,8 +200,6 @@ export class ReplacementController<
     };
   }
 
-  // ── ListState change handling ──────────────────────────────────────────────
-
   handleListStateChange(
     change: ListStateChange<T>,
     ctx: ReplacementUpdateContext<C, T>,
@@ -205,6 +212,13 @@ export class ReplacementController<
           change.animation?.duration,
           ctx,
         );
+        break;
+      case "delete":
+        this.handleDelete(change.item, change.animation?.duration, ctx);
+        break;
+      case "delete-finalize":
+        this.#replacementAnimations.delete(change.item);
+        this.#activeReplacementItems.delete(change.item);
         break;
       case "unshift":
       case "push":
@@ -240,12 +254,12 @@ export class ReplacementController<
     const now = getNow();
     const nextNode = ctx.renderItem(nextItem);
     const nextHeight = ctx.measureNode(nextNode).height;
-    const animation = this.readAnimation(prevItem, now);
+    const animation = this.readAnimation(prevItem, now, ctx);
 
     let currentNode: Node<C>;
     let currentAlpha = 1;
     let fromHeight: number;
-    if (animation == null) {
+    if (animation == null || animation.incoming == null) {
       currentNode = ctx.renderItem(prevItem);
       fromHeight = ctx.measureNode(currentNode).height;
     } else {
@@ -268,6 +282,7 @@ export class ReplacementController<
 
     this.#replacementAnimations.delete(prevItem);
     this.#replacementAnimations.set(nextItem, {
+      kind: "update",
       outgoing,
       incoming,
       fromHeight,
@@ -279,6 +294,72 @@ export class ReplacementController<
     this.#activeReplacementItems.add(nextItem);
   }
 
+  handleDelete(
+    item: T,
+    duration: number | undefined,
+    ctx: ReplacementUpdateContext<C, T>,
+  ): void {
+    const normalizedDuration = Math.max(
+      0,
+      typeof duration === "number" && Number.isFinite(duration) ? duration : 0,
+    );
+    const index = ctx.items.indexOf(item);
+    if (
+      normalizedDuration <= 0 ||
+      index < 0 ||
+      !this.#canAnimateUpdate(index, item, ctx)
+    ) {
+      this.#replacementAnimations.delete(item);
+      this.#activeReplacementItems.delete(item);
+      ctx.onDeleteComplete(item);
+      return;
+    }
+
+    const now = getNow();
+    const animation = this.readAnimation(item, now, ctx);
+
+    let currentNode: Node<C>;
+    let currentAlpha = 1;
+    let fromHeight: number;
+    if (animation == null) {
+      currentNode = ctx.renderItem(item);
+      fromHeight = ctx.measureNode(currentNode).height;
+    } else if (animation.incoming != null) {
+      currentNode = animation.incoming.node;
+      currentAlpha = this.#sampleLayerAlpha(animation.incoming, now);
+      fromHeight = this.#sampleReplacementHeight(animation, now);
+    } else if (animation.outgoing != null) {
+      currentNode = animation.outgoing.node;
+      currentAlpha = this.#sampleLayerAlpha(animation.outgoing, now);
+      fromHeight = this.#sampleReplacementHeight(animation, now);
+    } else {
+      currentNode = ctx.renderItem(item);
+      fromHeight = ctx.measureNode(currentNode).height;
+    }
+
+    const outgoing =
+      currentAlpha > ALPHA_EPSILON
+        ? this.#createLayer(
+            currentNode,
+            currentAlpha,
+            0,
+            now,
+            normalizedDuration,
+          )
+        : undefined;
+
+    this.#replacementAnimations.set(item, {
+      kind: "delete",
+      outgoing,
+      incoming: undefined,
+      fromHeight,
+      toHeight: 0,
+      startTime: now,
+      duration: normalizedDuration,
+    });
+    this.#activeReplacementItems.add(item);
+  }
+
   /** Clears all animation state (e.g., on list reset). */
   reset(): void {
     this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
@@ -287,8 +368,6 @@ export class ReplacementController<
     this.#hasVisibleItemSnapshot = false;
     this.#visibleSnapshotState = undefined;
   }
-
-  // ── Private helpers ────────────────────────────────────────────────────────
 
   #createLayer(
     node: Node<C>,

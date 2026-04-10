@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import * as api from "../src/index";
 import type {
   Context,
+  DeleteListItemAnimationOptions,
   FlexItemOptions,
   MultilineTextOptions,
   Node,
@@ -78,6 +79,9 @@ const justifyOptionsTypecheck: TextJustifyOptions = {
 const updateAnimationOptionsTypecheck: UpdateListItemAnimationOptions = {
   duration: 180,
 };
+const deleteAnimationOptionsTypecheck: DeleteListItemAnimationOptions = {
+  duration: 180,
+};
 
 void flexItemOptionsTypecheck;
 void nodeWithMinContentTypecheck;
@@ -90,6 +94,7 @@ void multilineTextOptionsTypecheck;
 void justifyModeTypecheck;
 void justifyOptionsTypecheck;
 void updateAnimationOptionsTypecheck;
+void deleteAnimationOptionsTypecheck;
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {
