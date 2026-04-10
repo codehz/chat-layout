@@ -1,9 +1,29 @@
 import { describe, expect, test } from "bun:test";
 
-import { Fixed, Flex, FlexItem, MultilineText, PaddingBox, Place, ShrinkWrap, Text } from "../../src/nodes";
+import {
+  Fixed,
+  Flex,
+  FlexItem,
+  MultilineText,
+  PaddingBox,
+  Place,
+  ShrinkWrap,
+  Text,
+} from "../../src/nodes";
 import { BaseRenderer } from "../../src/renderer";
-import type { Box, Context, HitTest, InlineSpan, LayoutConstraints, Node, TextOverflowWrapMode } from "../../src/types";
-import { createTextGraphics as createGraphics, ensureMockOffscreenCanvas } from "../helpers/graphics";
+import type {
+  Box,
+  Context,
+  HitTest,
+  InlineSpan,
+  LayoutConstraints,
+  Node,
+  TextOverflowWrapMode,
+} from "../../src/types";
+import {
+  createTextGraphics as createGraphics,
+  ensureMockOffscreenCanvas,
+} from "../helpers/graphics";
 
 type C = CanvasRenderingContext2D;
 
@@ -14,7 +34,10 @@ type ProbeCall = {
 
 ensureMockOffscreenCanvas();
 
-function createTextRecordingGraphics(viewportWidth = 320, viewportHeight = 100): {
+function createTextRecordingGraphics(
+  viewportWidth = 320,
+  viewportHeight = 100,
+): {
   graphics: C;
   fillTexts: Array<{ text: string; x: number; y: number }>;
 } {
@@ -63,7 +86,11 @@ class ConstraintTestRenderer extends BaseRenderer<C> {
     return node.draw(this.#contextWithConstraints(constraints), 0, 0);
   }
 
-  hittestNode(node: Node<C>, test: HitTest, constraints?: LayoutConstraints): boolean {
+  hittestNode(
+    node: Node<C>,
+    test: HitTest,
+    constraints?: LayoutConstraints,
+  ): boolean {
     return node.hittest(this.#contextWithConstraints(constraints), test);
   }
 }
@@ -103,7 +130,9 @@ function createConstraintProbeNode(size: Box): {
     constraints,
     node: {
       measure(ctx) {
-        constraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        constraints.push(
+          ctx.constraints == null ? undefined : { ...ctx.constraints },
+        );
         return size;
       },
       draw() {
@@ -148,11 +177,16 @@ function createResponsiveProbeNode(options?: {
     hits,
     node: {
       measure(ctx) {
-        measureConstraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        measureConstraints.push(
+          ctx.constraints == null ? undefined : { ...ctx.constraints },
+        );
         const maxWidth = ctx.constraints?.maxWidth;
         return {
           width: Math.min(naturalWidth, maxWidth ?? naturalWidth),
-          height: maxWidth != null && maxWidth < stableThreshold ? wrappedHeight : stableHeight,
+          height:
+            maxWidth != null && maxWidth < stableThreshold
+              ? wrappedHeight
+              : stableHeight,
         };
       },
       measureMinContent() {
@@ -162,12 +196,16 @@ function createResponsiveProbeNode(options?: {
         };
       },
       draw(ctx, x, y) {
-        drawConstraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        drawConstraints.push(
+          ctx.constraints == null ? undefined : { ...ctx.constraints },
+        );
         draws.push({ x, y });
         return false;
       },
       hittest(ctx, test) {
-        hitConstraints.push(ctx.constraints == null ? undefined : { ...ctx.constraints });
+        hitConstraints.push(
+          ctx.constraints == null ? undefined : { ...ctx.constraints },
+        );
         hits.push({ x: test.x, y: test.y });
         return true;
       },
@@ -256,28 +294,21 @@ function createChatLikeBubbleTree(
     alignItems: reply == null ? "start" : "stretch",
   });
 
-  const bubble = new PaddingBox(
-    bubbleColumn,
-    {
-      top: 6,
-      bottom: 6,
-      left: 10,
-      right: 10,
-    },
-  );
+  const bubble = new PaddingBox(bubbleColumn, {
+    top: 6,
+    bottom: 6,
+    left: 10,
+    right: 10,
+  });
 
-  const body = new Flex<C>(
-    [senderLine, bubble],
-    {
-      direction: "column",
-      alignItems: sender === "A" ? "end" : "start",
-    },
-  );
+  const body = new Flex<C>([senderLine, bubble], {
+    direction: "column",
+    alignItems: sender === "A" ? "end" : "start",
+  });
 
-  const alignedBody = new Place<C>(
-    body,
-    { align: sender === "A" ? "end" : "start" },
-  );
+  const alignedBody = new Place<C>(body, {
+    align: sender === "A" ? "end" : "start",
+  });
 
   const row = new Flex<C>(
     [
@@ -326,12 +357,30 @@ function measureChatLikeBubbleTree(
 ) {
   renderer.measureNode(tree.node, constraints);
   const placeLayout = renderer.getLayoutResult(tree.node, constraints)!;
-  const paddedLayout = renderer.getLayoutResult(tree.padded, placeLayout.children[0]!.constraints)!;
-  const rowLayout = renderer.getLayoutResult(tree.row, paddedLayout.children[0]!.constraints)!;
-  const alignedBodyLayout = renderer.getLayoutResult(tree.alignedBody, rowLayout.children[1]!.constraints)!;
-  const bodyLayout = renderer.getLayoutResult(tree.body, alignedBodyLayout.children[0]!.constraints)!;
-  const bubbleLayout = renderer.getLayoutResult(tree.bubble, bodyLayout.children[1]!.constraints)!;
-  const bubbleColumnLayout = renderer.getLayoutResult(tree.bubbleColumn, bubbleLayout.children[0]!.constraints)!;
+  const paddedLayout = renderer.getLayoutResult(
+    tree.padded,
+    placeLayout.children[0]!.constraints,
+  )!;
+  const rowLayout = renderer.getLayoutResult(
+    tree.row,
+    paddedLayout.children[0]!.constraints,
+  )!;
+  const alignedBodyLayout = renderer.getLayoutResult(
+    tree.alignedBody,
+    rowLayout.children[1]!.constraints,
+  )!;
+  const bodyLayout = renderer.getLayoutResult(
+    tree.body,
+    alignedBodyLayout.children[0]!.constraints,
+  )!;
+  const bubbleLayout = renderer.getLayoutResult(
+    tree.bubble,
+    bodyLayout.children[1]!.constraints,
+  )!;
+  const bubbleColumnLayout = renderer.getLayoutResult(
+    tree.bubbleColumn,
+    bubbleLayout.children[0]!.constraints,
+  )!;
 
   return {
     placeLayout,
@@ -358,9 +407,7 @@ describe("Place", () => {
     renderer.drawNode(node);
 
     expect(box).toEqual({ width: 88, height: 20 });
-    expect(fillTexts).toEqual([
-      { text: "padded text", x: 0, y: 13 },
-    ]);
+    expect(fillTexts).toEqual([{ text: "padded text", x: 0, y: 13 }]);
   });
 
   test("Text draws inline spans on a single line", () => {
@@ -402,7 +449,10 @@ describe("Place", () => {
       overflow: "ellipsis",
     });
 
-    expect(renderer.measureNode(node, { maxWidth: 64 })).toEqual({ width: 64, height: 20 });
+    expect(renderer.measureNode(node, { maxWidth: 64 })).toEqual({
+      width: 64,
+      height: 20,
+    });
     renderer.drawNode(node, { maxWidth: 64 });
 
     expect(fillTexts).toEqual([
@@ -449,10 +499,18 @@ describe("Place", () => {
     expect(renderer.measureNode(textNode)).toEqual({ width: 120, height: 20 });
     renderer.drawNode(textNode);
 
-    expect(renderer.measureNode(multilineNode)).toEqual({ width: 72, height: 60 });
+    expect(renderer.measureNode(multilineNode)).toEqual({
+      width: 72,
+      height: 60,
+    });
     renderer.drawNode(multilineNode);
 
-    expect(fillTexts.map(({ text }) => text)).toEqual(["  padded text  ", "  alpha  ", "", " beta "]);
+    expect(fillTexts.map(({ text }) => text)).toEqual([
+      "  padded text  ",
+      "  alpha  ",
+      "",
+      " beta ",
+    ]);
   });
 
   test("MultilineText supports logical align and explicit physicalAlign", () => {
@@ -499,8 +557,18 @@ describe("Place", () => {
       const layout = renderer.getLayoutResult(node, constraints);
 
       expect(box).toEqual({ width: 100, height: 10 });
-      expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 100, height: 10 });
-      expect(layout?.children[0]?.rect).toEqual({ x: expectedX, y: 0, width: 20, height: 10 });
+      expect(layout?.containerBox).toEqual({
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 10,
+      });
+      expect(layout?.children[0]?.rect).toEqual({
+        x: expectedX,
+        y: 0,
+        width: 20,
+        height: 10,
+      });
     }
   });
 
@@ -515,9 +583,13 @@ describe("Place", () => {
     expect(draws).toHaveLength(1);
     expect(draws[0]).toEqual({ x: 40, y: 0 });
 
-    expect(renderer.hittestNode(place, { x: 50, y: 5, type: "click" }, constraints)).toBe(true);
+    expect(
+      renderer.hittestNode(place, { x: 50, y: 5, type: "click" }, constraints),
+    ).toBe(true);
     expect(hits[0]).toEqual({ x: 10, y: 5 });
-    expect(renderer.hittestNode(place, { x: 5, y: 5, type: "click" }, constraints)).toBe(false);
+    expect(
+      renderer.hittestNode(place, { x: 5, y: 5, type: "click" }, constraints),
+    ).toBe(false);
   });
 
   test("shrink-wraps when no maxWidth constraint is available", () => {
@@ -529,7 +601,12 @@ describe("Place", () => {
 
     expect(box).toEqual({ width: 20, height: 10 });
     expect(layout?.containerBox).toEqual({ x: 0, y: 0, width: 20, height: 10 });
-    expect(layout?.children[0]?.rect).toEqual({ x: 0, y: 0, width: 20, height: 10 });
+    expect(layout?.children[0]?.rect).toEqual({
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 10,
+    });
   });
 
   test("chat bubbles wrap under maxWidth without forcing the bubble itself full width", () => {
@@ -538,31 +615,42 @@ describe("Place", () => {
 
     const unconstrainedBox = renderer.measureNode(tree.node);
     const unconstrainedLayout = renderer.getLayoutResult(tree.node);
-    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
+    const constrained = measureChatLikeBubbleTree(renderer, tree, {
+      maxWidth: 320,
+    });
 
-    expect(unconstrainedBox.width).toBeGreaterThan(constrained.placeLayout.containerBox.width);
-    expect(unconstrainedLayout?.children[0]?.rect.width).toBeLessThanOrEqual(unconstrainedBox.width);
+    expect(unconstrainedBox.width).toBeGreaterThan(
+      constrained.placeLayout.containerBox.width,
+    );
+    expect(unconstrainedLayout?.children[0]?.rect.width).toBeLessThanOrEqual(
+      unconstrainedBox.width,
+    );
     expect(constrained.placeLayout.containerBox.width).toBe(320);
-    expect(constrained.rowLayout.children[1]!.rect.width).toBeGreaterThan(constrained.bodyLayout.children[1]!.rect.width);
+    expect(constrained.rowLayout.children[1]!.rect.width).toBeGreaterThan(
+      constrained.bodyLayout.children[1]!.rect.width,
+    );
     expect(constrained.bodyLayout.children[1]!.rect.width).toBeLessThan(320);
   });
 
   test("reply preview stretches across the bubble while the bubble stays shrink-wrapped", () => {
     const renderer = new BaseRenderer(createGraphics(320, 200), {});
-    const tree = createChatLikeBubbleTree(
-      "short message",
-      {
-        reply: {
-          sender: "B",
-          content: "tiny reply preview",
-        },
+    const tree = createChatLikeBubbleTree("short message", {
+      reply: {
+        sender: "B",
+        content: "tiny reply preview",
       },
+    });
+
+    const constrained = measureChatLikeBubbleTree(renderer, tree, {
+      maxWidth: 320,
+    });
+
+    expect(constrained.rowLayout.children[1]!.rect.width).toBeGreaterThan(
+      constrained.bodyLayout.children[1]!.rect.width,
     );
-
-    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
-
-    expect(constrained.rowLayout.children[1]!.rect.width).toBeGreaterThan(constrained.bodyLayout.children[1]!.rect.width);
-    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBe(constrained.bubbleColumnLayout.containerBox.width);
+    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBe(
+      constrained.bubbleColumnLayout.containerBox.width,
+    );
     expect(constrained.bubbleColumnLayout.children[1]!.rect.width).toBeLessThan(
       constrained.bubbleColumnLayout.children[0]!.rect.width,
     );
@@ -581,11 +669,15 @@ describe("Place", () => {
       },
     );
 
-    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
+    const constrained = measureChatLikeBubbleTree(renderer, tree, {
+      maxWidth: 320,
+    });
     const bodyRect = constrained.alignedBodyLayout.children[0]!.rect;
 
     expect(bodyRect.x).toBeGreaterThan(0);
-    expect(bodyRect.x + bodyRect.width).toBe(constrained.alignedBodyLayout.containerBox.width);
+    expect(bodyRect.x + bodyRect.width).toBe(
+      constrained.alignedBodyLayout.containerBox.width,
+    );
   });
 
   test("chat bubbles shrink long unspaced messages when overflowWrap=anywhere", () => {
@@ -595,30 +687,37 @@ describe("Place", () => {
       messageOverflowWrap: "anywhere",
     });
 
-    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
+    const constrained = measureChatLikeBubbleTree(renderer, tree, {
+      maxWidth: 320,
+    });
 
     expect(constrained.placeLayout.containerBox.width).toBe(320);
     expect(constrained.bodyLayout.children[1]!.rect.width).toBeLessThan(320);
-    expect(constrained.bubbleColumnLayout.children[0]!.rect.height).toBeGreaterThan(20);
+    expect(
+      constrained.bubbleColumnLayout.children[0]!.rect.height,
+    ).toBeGreaterThan(20);
   });
 
   test("reply previews shrink long unspaced strings when overflowWrap=anywhere", () => {
     const renderer = new BaseRenderer(createGraphics(320, 200), {});
-    const tree = createChatLikeBubbleTree(
-      "short message",
-      {
-        reply: {
-          sender: "B",
-          content: "Z".repeat(120),
-        },
-        replyOverflowWrap: "anywhere",
+    const tree = createChatLikeBubbleTree("short message", {
+      reply: {
+        sender: "B",
+        content: "Z".repeat(120),
       },
+      replyOverflowWrap: "anywhere",
+    });
+
+    const constrained = measureChatLikeBubbleTree(renderer, tree, {
+      maxWidth: 320,
+    });
+
+    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBeLessThan(
+      320,
     );
-
-    const constrained = measureChatLikeBubbleTree(renderer, tree, { maxWidth: 320 });
-
-    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBeLessThan(320);
-    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBe(constrained.bubbleColumnLayout.containerBox.width);
+    expect(constrained.bubbleColumnLayout.children[0]!.rect.width).toBe(
+      constrained.bubbleColumnLayout.containerBox.width,
+    );
   });
 
   test("does not synthesize child maxWidth constraints when expand=false", () => {
@@ -699,13 +798,18 @@ describe("Place", () => {
     renderer.drawNode(padded, constraints);
     expect(draws[0]).toEqual({ x: 10, y: 5 });
 
-    expect(renderer.hittestNode(padded, { x: 15, y: 7, type: "click" }, constraints)).toBe(true);
+    expect(
+      renderer.hittestNode(padded, { x: 15, y: 7, type: "click" }, constraints),
+    ).toBe(true);
     expect(hits[0]).toEqual({ x: 5, y: 2 });
   });
 
   test("PaddingBox propagates vertical constraints and clamps its measured size to the parent", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
-    const { node, constraints: seenConstraints } = createConstraintProbeNode({ width: 20, height: 50 });
+    const { node, constraints: seenConstraints } = createConstraintProbeNode({
+      width: 20,
+      height: 50,
+    });
     const padded = new PaddingBox<C>(node, {
       top: 10,
       bottom: 10,
@@ -736,7 +840,10 @@ describe("Place", () => {
 
   test("PaddingBox clamps subtracted constraints to zero when padding exceeds available space", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
-    const { node, constraints: seenConstraints } = createConstraintProbeNode({ width: 5, height: 5 });
+    const { node, constraints: seenConstraints } = createConstraintProbeNode({
+      width: 5,
+      height: 5,
+    });
     const padded = new PaddingBox<C>(node, {
       top: 6,
       bottom: 6,
@@ -805,12 +912,15 @@ describe("Place", () => {
   test("ShrinkWrap finds a narrower width without increasing height", () => {
     const renderer = new BaseRenderer(createGraphics(320, 160), {});
     const inner = new PaddingBox<C>(
-      new MultilineText("alpha beta gamma delta epsilon zeta eta theta iota kappa lambda", {
-        lineHeight: 20,
-        font: "16px sans-serif",
-        align: "start",
-        color: "#000",
-      }),
+      new MultilineText(
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda",
+        {
+          lineHeight: 20,
+          font: "16px sans-serif",
+          align: "start",
+          color: "#000",
+        },
+      ),
       {
         top: 4,
         bottom: 4,
@@ -832,7 +942,8 @@ describe("Place", () => {
 
   test("ShrinkWrap passes through directly when no maxWidth is available", () => {
     const renderer = new BaseRenderer(createGraphics(), {});
-    const { node: probe, constraints: seenConstraints } = createConstraintProbeNode({ width: 20, height: 10 });
+    const { node: probe, constraints: seenConstraints } =
+      createConstraintProbeNode({ width: 20, height: 10 });
     const wrapped = new ShrinkWrap<C>(probe);
 
     const box = renderer.measureNode(wrapped);
@@ -852,7 +963,10 @@ describe("Place", () => {
 
     const box = renderer.measureNode(wrapped, constraints);
     const shrinkLayout = renderer.getLayoutResult(wrapped, constraints)!;
-    const placeLayout = renderer.getLayoutResult(place, shrinkLayout.children[0]!.constraints)!;
+    const placeLayout = renderer.getLayoutResult(
+      place,
+      shrinkLayout.children[0]!.constraints,
+    )!;
 
     expect(box.width).toBeGreaterThanOrEqual(120);
     expect(box.width).toBeLessThan(120.5);
@@ -874,14 +988,23 @@ describe("Place", () => {
     expect(probe.draws[0]).toEqual({ x: box.width - 80, y: 0 });
     expect(probe.drawConstraints[0]?.maxWidth).toBe(box.width);
 
-    expect(renderer.hittestNode(wrapped, { x: box.width - 10, y: 5, type: "click" }, constraints)).toBe(true);
+    expect(
+      renderer.hittestNode(
+        wrapped,
+        { x: box.width - 10, y: 5, type: "click" },
+        constraints,
+      ),
+    ).toBe(true);
     expect(probe.hits[0]).toEqual({ x: 70, y: 5 });
     expect(probe.hitConstraints[0]?.maxWidth).toBe(box.width);
   });
 
   test("ShrinkWrap respects minWidth as the lower bound", () => {
     const renderer = new BaseRenderer(createGraphics(240, 100), {});
-    const place = new Place<C>(createResponsiveProbeNode().node, { align: "end", expand: true });
+    const place = new Place<C>(createResponsiveProbeNode().node, {
+      align: "end",
+      expand: true,
+    });
     const wrapped = new ShrinkWrap<C>(place);
     const constraints = { minWidth: 140, maxWidth: 200 };
 
@@ -897,7 +1020,10 @@ describe("Place", () => {
 
   test("ShrinkWrap respects preferredMinWidth as a soft lower bound", () => {
     const renderer = new BaseRenderer(createGraphics(240, 100), {});
-    const place = new Place<C>(createResponsiveProbeNode().node, { align: "end", expand: true });
+    const place = new Place<C>(createResponsiveProbeNode().node, {
+      align: "end",
+      expand: true,
+    });
     const wrapped = new ShrinkWrap<C>(place, { preferredMinWidth: 140 });
     const constraints = { maxWidth: 200 };
 
@@ -912,7 +1038,10 @@ describe("Place", () => {
 
   test("ShrinkWrap ignores preferredMinWidth when parent maxWidth is tighter", () => {
     const renderer = new BaseRenderer(createGraphics(240, 100), {});
-    const place = new Place<C>(createResponsiveProbeNode().node, { align: "end", expand: true });
+    const place = new Place<C>(createResponsiveProbeNode().node, {
+      align: "end",
+      expand: true,
+    });
     const wrapped = new ShrinkWrap<C>(place, { preferredMinWidth: 140 });
     const constraints = { maxWidth: 130 };
 
@@ -931,15 +1060,13 @@ describe("Place", () => {
       createChatLikeBubbleTree("short message", {}).node,
     );
     const withReply = new ShrinkWrap<C>(
-      createChatLikeBubbleTree(
-        "short message",
-        {
-          reply: {
-            sender: "A",
-            content: "reply preview content that is noticeably wider than the short message body alone",
-          },
+      createChatLikeBubbleTree("short message", {
+        reply: {
+          sender: "A",
+          content:
+            "reply preview content that is noticeably wider than the short message body alone",
         },
-      ).node,
+      }).node,
     );
     const constraints = { maxWidth: 320 };
 

@@ -38,7 +38,10 @@ function normalizeOffset(offset: number): number {
   return Number.isFinite(offset) ? offset : 0;
 }
 
-export function normalizeTimelineState(itemCount: number, state: VisibleListState): NormalizedListState {
+export function normalizeTimelineState(
+  itemCount: number,
+  state: VisibleListState,
+): NormalizedListState {
   if (itemCount <= 0) {
     return { position: 0, offset: 0 };
   }
@@ -57,7 +60,10 @@ export function normalizeTimelineState(itemCount: number, state: VisibleListStat
   };
 }
 
-export function normalizeChatState(itemCount: number, state: VisibleListState): NormalizedListState {
+export function normalizeChatState(
+  itemCount: number,
+  state: VisibleListState,
+): NormalizedListState {
   if (itemCount <= 0) {
     return { position: 0, offset: 0 };
   }
@@ -135,7 +141,7 @@ export function resolveTimelineVisibleWindow<T, V>(
       offset = 0;
     } else {
       shift = viewportHeight - y;
-      y = (offset += shift);
+      y = offset += shift;
       let lastIdx = -1;
       for (let i = position - 1; i >= 0; i -= 1) {
         const { value, height } = resolveItem(items[i]!, i);
@@ -218,7 +224,7 @@ export function resolveChatVisibleWindow<T, V>(
       for (let i = position + 1; i < items.length; i += 1) {
         const { value, height } = resolveItem(items[i]!, i);
         drawList.push({ idx: i, value, offset: y - shift, height });
-        y = (drawLength += height);
+        y = drawLength += height;
         position = i;
         if (y >= viewportHeight) {
           break;

@@ -2,7 +2,14 @@ import { expect } from "bun:test";
 
 import { Text } from "../../src/nodes";
 import { BaseRenderer, ListState } from "../../src/renderer";
-import type { Box, Context, HitTest, LayoutConstraints, Node, RenderFeedback } from "../../src/types";
+import type {
+  Box,
+  Context,
+  HitTest,
+  LayoutConstraints,
+  Node,
+  RenderFeedback,
+} from "../../src/types";
 
 type C = CanvasRenderingContext2D;
 
@@ -27,7 +34,11 @@ export class ConstraintTestRenderer extends BaseRenderer<C> {
     return node.draw(this.#contextWithConstraints(constraints), 0, 0);
   }
 
-  hittestNode(node: Node<C>, test: HitTest, constraints?: LayoutConstraints): boolean {
+  hittestNode(
+    node: Node<C>,
+    test: HitTest,
+    constraints?: LayoutConstraints,
+  ): boolean {
     return node.hittest(this.#contextWithConstraints(constraints), test);
   }
 }
@@ -98,28 +109,42 @@ function clampIndex(index: number, length: number): number {
   return Math.min(Math.max(index, 0), length - 1);
 }
 
-export function readTimelineAnchor(list: ListState<number>, heights: number[]): number {
+export function readTimelineAnchor(
+  list: ListState<number>,
+  heights: number[],
+): number {
   const currentPosition = list.position;
   const position = clampIndex(
-    typeof currentPosition === "number" && Number.isFinite(currentPosition) ? Math.trunc(currentPosition) : 0,
+    typeof currentPosition === "number" && Number.isFinite(currentPosition)
+      ? Math.trunc(currentPosition)
+      : 0,
     heights.length,
   );
   const height = heights[position];
   return height > 0 ? position - list.offset / height : position;
 }
 
-export function readChatAnchor(list: ListState<number>, heights: number[]): number {
+export function readChatAnchor(
+  list: ListState<number>,
+  heights: number[],
+): number {
   const fallback = heights.length - 1;
   const currentPosition = list.position;
   const position = clampIndex(
-    typeof currentPosition === "number" && Number.isFinite(currentPosition) ? Math.trunc(currentPosition) : fallback,
+    typeof currentPosition === "number" && Number.isFinite(currentPosition)
+      ? Math.trunc(currentPosition)
+      : fallback,
     heights.length,
   );
   const height = heights[position];
   return height > 0 ? position + 1 - list.offset / height : position + 1;
 }
 
-function readAnchorAtOffset(heights: number[], index: number, offset: number): number {
+function readAnchorAtOffset(
+  heights: number[],
+  index: number,
+  offset: number,
+): number {
   let currentIndex = clampIndex(index, heights.length);
   let remaining = Number.isFinite(offset) ? offset : 0;
 
@@ -164,7 +189,11 @@ export function expectedTimelineAnchor(
     case "start":
       return readAnchorAtOffset(heights, index, 0);
     case "center":
-      return readAnchorAtOffset(heights, index, height / 2 - viewportHeight / 2);
+      return readAnchorAtOffset(
+        heights,
+        index,
+        height / 2 - viewportHeight / 2,
+      );
     case "end":
       return readAnchorAtOffset(heights, index, height - viewportHeight);
   }
@@ -181,7 +210,11 @@ export function expectedChatAnchor(
     case "start":
       return readAnchorAtOffset(heights, index, viewportHeight);
     case "center":
-      return readAnchorAtOffset(heights, index, height / 2 + viewportHeight / 2);
+      return readAnchorAtOffset(
+        heights,
+        index,
+        height / 2 + viewportHeight / 2,
+      );
     case "end":
       return readAnchorAtOffset(heights, index, height);
   }

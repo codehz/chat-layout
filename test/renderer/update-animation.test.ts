@@ -1,9 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import { ListState, TimelineRenderer, memoRenderItem } from "../../src/renderer";
+import {
+  ListState,
+  TimelineRenderer,
+  memoRenderItem,
+} from "../../src/renderer";
 import type { Box, Context, HitTest, Node } from "../../src/types";
 import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
-import { createFeedback, expectFiniteFeedback } from "../helpers/renderer-fixtures";
+import {
+  createFeedback,
+  expectFiniteFeedback,
+} from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
 
@@ -20,7 +27,11 @@ type DrawProbe = {
   y: number;
 };
 
-function createProbeNode(item: Item, draws: DrawProbe[], hits: string[]): Node<C> {
+function createProbeNode(
+  item: Item,
+  draws: DrawProbe[],
+  hits: string[],
+): Node<C> {
   return {
     measure(_ctx: Context<C>): Box {
       return { width: 320, height: item.height };
@@ -50,7 +61,9 @@ function createRenderer(
   viewportHeight = 120,
 ): { list: ListState<Item>; renderer: TimelineRenderer<C, Item> } {
   const list = new ListState<Item>(items);
-  const renderItem = memoRenderItem<C, Item>((item) => createProbeNode(item, draws, hits));
+  const renderItem = memoRenderItem<C, Item>((item) =>
+    createProbeNode(item, draws, hits),
+  );
   const renderer = new TimelineRenderer(createGraphics(viewportHeight), {
     list,
     renderItem,
@@ -62,12 +75,7 @@ describe("update animation", () => {
   test("ListState.update hard-cuts by default", () => {
     const draws: DrawProbe[] = [];
     const before = { id: "before", height: 20 };
-    const { list, renderer } = createRenderer(
-      [
-        before,
-      ],
-      draws,
-    );
+    const { list, renderer } = createRenderer([before], draws);
 
     const afterDefault = { id: "after-default", height: 30 };
     list.update(before, afterDefault);
@@ -75,7 +83,11 @@ describe("update animation", () => {
     expect(draws.map((draw) => draw.id)).toEqual(["after-default"]);
 
     draws.length = 0;
-    list.update(afterDefault, { id: "after-zero", height: 40 }, { duration: 0 });
+    list.update(
+      afterDefault,
+      { id: "after-zero", height: 40 },
+      { duration: 0 },
+    );
     renderer.render();
     expect(draws.map((draw) => draw.id)).toEqual(["after-zero"]);
   });
@@ -87,10 +99,7 @@ describe("update animation", () => {
       const draws: DrawProbe[] = [];
       const oldItem = { id: "old", height: 20 };
       const { list, renderer } = createRenderer(
-        [
-          oldItem,
-          { id: "tail", height: 10 },
-        ],
+        [oldItem, { id: "tail", height: 10 }],
         draws,
       );
 
@@ -132,12 +141,7 @@ describe("update animation", () => {
       const itemA = { id: "a", height: 20 };
       const itemB = { id: "b", height: 20 };
       const itemC = { id: "c", height: 20 };
-      const { list, renderer } = createRenderer(
-        [
-          itemA,
-        ],
-        draws,
-      );
+      const { list, renderer } = createRenderer([itemA], draws);
 
       list.update(itemA, itemB, { duration: 100 });
       now.current = 50;
@@ -167,15 +171,16 @@ describe("update animation", () => {
       const hits: string[] = [];
       const animatedOld = { id: "animated-old", height: 30, hit: true };
       const { list, renderer } = createRenderer(
-        [
-          animatedOld,
-          { id: "neighbor", height: 30, hit: true },
-        ],
+        [animatedOld, { id: "neighbor", height: 30, hit: true }],
         draws,
         hits,
       );
 
-      list.update(animatedOld, { id: "animated-new", height: 30, hit: true }, { duration: 100 });
+      list.update(
+        animatedOld,
+        { id: "animated-new", height: 30, hit: true },
+        { duration: 100 },
+      );
       now.current = 50;
 
       expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(false);
@@ -192,14 +197,13 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const oldItem = { id: "old", height: 20, innerAlpha: 0.4 };
-      const { list, renderer } = createRenderer(
-        [
-          oldItem,
-        ],
-        draws,
-      );
+      const { list, renderer } = createRenderer([oldItem], draws);
 
-      list.update(oldItem, { id: "new", height: 20, innerAlpha: 0.25 }, { duration: 100 });
+      list.update(
+        oldItem,
+        { id: "new", height: 20, innerAlpha: 0.25 },
+        { duration: 100 },
+      );
       now.current = 50;
       renderer.render();
 
@@ -217,10 +221,7 @@ describe("update animation", () => {
       const draws: DrawProbe[] = [];
       const tailOld = { id: "tail-old", height: 20 };
       const { list, renderer } = createRenderer(
-        [
-          { id: "head", height: 20 },
-          tailOld,
-        ],
+        [{ id: "head", height: 20 }, tailOld],
         draws,
       );
 

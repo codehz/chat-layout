@@ -15,7 +15,10 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * Virtualized renderer anchored to the top, suitable for timeline-style UIs.
  */
-export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
+export class TimelineRenderer<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+> extends VirtualizedRenderer<C, T> {
   #resolveVisibleWindow() {
     const now = globalThis.performance?.now() ?? Date.now();
     return resolveTimelineVisibleWindow(
@@ -58,7 +61,10 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
     });
   }
 
-  protected _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number {
+  protected _getTargetAnchor(
+    index: number,
+    block: NonNullable<JumpToOptions["block"]>,
+  ): number {
     const height = this._getItemHeight(index);
     const viewportHeight = this.graphics.canvas.clientHeight;
 
@@ -72,13 +78,17 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
     }
   }
 
-  protected _getAnimatedLayerOffset(_slotHeight: number, _nodeHeight: number): number {
+  protected _getAnimatedLayerOffset(
+    _slotHeight: number,
+    _nodeHeight: number,
+  ): number {
     return 0;
   }
 
   render(feedback?: RenderFeedback): boolean {
     const keepAnimating = this._prepareRender();
-    const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
+    const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
+      this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     const solution = this.#resolveVisibleWindow();
     const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
@@ -87,6 +97,9 @@ export class TimelineRenderer<C extends CanvasRenderingContext2D, T extends {}> 
   }
 
   hittest(test: HitTest): boolean {
-    return this._hittestVisibleWindow(this.#resolveVisibleWindow().window, test);
+    return this._hittestVisibleWindow(
+      this.#resolveVisibleWindow().window,
+      test,
+    );
   }
 }

@@ -12,7 +12,11 @@ import type {
   Node,
 } from "../types";
 import { Group, measureNodeMinContent, Wrapper } from "./base";
-import { drawLayoutChildren, hittestLayoutChildren, writeLayoutResult } from "./shared";
+import {
+  drawLayoutChildren,
+  hittestLayoutChildren,
+  writeLayoutResult,
+} from "./shared";
 
 function getMainSize(axis: Axis, box: Box): number {
   return axis === "row" ? box.width : box.height;
@@ -22,19 +26,31 @@ function getCrossSize(axis: Axis, box: Box): number {
   return axis === "row" ? box.height : box.width;
 }
 
-function getMinMain(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+function getMinMain(
+  axis: Axis,
+  constraints?: LayoutConstraints,
+): number | undefined {
   return axis === "row" ? constraints?.minWidth : constraints?.minHeight;
 }
 
-function getMaxMain(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+function getMaxMain(
+  axis: Axis,
+  constraints?: LayoutConstraints,
+): number | undefined {
   return axis === "row" ? constraints?.maxWidth : constraints?.maxHeight;
 }
 
-function getMinCross(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+function getMinCross(
+  axis: Axis,
+  constraints?: LayoutConstraints,
+): number | undefined {
   return axis === "row" ? constraints?.minHeight : constraints?.minWidth;
 }
 
-function getMaxCross(axis: Axis, constraints?: LayoutConstraints): number | undefined {
+function getMaxCross(
+  axis: Axis,
+  constraints?: LayoutConstraints,
+): number | undefined {
   return axis === "row" ? constraints?.maxHeight : constraints?.maxWidth;
 }
 
@@ -82,20 +98,28 @@ function clampToConstraints(value: number, min?: number, max?: number): number {
   return result;
 }
 
-function constraintsEqual(left: LayoutConstraints | undefined, right: LayoutConstraints | undefined): boolean {
+function constraintsEqual(
+  left: LayoutConstraints | undefined,
+  right: LayoutConstraints | undefined,
+): boolean {
   if (left === right) {
     return true;
   }
   if (left == null || right == null) {
     return left == null && right == null;
   }
-  return left.minWidth === right.minWidth
-    && left.maxWidth === right.maxWidth
-    && left.minHeight === right.minHeight
-    && left.maxHeight === right.maxHeight;
+  return (
+    left.minWidth === right.minWidth &&
+    left.maxWidth === right.maxWidth &&
+    left.minHeight === right.minHeight &&
+    left.maxHeight === right.maxHeight
+  );
 }
 
-function getCrossAlignment(alignSelf: CrossAxisAlignment | "auto" | undefined, alignItems: CrossAxisAlignment): CrossAxisAlignment {
+function getCrossAlignment(
+  alignSelf: CrossAxisAlignment | "auto" | undefined,
+  alignItems: CrossAxisAlignment,
+): CrossAxisAlignment {
   if (alignSelf == null || alignSelf === "auto") {
     return alignItems;
   }
@@ -134,7 +158,11 @@ function getJustifySpacing(
   }
 }
 
-function getCrossOffset(align: CrossAxisAlignment, frameCross: number, contentCross: number): number {
+function getCrossOffset(
+  align: CrossAxisAlignment,
+  frameCross: number,
+  contentCross: number,
+): number {
   switch (align) {
     case "center":
       return (frameCross - contentCross) / 2;
@@ -147,7 +175,13 @@ function getCrossOffset(align: CrossAxisAlignment, frameCross: number, contentCr
   }
 }
 
-function createRectFromAxis(axis: Axis, main: number, cross: number, mainSize: number, crossSize: number) {
+function createRectFromAxis(
+  axis: Axis,
+  main: number,
+  cross: number,
+  mainSize: number,
+  crossSize: number,
+) {
   return axis === "row"
     ? createRect(main, cross, mainSize, crossSize)
     : createRect(cross, main, crossSize, mainSize);
@@ -186,7 +220,9 @@ type MeasuredLayout<C extends CanvasRenderingContext2D> = {
   };
 };
 
-function readFlexItemOptions<C extends CanvasRenderingContext2D>(child: Node<C>): FlexItemOptions {
+function readFlexItemOptions<C extends CanvasRenderingContext2D>(
+  child: Node<C>,
+): FlexItemOptions {
   if (child instanceof FlexItem) {
     return child.item;
   }
@@ -198,7 +234,10 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
   options: FlexContainerOptions,
   constraints: LayoutConstraints | undefined,
   measureChild: (node: Node<C>, constraints?: LayoutConstraints) => Box,
-  measureChildMinContent: (node: Node<C>, constraints?: LayoutConstraints) => Box,
+  measureChildMinContent: (
+    node: Node<C>,
+    constraints?: LayoutConstraints,
+  ) => Box,
 ): MeasuredLayout<C> {
   const axis = options.direction ?? "row";
   const gap = options.gap ?? 0;
@@ -211,10 +250,13 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
   const minMain = getMinMain(axis, constraints);
   const maxCross = getMaxCross(axis, constraints);
   const minCross = getMinCross(axis, constraints);
-  const gapTotal = orderedChildren.length > 1 ? gap * (orderedChildren.length - 1) : 0;
+  const gapTotal =
+    orderedChildren.length > 1 ? gap * (orderedChildren.length - 1) : 0;
   const finiteMain = maxMain != null;
   const finiteCross = maxCross != null;
-  const availableMain = finiteMain ? Math.max(0, maxMain - gapTotal) : undefined;
+  const availableMain = finiteMain
+    ? Math.max(0, maxMain - gapTotal)
+    : undefined;
   let totalGrow = 0;
   let totalBasis = 0;
   let nonGrowBasis = 0;
@@ -269,7 +311,10 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
     });
   }
 
-  const entersShrinkPath = finiteMain && availableMain != null && totalBasis - availableMain > SHRINK_EPSILON;
+  const entersShrinkPath =
+    finiteMain &&
+    availableMain != null &&
+    totalBasis - availableMain > SHRINK_EPSILON;
 
   if (entersShrinkPath) {
     const totalDeficit = totalBasis - availableMain!;
@@ -277,17 +322,28 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
 
     for (const child of orderedChildren) {
       const measurement = measurements.get(child)!;
-      const minContentMeasured = measureChildMinContent(child, measurement.basisConstraints);
-      measurement.minContentMain = Math.min(measurement.basis, getMainSize(axis, minContentMeasured));
+      const minContentMeasured = measureChildMinContent(
+        child,
+        measurement.basisConstraints,
+      );
+      measurement.minContentMain = Math.min(
+        measurement.basis,
+        getMainSize(axis, minContentMeasured),
+      );
       measurement.finalMain = measurement.basis;
-      measurement.frozen = measurement.shrink <= 0 || measurement.basis - measurement.minContentMain <= SHRINK_EPSILON;
+      measurement.frozen =
+        measurement.shrink <= 0 ||
+        measurement.basis - measurement.minContentMain <= SHRINK_EPSILON;
     }
 
     while (remainingDeficit > SHRINK_EPSILON) {
       const active = orderedChildren
         .map((child) => measurements.get(child)!)
         .filter((measurement) => !measurement.frozen && measurement.shrink > 0);
-      const totalScaled = active.reduce((sum, measurement) => sum + measurement.shrink * measurement.basis, 0);
+      const totalScaled = active.reduce(
+        (sum, measurement) => sum + measurement.shrink * measurement.basis,
+        0,
+      );
 
       if (active.length === 0 || totalScaled <= SHRINK_EPSILON) {
         break;
@@ -295,7 +351,10 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
 
       let frozeAny = false;
       for (const measurement of active) {
-        const tentative = measurement.basis - remainingDeficit * ((measurement.shrink * measurement.basis) / totalScaled);
+        const tentative =
+          measurement.basis -
+          remainingDeficit *
+            ((measurement.shrink * measurement.basis) / totalScaled);
         if (tentative <= measurement.minContentMain + SHRINK_EPSILON) {
           measurement.finalMain = measurement.minContentMain;
           measurement.frozen = true;
@@ -314,7 +373,10 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
       for (const child of orderedChildren) {
         const measurement = measurements.get(child)!;
         if (measurement.frozen) {
-          absorbedDeficit += Math.max(0, measurement.basis - measurement.finalMain);
+          absorbedDeficit += Math.max(
+            0,
+            measurement.basis - measurement.finalMain,
+          );
         }
       }
       remainingDeficit = Math.max(0, totalDeficit - absorbedDeficit);
@@ -341,11 +403,21 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
       measurement.frameCross = getCrossSize(axis, measurement.measured);
     }
   } else {
-    const remainingMain = finiteMain && availableMain != null ? Math.max(0, availableMain - nonGrowBasis) : undefined;
+    const remainingMain =
+      finiteMain && availableMain != null
+        ? Math.max(0, availableMain - nonGrowBasis)
+        : undefined;
 
     for (const child of orderedChildren) {
       const measurement = measurements.get(child)!;
-      if (!(measurement.grow > 0 && finiteMain && remainingMain != null && totalGrow > 0)) {
+      if (
+        !(
+          measurement.grow > 0 &&
+          finiteMain &&
+          remainingMain != null &&
+          totalGrow > 0
+        )
+      ) {
         measurement.measured = measurement.basisMeasured;
         measurement.initialConstraints = measurement.basisConstraints;
         measurement.finalConstraints = finiteMain
@@ -394,7 +466,12 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
 
   for (const child of orderedChildren) {
     const measurement = measurements.get(child)!;
-    if (!constraintsEqual(measurement.initialConstraints, measurement.finalConstraints)) {
+    if (
+      !constraintsEqual(
+        measurement.initialConstraints,
+        measurement.finalConstraints,
+      )
+    ) {
       measurement.measured = measureChild(child, measurement.finalConstraints);
     }
     measurement.frameMain = measurement.finalMain;
@@ -409,9 +486,10 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
     contentCross = Math.max(contentCross, measurement.frameCross);
   }
 
-  const containerMain = finiteMain && mainAxisSize === "fill"
-    ? Math.max(maxMain!, contentMain)
-    : clampToConstraints(contentMain, minMain, maxMain);
+  const containerMain =
+    finiteMain && mainAxisSize === "fill"
+      ? Math.max(maxMain!, contentMain)
+      : clampToConstraints(contentMain, minMain, maxMain);
   const containerCross = clampToConstraints(contentCross, minCross, maxCross);
   if (finiteCross) {
     for (const child of orderedChildren) {
@@ -436,7 +514,8 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
       measurement.measured = remeasured;
       measurement.finalConstraints = finalConstraints;
       measurement.frameCross = containerCross;
-      measurement.frameMain = measurement.allocatedMain ?? getMainSize(axis, remeasured);
+      measurement.frameMain =
+        measurement.allocatedMain ?? getMainSize(axis, remeasured);
     }
 
     contentMain = gapTotal;
@@ -444,27 +523,55 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
     for (const child of orderedChildren) {
       const measurement = measurements.get(child)!;
       contentMain += measurement.frameMain;
-      contentCross = Math.max(contentCross, getCrossSize(axis, measurement.measured));
+      contentCross = Math.max(
+        contentCross,
+        getCrossSize(axis, measurement.measured),
+      );
     }
   }
 
-  const finalContainerMain = finiteMain && mainAxisSize === "fill"
-    ? Math.max(maxMain!, contentMain)
-    : clampToConstraints(contentMain, minMain, maxMain);
+  const finalContainerMain =
+    finiteMain && mainAxisSize === "fill"
+      ? Math.max(maxMain!, contentMain)
+      : clampToConstraints(contentMain, minMain, maxMain);
   const freeSpace = Math.max(0, finalContainerMain - contentMain);
-  const spacing = getJustifySpacing(justifyContent, freeSpace, orderedChildren.length, gap);
+  const spacing = getJustifySpacing(
+    justifyContent,
+    freeSpace,
+    orderedChildren.length,
+    gap,
+  );
   const childResults: ChildLayoutResult<C>[] = [];
   let cursor = spacing.leading;
 
   for (const child of orderedChildren) {
     const measurement = measurements.get(child)!;
-    const frameCross = measurement.stretch && finiteCross ? containerCross : measurement.frameCross;
+    const frameCross =
+      measurement.stretch && finiteCross
+        ? containerCross
+        : measurement.frameCross;
     const contentMainSize = getMainSize(axis, measurement.measured);
     const contentCrossSize = getCrossSize(axis, measurement.measured);
-    const rectCross = measurement.stretch ? 0 : getCrossOffset(measurement.effectiveAlign, containerCross, frameCross);
-    const contentCrossOffset = rectCross + getCrossOffset(measurement.effectiveAlign, frameCross, contentCrossSize);
-    const rect = createRectFromAxis(axis, cursor, rectCross, measurement.frameMain, frameCross);
-    const contentBox = createRectFromAxis(axis, cursor, contentCrossOffset, contentMainSize, contentCrossSize);
+    const rectCross = measurement.stretch
+      ? 0
+      : getCrossOffset(measurement.effectiveAlign, containerCross, frameCross);
+    const contentCrossOffset =
+      rectCross +
+      getCrossOffset(measurement.effectiveAlign, frameCross, contentCrossSize);
+    const rect = createRectFromAxis(
+      axis,
+      cursor,
+      rectCross,
+      measurement.frameMain,
+      frameCross,
+    );
+    const contentBox = createRectFromAxis(
+      axis,
+      cursor,
+      contentCrossOffset,
+      contentMainSize,
+      contentCrossSize,
+    );
 
     childResults.push({
       node: child,
@@ -475,12 +582,14 @@ export function computeFlexLayout<C extends CanvasRenderingContext2D>(
     cursor += measurement.frameMain + spacing.between;
   }
 
-  const containerBox = axis === "row"
-    ? createRect(0, 0, finalContainerMain, containerCross)
-    : createRect(0, 0, containerCross, finalContainerMain);
-  const finalContentBox = childResults.length > 0
-    ? computeContentBox(childResults)
-    : createRect(0, 0, 0, 0);
+  const containerBox =
+    axis === "row"
+      ? createRect(0, 0, finalContainerMain, containerCross)
+      : createRect(0, 0, containerCross, finalContainerMain);
+  const finalContentBox =
+    childResults.length > 0
+      ? computeContentBox(childResults)
+      : createRect(0, 0, 0, 0);
 
   return {
     box: {
@@ -542,8 +651,11 @@ export class Flex<C extends CanvasRenderingContext2D> extends Group<C> {
   measureMinContent(ctx: Context<C>): Box {
     const axis = this.options.direction ?? "row";
     const gap = this.options.gap ?? 0;
-    const orderedChildren = this.options.reverse ? [...this.children].reverse() : this.children;
-    const gapTotal = orderedChildren.length > 1 ? gap * (orderedChildren.length - 1) : 0;
+    const orderedChildren = this.options.reverse
+      ? [...this.children].reverse()
+      : this.children;
+    const gapTotal =
+      orderedChildren.length > 1 ? gap * (orderedChildren.length - 1) : 0;
     const childConstraints = createAxisConstraints(
       axis,
       ctx.constraints,

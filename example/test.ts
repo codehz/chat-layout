@@ -47,8 +47,10 @@ class RoundedBox extends PaddingBox<C> {
     // Reuse the current layout constraints so the background matches wrapped text.
     const { width, height } = ctx.measureNode(this, ctx.constraints);
     ctx.with((g) => {
-      const fill = this.fill == null ? undefined : ctx.resolveDynValue(this.fill);
-      const stroke = this.stroke == null ? undefined : ctx.resolveDynValue(this.stroke);
+      const fill =
+        this.fill == null ? undefined : ctx.resolveDynValue(this.fill);
+      const stroke =
+        this.stroke == null ? undefined : ctx.resolveDynValue(this.stroke);
       g.beginPath();
       g.roundRect(x, y, width, height, this.radii);
       if (fill != null) {

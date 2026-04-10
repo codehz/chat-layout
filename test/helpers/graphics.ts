@@ -115,7 +115,9 @@ export function createTextGraphics(
   return graphics as unknown as C;
 }
 
-export function withOffscreenMeasureCounter<T>(cb: (counter: { count: number }) => T): T {
+export function withOffscreenMeasureCounter<T>(
+  cb: (counter: { count: number }) => T,
+): T {
   ensureMockOffscreenCanvas();
   const counter = { count: 0 };
   const previous = observeOffscreenMeasureText;

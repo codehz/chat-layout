@@ -15,7 +15,10 @@ function clamp(value: number, min: number, max: number): number {
 /**
  * Virtualized renderer anchored to the bottom, suitable for chat-style UIs.
  */
-export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> extends VirtualizedRenderer<C, T> {
+export class ChatRenderer<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+> extends VirtualizedRenderer<C, T> {
   #resolveVisibleWindow() {
     const now = globalThis.performance?.now() ?? Date.now();
     return resolveChatVisibleWindow(
@@ -41,7 +44,9 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
       return 0;
     }
     const height = this._getItemHeight(state.position);
-    return height > 0 ? state.position + 1 - state.offset / height : state.position + 1;
+    return height > 0
+      ? state.position + 1 - state.offset / height
+      : state.position + 1;
   }
 
   protected _applyAnchor(anchor: number): void {
@@ -49,7 +54,11 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
       return;
     }
     const clampedAnchor = clamp(anchor, 0, this.items.length);
-    const position = clamp(Math.ceil(clampedAnchor) - 1, 0, this.items.length - 1);
+    const position = clamp(
+      Math.ceil(clampedAnchor) - 1,
+      0,
+      this.items.length - 1,
+    );
     const height = this._getItemHeight(position);
     const offset = height > 0 ? (position + 1 - clampedAnchor) * height : 0;
     this._commitListState({
@@ -58,7 +67,10 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
     });
   }
 
-  protected _getTargetAnchor(index: number, block: NonNullable<JumpToOptions["block"]>): number {
+  protected _getTargetAnchor(
+    index: number,
+    block: NonNullable<JumpToOptions["block"]>,
+  ): number {
     const height = this._getItemHeight(index);
     const viewportHeight = this.graphics.canvas.clientHeight;
 
@@ -72,13 +84,17 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
     }
   }
 
-  protected _getAnimatedLayerOffset(slotHeight: number, nodeHeight: number): number {
+  protected _getAnimatedLayerOffset(
+    slotHeight: number,
+    nodeHeight: number,
+  ): number {
     return slotHeight - nodeHeight;
   }
 
   render(feedback?: RenderFeedback): boolean {
     const keepAnimating = this._prepareRender();
-    const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
+    const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
+      this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     const solution = this.#resolveVisibleWindow();
     const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
@@ -87,6 +103,9 @@ export class ChatRenderer<C extends CanvasRenderingContext2D, T extends {}> exte
   }
 
   hittest(test: HitTest): boolean {
-    return this._hittestVisibleWindow(this.#resolveVisibleWindow().window, test);
+    return this._hittestVisibleWindow(
+      this.#resolveVisibleWindow().window,
+      test,
+    );
   }
 }

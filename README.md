@@ -28,10 +28,11 @@ const bubble = new RoundedBox(
 );
 
 const body = new ShrinkWrap(
-  new Flex(
-    [senderLine, bubble],
-    { direction: "column", gap: 4, alignItems: item.sender === "A" ? "end" : "start" },
-  ),
+  new Flex([senderLine, bubble], {
+    direction: "column",
+    gap: 4,
+    alignItems: item.sender === "A" ? "end" : "start",
+  }),
 );
 
 const row = new Flex(
@@ -74,17 +75,20 @@ See [example/chat.ts](./example/chat.ts) for a full chat example.
 Single-line `Text` can ellipsize at the start, end, or middle when a finite width constraint is present:
 
 ```ts
-const title = new Text([
-  { text: "Extremely long " },
-  { text: "thread title", font: "700 16px system-ui", color: "#0f766e" },
-  { text: " that should not blow out the row" },
-], {
-  lineHeight: 20,
-  font: "16px system-ui",
-  color: "#111",
-  overflow: "ellipsis",
-  ellipsisPosition: "middle",
-});
+const title = new Text(
+  [
+    { text: "Extremely long " },
+    { text: "thread title", font: "700 16px system-ui", color: "#0f766e" },
+    { text: " that should not blow out the row" },
+  ],
+  {
+    lineHeight: 20,
+    font: "16px system-ui",
+    color: "#111",
+    overflow: "ellipsis",
+    ellipsisPosition: "middle",
+  },
+);
 ```
 
 Multi-line `MultilineText` can cap the visible line count and convert the last visible line to an end ellipsis:
@@ -119,9 +123,9 @@ const justified = new MultilineText(paragraph, {
   font: "16px system-ui",
   color: "#111",
   align: "start",
-  justify: true,               // or "inter-word" | "inter-character"
-  justifyLastLine: false,       // default: last line uses normal alignment
-  justifyGapThreshold: 2.0,    // max gap ratio before fallback
+  justify: true, // or "inter-word" | "inter-character"
+  justifyLastLine: false, // default: last line uses normal alignment
+  justifyGapThreshold: 2.0, // max gap ratio before fallback
 });
 ```
 

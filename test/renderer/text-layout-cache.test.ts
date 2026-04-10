@@ -1,16 +1,33 @@
 import { describe, expect, test } from "bun:test";
 
 import { MultilineText, Text } from "../../src/nodes";
-import type { InlineSpan, MultilineTextOptions, TextOptions } from "../../src/types";
-import { ChatRenderer, DebugRenderer, ListState, memoRenderItem } from "../../src/renderer";
-import { createTextGraphics, ensureMockOffscreenCanvas, withOffscreenMeasureCounter } from "../helpers/graphics";
+import type {
+  InlineSpan,
+  MultilineTextOptions,
+  TextOptions,
+} from "../../src/types";
+import {
+  ChatRenderer,
+  DebugRenderer,
+  ListState,
+  memoRenderItem,
+} from "../../src/renderer";
+import {
+  createTextGraphics,
+  ensureMockOffscreenCanvas,
+  withOffscreenMeasureCounter,
+} from "../helpers/graphics";
 import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
 
 ensureMockOffscreenCanvas();
 
-function createSingleLineNode(text: string, font: string, options: Partial<TextOptions<C>> = {}): Text<C> {
+function createSingleLineNode(
+  text: string,
+  font: string,
+  options: Partial<TextOptions<C>> = {},
+): Text<C> {
   return new Text(text, {
     lineHeight: 20,
     font,
@@ -19,7 +36,11 @@ function createSingleLineNode(text: string, font: string, options: Partial<TextO
   });
 }
 
-function createMultilineNode(text: string, font: string, options: Partial<MultilineTextOptions<C>> = {}): MultilineText<C> {
+function createMultilineNode(
+  text: string,
+  font: string,
+  options: Partial<MultilineTextOptions<C>> = {},
+): MultilineText<C> {
   return new MultilineText(text, {
     align: "start",
     lineHeight: 20,
@@ -32,9 +53,12 @@ function createMultilineNode(text: string, font: string, options: Partial<Multil
 describe("text layout cache", () => {
   test("repeated draws of the same Text node reuse cached layout work", () => {
     let graphicsMeasures = 0;
-    const renderer = new DebugRenderer(createTextGraphics(80, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new DebugRenderer(
+      createTextGraphics(80, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const node = createSingleLineNode(
       "alpha beta gamma delta epsilon zeta eta theta text-cache-repeat-single",
       "16px cache-test-single-repeat",
@@ -57,12 +81,19 @@ describe("text layout cache", () => {
 
   test("repeated draws of the same rich Text node reuse cached layout work", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const spans: InlineSpan<C>[] = [
       { text: "alpha " },
-      { text: "beta", font: "700 16px cache-test-rich-single", color: "#0369a1" },
+      {
+        text: "beta",
+        font: "700 16px cache-test-rich-single",
+        color: "#0369a1",
+      },
       { text: " gamma delta epsilon" },
     ];
     const node = new Text(spans, {
@@ -90,18 +121,28 @@ describe("text layout cache", () => {
 
   test("repeated renders of the same visible MultilineText node reuse cached layout work", () => {
     let graphicsMeasures = 0;
-    const list = new ListState([{ text: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-chat-repeat" }]);
-    const renderer = new ChatRenderer(createTextGraphics(80, 100, () => {
-      graphicsMeasures += 1;
-    }), {
-      list,
-      renderItem: memoRenderItem<C, { text: string }>((item) => new MultilineText(item.text, {
-        align: "start",
-        lineHeight: 20,
-        font: "16px cache-test-chat-repeat",
-        color: "#000",
-      })),
-    });
+    const list = new ListState([
+      {
+        text: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-chat-repeat",
+      },
+    ]);
+    const renderer = new ChatRenderer(
+      createTextGraphics(80, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {
+        list,
+        renderItem: memoRenderItem<C, { text: string }>(
+          (item) =>
+            new MultilineText(item.text, {
+              align: "start",
+              lineHeight: 20,
+              font: "16px cache-test-chat-repeat",
+              color: "#000",
+            }),
+        ),
+      },
+    );
 
     withOffscreenMeasureCounter((offscreen) => {
       renderer.render();
@@ -120,9 +161,12 @@ describe("text layout cache", () => {
 
   test("different maxWidth values rerun layout but reuse prepared text", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const node = createMultilineNode(
       "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron text-cache-width-reuse",
       "16px cache-test-width-reuse",
@@ -148,10 +192,14 @@ describe("text layout cache", () => {
 
   test("different nodes with the same text and font share prepared text work", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
-    const text = "alpha beta gamma delta epsilon zeta eta theta text-cache-cross-node";
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
+    const text =
+      "alpha beta gamma delta epsilon zeta eta theta text-cache-cross-node";
     const font = "16px cache-test-cross-node";
     const first = createMultilineNode(text, font);
     const second = createMultilineNode(text, font);
@@ -169,9 +217,12 @@ describe("text layout cache", () => {
 
   test("invalidateNode keeps prepared text warm for subsequent measure and draw", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const node = createMultilineNode(
       "alpha beta gamma delta epsilon zeta eta theta text-cache-invalidate",
       "16px cache-test-invalidate",
@@ -220,9 +271,12 @@ describe("text layout cache", () => {
 
   test("min-content measurement uses separate cache keys from constrained layout", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const node = createMultilineNode(
       "alpha beta gamma",
       "16px cache-test-min-content-separation",
@@ -244,9 +298,12 @@ describe("text layout cache", () => {
 
   test("ellipsized multiline nodes reuse prepared text across maxWidth changes", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const node = createMultilineNode(
       "alpha beta gamma delta epsilon zeta eta theta ellipsis-cache-width-reuse",
       "16px cache-test-ellipsis-width-reuse",
@@ -274,13 +331,22 @@ describe("text layout cache", () => {
 
   test("same text with different ellipsis positions shares prepared text work", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const text = "alpha beta gamma delta epsilon ellipsis-cache-cross-position";
     const font = "16px cache-test-cross-position";
-    const startNode = createSingleLineNode(text, font, { overflow: "ellipsis", ellipsisPosition: "start" });
-    const middleNode = createSingleLineNode(text, font, { overflow: "ellipsis", ellipsisPosition: "middle" });
+    const startNode = createSingleLineNode(text, font, {
+      overflow: "ellipsis",
+      ellipsisPosition: "start",
+    });
+    const middleNode = createSingleLineNode(text, font, {
+      overflow: "ellipsis",
+      ellipsisPosition: "middle",
+    });
 
     withOffscreenMeasureCounter((offscreen) => {
       renderer.drawNode(startNode, { maxWidth: 96 });
@@ -295,13 +361,20 @@ describe("text layout cache", () => {
 
   test("same text with different whiteSpace modes keep separate prepared text entries", () => {
     let graphicsMeasures = 0;
-    const renderer = new ConstraintTestRenderer(createTextGraphics(320, 100, () => {
-      graphicsMeasures += 1;
-    }), {});
+    const renderer = new ConstraintTestRenderer(
+      createTextGraphics(320, 100, () => {
+        graphicsMeasures += 1;
+      }),
+      {},
+    );
     const text = "  alpha  \n\n beta ";
     const font = "16px cache-test-white-space-mode";
-    const normalNode = createMultilineNode(text, font, { whiteSpace: "normal" });
-    const preWrapNode = createMultilineNode(text, font, { whiteSpace: "pre-wrap" });
+    const normalNode = createMultilineNode(text, font, {
+      whiteSpace: "normal",
+    });
+    const preWrapNode = createMultilineNode(text, font, {
+      whiteSpace: "pre-wrap",
+    });
 
     withOffscreenMeasureCounter((offscreen) => {
       renderer.drawNode(normalNode, { maxWidth: 80 });

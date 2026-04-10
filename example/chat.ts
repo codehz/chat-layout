@@ -195,7 +195,11 @@ const richTextMessage: InlineSpan<C>[] = [
   { text: "、" },
   { text: "粗体", font: "700 16px system-ui", color: "#b91c1c" },
   { text: "，以及 " },
-  { text: "inline code", font: "15px ui-monospace, SFMono-Regular, Consolas, monospace", color: "#7c3aed" },
+  {
+    text: "inline code",
+    font: "15px ui-monospace, SFMono-Regular, Consolas, monospace",
+    color: "#7c3aed",
+  },
   { text: " 这样的片段混排。" },
 ];
 
@@ -205,7 +209,11 @@ const richReplyPreview: InlineSpan<C>[] = [
   { text: "，比如 " },
   { text: "关键词高亮", color: "#2563eb" },
   { text: " 和 " },
-  { text: "code()", font: "12px ui-monospace, SFMono-Regular, Consolas, monospace", color: "#7c3aed" },
+  {
+    text: "code()",
+    font: "12px ui-monospace, SFMono-Regular, Consolas, monospace",
+    color: "#7c3aed",
+  },
   {
     text: "，超长内容仍然会按原来的两行省略规则收起，不需要额外处理。",
   },
@@ -237,7 +245,10 @@ class ItemDetector extends Wrapper<C> {
       if (!list.items.includes(this.item)) {
         return true;
       }
-      const nextItem = this.item.kind === "revoked" ? this.item.original : revokeMessage(this.item);
+      const nextItem =
+        this.item.kind === "revoked"
+          ? this.item.original
+          : revokeMessage(this.item);
       currentHover = nextItem;
       list.update(this.item, nextItem, {
         duration: REPLACE_ANIMATION_DURATION,
@@ -265,8 +276,10 @@ const renderItem = memoRenderItem((item: ChatItem): Node<C> => {
               left: 12,
               right: 12,
               radii: 999,
-              fill: () => (currentHover?.id === item.id ? "#d9d9d9" : "#ececec"),
-              stroke: () => (currentHover?.id === item.id ? "#bcbcbc" : "#d3d3d3"),
+              fill: () =>
+                currentHover?.id === item.id ? "#d9d9d9" : "#ececec",
+              stroke: () =>
+                currentHover?.id === item.id ? "#bcbcbc" : "#d3d3d3",
             },
           ),
           {
@@ -631,7 +644,9 @@ button("jump latest (no anim)", () => {
 });
 
 button("revoke first", () => {
-  const item = list.items.find((entry): entry is MessageItem => entry.kind === "message");
+  const item = list.items.find(
+    (entry): entry is MessageItem => entry.kind === "message",
+  );
   if (item == null) {
     return;
   }

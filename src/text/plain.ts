@@ -83,10 +83,19 @@ function createEllipsisOnlyLayout<C extends CanvasRenderingContext2D>(
   if (ellipsisWidth > maxWidth) {
     return { width: 0, text: "", shift, overflowed: true };
   }
-  return { width: ellipsisWidth, text: ELLIPSIS_GLYPH, shift, overflowed: true };
+  return {
+    width: ellipsisWidth,
+    text: ELLIPSIS_GLYPH,
+    shift,
+    overflowed: true,
+  };
 }
 
-function toTextBlockLayout(lines: PreparedInlineLineRange[], prepared: PreparedTextWithSegments, shift: number): TextBlockLayout {
+function toTextBlockLayout(
+  lines: PreparedInlineLineRange[],
+  prepared: PreparedTextWithSegments,
+  shift: number,
+): TextBlockLayout {
   const mappedLines: TextLayout[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]!;
@@ -144,8 +153,14 @@ function collectEllipsisLayout<C extends CanvasRenderingContext2D>(
   }
   const { prefixCount, suffixCount, width } = selection;
 
-  const prefixText = atoms.slice(0, prefixCount).map((atom) => atom.text).join("");
-  const suffixText = atoms.slice(atoms.length - suffixCount).map((atom) => atom.text).join("");
+  const prefixText = atoms
+    .slice(0, prefixCount)
+    .map((atom) => atom.text)
+    .join("");
+  const suffixText = atoms
+    .slice(atoms.length - suffixCount)
+    .map((atom) => atom.text)
+    .join("");
 
   return {
     width,
@@ -160,15 +175,23 @@ function collectEllipsisLayout<C extends CanvasRenderingContext2D>(
   };
 }
 
-function getFirstLineRange(prepared: PreparedTextWithSegments): PreparedInlineLineRange | undefined {
+function getFirstLineRange(
+  prepared: PreparedTextWithSegments,
+): PreparedInlineLineRange | undefined {
   const start = getPreparedLineStart(prepared);
   if (start == null) {
     return undefined;
   }
-  return layoutNextPreparedLine(prepared, start, Number.POSITIVE_INFINITY) ?? undefined;
+  return (
+    layoutNextPreparedLine(prepared, start, Number.POSITIVE_INFINITY) ??
+    undefined
+  );
 }
 
-function walkLines(prepared: PreparedTextWithSegments, maxWidth: number): PreparedInlineLineRange[] {
+function walkLines(
+  prepared: PreparedTextWithSegments,
+  maxWidth: number,
+): PreparedInlineLineRange[] {
   const lines: PreparedInlineLineRange[] = [];
   walkPreparedLineRanges(prepared, maxWidth, (line) => {
     lines.push(line);
@@ -250,7 +273,14 @@ function layoutForcedEllipsizedLine<C extends CanvasRenderingContext2D>(
   maxWidth: number,
   shift: number,
 ): OverflowTextLayout {
-  return collectEllipsisLayout(ctx, flattenPreparedLineAtoms(prepared, line), maxWidth, shift, "end", true);
+  return collectEllipsisLayout(
+    ctx,
+    flattenPreparedLineAtoms(prepared, line),
+    maxWidth,
+    shift,
+    "end",
+    true,
+  );
 }
 
 export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
@@ -259,7 +289,12 @@ export function layoutFirstLineIntrinsic<C extends CanvasRenderingContext2D>(
   whiteSpace: TextWhiteSpaceMode = "normal",
   wordBreak: TextWordBreakMode = "normal",
 ): TextLayout {
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const line = getFirstLineRange(prepared);
   if (line == null) {
     return { width: 0, text: "", shift: 0 };
@@ -277,8 +312,16 @@ export function measureTextIntrinsic<C extends CanvasRenderingContext2D>(
   whiteSpace: TextWhiteSpaceMode = "normal",
   wordBreak: TextWordBreakMode = "normal",
 ): TextMeasurement {
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
-  const { maxLineWidth: width, lineCount } = measurePreparedLineStats(prepared, Number.POSITIVE_INFINITY);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
+  const { maxLineWidth: width, lineCount } = measurePreparedLineStats(
+    prepared,
+    Number.POSITIVE_INFINITY,
+  );
   return { width, lineCount };
 }
 
@@ -288,7 +331,12 @@ export function layoutTextIntrinsic<C extends CanvasRenderingContext2D>(
   whiteSpace: TextWhiteSpaceMode = "normal",
   wordBreak: TextWordBreakMode = "normal",
 ): TextBlockLayout {
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const lines = walkLines(prepared, Number.POSITIVE_INFINITY);
   return toTextBlockLayout(lines, prepared, measureFontShift(ctx));
 }
@@ -305,7 +353,12 @@ export function layoutFirstLine<C extends CanvasRenderingContext2D>(
   if (clampedMaxWidth === 0) {
     return { width: 0, text: "", shift };
   }
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const start = getPreparedLineStart(prepared);
   if (start == null) {
     return { width: 0, text: "", shift };
@@ -335,7 +388,12 @@ export function layoutEllipsizedFirstLine<C extends CanvasRenderingContext2D>(
     return { width: 0, text: "", shift, overflowed: true };
   }
 
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const intrinsicLine = getFirstLineRange(prepared);
   if (intrinsicLine == null) {
     return { width: 0, text: "", shift: 0, overflowed: false };
@@ -360,8 +418,16 @@ export function measureText<C extends CanvasRenderingContext2D>(
   if (clampedMaxWidth === 0) {
     return { width: 0, lineCount: 0 };
   }
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
-  const { maxLineWidth: width, lineCount } = measurePreparedLineStats(prepared, clampedMaxWidth);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
+  const { maxLineWidth: width, lineCount } = measurePreparedLineStats(
+    prepared,
+    clampedMaxWidth,
+  );
   return { width, lineCount };
 }
 
@@ -372,12 +438,20 @@ export function measureTextMinContent<C extends CanvasRenderingContext2D>(
   wordBreak: TextWordBreakMode = "normal",
   overflowWrap: TextOverflowWrapMode = "break-word",
 ): TextMeasurement {
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const width = measurePreparedMinContentWidth(prepared, overflowWrap);
   if (width === 0) {
     return { width: 0, lineCount: 0 };
   }
-  const { lineCount } = measurePreparedLineStats(prepared, Math.max(width, MIN_CONTENT_WIDTH_EPSILON));
+  const { lineCount } = measurePreparedLineStats(
+    prepared,
+    Math.max(width, MIN_CONTENT_WIDTH_EPSILON),
+  );
   return { width, lineCount };
 }
 
@@ -392,7 +466,12 @@ export function layoutText<C extends CanvasRenderingContext2D>(
   if (clampedMaxWidth === 0) {
     return { width: 0, lines: [] };
   }
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const lines = walkLines(prepared, clampedMaxWidth);
   return toTextBlockLayout(lines, prepared, measureFontShift(ctx));
 }
@@ -414,7 +493,12 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
   const overflow = options.overflow ?? "clip";
   const normalizedMaxLines = normalizeMaxLines(options.maxLines);
 
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const shift = measureFontShift(ctx);
   if (normalizedMaxLines == null) {
     const lines = walkLines(prepared, clampedMaxWidth);
@@ -426,7 +510,11 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
     };
   }
 
-  const { lines: visibleRanges, overflowed } = collectVisibleLines(prepared, clampedMaxWidth, normalizedMaxLines);
+  const { lines: visibleRanges, overflowed } = collectVisibleLines(
+    prepared,
+    clampedMaxWidth,
+    normalizedMaxLines,
+  );
   if (!overflowed) {
     const layout = toTextBlockLayout(visibleRanges, prepared, shift);
     return {
@@ -451,14 +539,18 @@ export function layoutTextWithOverflow<C extends CanvasRenderingContext2D>(
   }
 
   const lastVisibleRange = visibleRanges[visibleRanges.length - 1];
-  const ellipsizedLastLine = lastVisibleRange == null
-    ? createEllipsisOnlyLayout(ctx, clampedMaxWidth, shift)
-    : collectEndEllipsisLayoutFromCursor(ctx, prepared, lastVisibleRange.start, clampedMaxWidth, shift);
+  const ellipsizedLastLine =
+    lastVisibleRange == null
+      ? createEllipsisOnlyLayout(ctx, clampedMaxWidth, shift)
+      : collectEndEllipsisLayoutFromCursor(
+          ctx,
+          prepared,
+          lastVisibleRange.start,
+          clampedMaxWidth,
+          shift,
+        );
 
-  const mergedLines = [
-    ...visibleLines.slice(0, -1),
-    ellipsizedLastLine,
-  ];
+  const mergedLines = [...visibleLines.slice(0, -1), ellipsizedLastLine];
   return {
     width: measureTextLayoutWidth(mergedLines),
     lines: mergedLines,
@@ -472,6 +564,11 @@ export function measureTextNaturalWidth<C extends CanvasRenderingContext2D>(
   whiteSpace: TextWhiteSpaceMode = "normal",
   wordBreak: TextWordBreakMode = "normal",
 ): number {
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   return measurePreparedNaturalWidth(prepared);
 }

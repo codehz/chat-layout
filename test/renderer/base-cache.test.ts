@@ -2,18 +2,35 @@ import { describe, expect, test } from "bun:test";
 
 import { Fixed, Flex, Place } from "../../src/nodes";
 import { BaseRenderer } from "../../src/renderer";
-import { registerNodeParent, unregisterNodeParent } from "../../src/internal/node-registry";
-import type { Box, Context, HitTest, LayoutConstraints, Node } from "../../src/types";
+import {
+  registerNodeParent,
+  unregisterNodeParent,
+} from "../../src/internal/node-registry";
+import type {
+  Box,
+  Context,
+  HitTest,
+  LayoutConstraints,
+  Node,
+} from "../../src/types";
 import { createTextGraphics } from "../helpers/graphics";
 
 type C = CanvasRenderingContext2D;
 
 function createMutableGraphics(width: number): C {
   const canvas = { clientWidth: width, clientHeight: 100 };
-  return { canvas, textRendering: "auto", clearRect() {}, save() {}, restore() {} } as unknown as C;
+  return {
+    canvas,
+    textRendering: "auto",
+    clearRect() {},
+    save() {},
+    restore() {},
+  } as unknown as C;
 }
 
-function createConstraintAwareNode(measureFn: (constraints: LayoutConstraints | undefined) => Box): Node<C> {
+function createConstraintAwareNode(
+  measureFn: (constraints: LayoutConstraints | undefined) => Box,
+): Node<C> {
   return {
     measure(ctx: Context<C>): Box {
       return measureFn(ctx.constraints);

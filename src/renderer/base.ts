@@ -1,4 +1,7 @@
-import { forEachNodeAncestor, getNodeRevision } from "../internal/node-registry";
+import {
+  forEachNodeAncestor,
+  getNodeRevision,
+} from "../internal/node-registry";
 import type {
   Box,
   Context,
@@ -14,8 +17,15 @@ import { shallow } from "../utils";
 const MAX_CONSTRAINT_VARIANTS = 8;
 
 type LayoutCacheAccess<C extends CanvasRenderingContext2D> = {
-  getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined;
-  setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void;
+  getLayoutResult(
+    node: Node<C>,
+    constraints?: LayoutConstraints,
+  ): FlexLayoutResult<C> | undefined;
+  setLayoutResult(
+    node: Node<C>,
+    result: FlexLayoutResult<C>,
+    constraints?: LayoutConstraints,
+  ): void;
 };
 
 type TextLayoutCacheAccess<C extends CanvasRenderingContext2D> = {
@@ -38,7 +48,9 @@ type TextLayoutCacheEntry = {
   layout: unknown;
 };
 
-type RendererContext<C extends CanvasRenderingContext2D> = Context<C> & LayoutCacheAccess<C> & TextLayoutCacheAccess<C>;
+type RendererContext<C extends CanvasRenderingContext2D> = Context<C> &
+  LayoutCacheAccess<C> &
+  TextLayoutCacheAccess<C>;
 
 function constraintKey(constraints: LayoutConstraints | undefined): string {
   if (constraints == null) return "";
@@ -48,7 +60,10 @@ function constraintKey(constraints: LayoutConstraints | undefined): string {
 /**
  * Base renderer that provides measurement, layout caching, and drawing helpers.
  */
-export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}> {
+export class BaseRenderer<
+  C extends CanvasRenderingContext2D,
+  O extends {} = {},
+> {
   /** Canvas rendering context used by this renderer. */
   graphics: C;
   #ctx: RendererContext<C>;
@@ -80,7 +95,11 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
       getLayoutResult(node: Node<C>, constraints?: LayoutConstraints) {
         return self.getLayoutResult(node, constraints);
       },
-      setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints) {
+      setLayoutResult(
+        node: Node<C>,
+        result: FlexLayoutResult<C>,
+        constraints?: LayoutConstraints,
+      ) {
         self.setLayoutResult(node, result, constraints);
       },
       getTextLayout<T>(node: Node<C>, key: string) {
@@ -110,8 +129,14 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
 
   #clearAllCaches(): void {
     this.#cache = new WeakMap<Node<C>, Map<string, BoxCacheEntry>>();
-    this.#layoutCache = new WeakMap<Node<C>, Map<string, LayoutCacheEntry<C>>>();
-    this.#textLayoutCache = new WeakMap<Node<C>, Map<string, TextLayoutCacheEntry>>();
+    this.#layoutCache = new WeakMap<
+      Node<C>,
+      Map<string, LayoutCacheEntry<C>>
+    >();
+    this.#textLayoutCache = new WeakMap<
+      Node<C>,
+      Map<string, TextLayoutCacheEntry>
+    >();
   }
 
   #syncCachesToViewportWidth(): void {
@@ -167,7 +192,10 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   /**
    * Returns the cached layout result for a node under the given constraints, if available.
    */
-  getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined {
+  getLayoutResult(
+    node: Node<C>,
+    constraints?: LayoutConstraints,
+  ): FlexLayoutResult<C> | undefined {
     this.#syncCachesToViewportWidth();
     const nodeCache = this.#layoutCache.get(node);
     if (nodeCache == null) {
@@ -188,7 +216,11 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
   /**
    * Stores a layout result for later draw and hit-test passes.
    */
-  setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void {
+  setLayoutResult(
+    node: Node<C>,
+    result: FlexLayoutResult<C>,
+    constraints?: LayoutConstraints,
+  ): void {
     this.#syncCachesToViewportWidth();
     let nodeCache = this.#layoutCache.get(node);
     if (nodeCache == null) {
@@ -280,12 +312,15 @@ export class BaseRenderer<C extends CanvasRenderingContext2D, O extends {} = {}>
 /**
  * Immediate-mode renderer for a single root node.
  */
-export class DebugRenderer<C extends CanvasRenderingContext2D> extends BaseRenderer<C> {
+export class DebugRenderer<
+  C extends CanvasRenderingContext2D,
+> extends BaseRenderer<C> {
   /**
    * Clears the viewport and draws the provided root node.
    */
   draw(node: Node<C>): boolean {
-    const { clientWidth: viewportWidth, clientHeight: viewportHeight } = this.graphics.canvas;
+    const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
+      this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
     return this.drawRootNode(node);
   }

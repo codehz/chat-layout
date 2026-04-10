@@ -9,7 +9,10 @@ let sharedGraphemeSegmenter: Intl.Segmenter | null | undefined;
 const fontShiftCache = new Map<string, number>();
 const ellipsisWidthCache = new Map<string, number>();
 
-export function readLruValue<T>(cache: Map<string, T>, key: string): T | undefined {
+export function readLruValue<T>(
+  cache: Map<string, T>,
+  key: string,
+): T | undefined {
   const cached = cache.get(key);
   if (cached == null) {
     return undefined;
@@ -19,7 +22,12 @@ export function readLruValue<T>(cache: Map<string, T>, key: string): T | undefin
   return cached;
 }
 
-export function writeLruValue<T>(cache: Map<string, T>, key: string, value: T, capacity: number): T {
+export function writeLruValue<T>(
+  cache: Map<string, T>,
+  key: string,
+  value: T,
+  capacity: number,
+): T {
   if (cache.has(key)) {
     cache.delete(key);
   } else if (cache.size >= capacity) {
@@ -32,7 +40,9 @@ export function writeLruValue<T>(cache: Map<string, T>, key: string, value: T, c
   return value;
 }
 
-export function measureFontShift<C extends CanvasRenderingContext2D>(ctx: Context<C>): number {
+export function measureFontShift<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+): number {
   const font = ctx.graphics.font;
   const cached = fontShiftCache.get(font);
   if (cached != null) {
@@ -47,7 +57,9 @@ export function measureFontShift<C extends CanvasRenderingContext2D>(ctx: Contex
   return shift;
 }
 
-export function measureEllipsisWidth<C extends CanvasRenderingContext2D>(ctx: Context<C>): number {
+export function measureEllipsisWidth<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+): number {
   const font = ctx.graphics.font;
   const cached = ellipsisWidthCache.get(font);
   if (cached != null) {
@@ -62,9 +74,10 @@ function getGraphemeSegmenter(): Intl.Segmenter | null {
   if (sharedGraphemeSegmenter !== undefined) {
     return sharedGraphemeSegmenter;
   }
-  sharedGraphemeSegmenter = typeof Intl.Segmenter === "function"
-    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
-    : null;
+  sharedGraphemeSegmenter =
+    typeof Intl.Segmenter === "function"
+      ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+      : null;
   return sharedGraphemeSegmenter;
 }
 
@@ -100,7 +113,10 @@ export function buildSuffixWidths(widths: readonly number[]): number[] {
   return cumulativeWidths;
 }
 
-export function findMaxFittingCount(cumulativeWidths: readonly number[], maxWidth: number): number {
+export function findMaxFittingCount(
+  cumulativeWidths: readonly number[],
+  maxWidth: number,
+): number {
   if (maxWidth <= 0) {
     return 0;
   }
@@ -117,7 +133,9 @@ export function findMaxFittingCount(cumulativeWidths: readonly number[], maxWidt
   return low;
 }
 
-export function normalizeMaxLines(maxLines: number | undefined): number | undefined {
+export function normalizeMaxLines(
+  maxLines: number | undefined,
+): number | undefined {
   if (maxLines == null || !Number.isFinite(maxLines)) {
     return undefined;
   }
@@ -144,25 +162,38 @@ export function selectEllipsisUnitCounts({
 
   switch (position) {
     case "start":
-      suffixCount = Math.min(unitCount, findMaxFittingCount(suffixWidths, availableWidth));
+      suffixCount = Math.min(
+        unitCount,
+        findMaxFittingCount(suffixWidths, availableWidth),
+      );
       break;
     case "middle": {
       let bestVisibleUnits = -1;
       let bestBalanceScore = Number.NEGATIVE_INFINITY;
-      for (let nextPrefixCount = 0; nextPrefixCount <= unitCount; nextPrefixCount += 1) {
+      for (
+        let nextPrefixCount = 0;
+        nextPrefixCount <= unitCount;
+        nextPrefixCount += 1
+      ) {
         const prefixWidth = prefixWidths[nextPrefixCount] ?? 0;
         if (prefixWidth > availableWidth) {
           break;
         }
         const remainingWidth = availableWidth - prefixWidth;
         const maxSuffixCount = Math.max(0, getMaxSuffixCount(nextPrefixCount));
-        const nextSuffixCount = Math.min(maxSuffixCount, findMaxFittingCount(suffixWidths, remainingWidth));
+        const nextSuffixCount = Math.min(
+          maxSuffixCount,
+          findMaxFittingCount(suffixWidths, remainingWidth),
+        );
         const visibleUnits = nextPrefixCount + nextSuffixCount;
         const balanceScore = -Math.abs(nextPrefixCount - nextSuffixCount);
         if (
           visibleUnits > bestVisibleUnits ||
-          (visibleUnits === bestVisibleUnits && balanceScore > bestBalanceScore) ||
-          (visibleUnits === bestVisibleUnits && balanceScore === bestBalanceScore && nextPrefixCount > prefixCount)
+          (visibleUnits === bestVisibleUnits &&
+            balanceScore > bestBalanceScore) ||
+          (visibleUnits === bestVisibleUnits &&
+            balanceScore === bestBalanceScore &&
+            nextPrefixCount > prefixCount)
         ) {
           prefixCount = nextPrefixCount;
           suffixCount = nextSuffixCount;
@@ -173,7 +204,10 @@ export function selectEllipsisUnitCounts({
       break;
     }
     case "end":
-      prefixCount = Math.min(unitCount, findMaxFittingCount(prefixWidths, availableWidth));
+      prefixCount = Math.min(
+        unitCount,
+        findMaxFittingCount(prefixWidths, availableWidth),
+      );
       break;
   }
 
@@ -205,11 +239,14 @@ export function resolveEllipsisSelection({
     availableWidth: Math.max(0, maxWidth - ellipsisWidth),
   });
 
-  const width = position === "start"
-    ? ellipsisWidth + (suffixWidths[suffixCount] ?? 0)
-    : position === "middle"
-      ? (prefixWidths[prefixCount] ?? 0) + ellipsisWidth + (suffixWidths[suffixCount] ?? 0)
-      : (prefixWidths[prefixCount] ?? 0) + ellipsisWidth;
+  const width =
+    position === "start"
+      ? ellipsisWidth + (suffixWidths[suffixCount] ?? 0)
+      : position === "middle"
+        ? (prefixWidths[prefixCount] ?? 0) +
+          ellipsisWidth +
+          (suffixWidths[suffixCount] ?? 0)
+        : (prefixWidths[prefixCount] ?? 0) + ellipsisWidth;
 
   return { prefixCount, suffixCount, width };
 }

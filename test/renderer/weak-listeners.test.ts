@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { emitWeakListeners, pruneWeakListenerMap, type WeakListenerRecord } from "../../src/renderer/weak-listeners";
+import {
+  emitWeakListeners,
+  pruneWeakListenerMap,
+  type WeakListenerRecord,
+} from "../../src/renderer/weak-listeners";
 
 function createFakeRef<T extends object>(initial: T | undefined) {
   let current = initial;
@@ -23,7 +27,10 @@ describe("weak listeners", () => {
     const liveRef = createFakeRef(liveOwner);
     const deadRef = createFakeRef(deadOwner);
     const seen: string[] = [];
-    const listeners = new Map<symbol, WeakListenerRecord<{ id: string }, string>>([
+    const listeners = new Map<
+      symbol,
+      WeakListenerRecord<{ id: string }, string>
+    >([
       [
         Symbol("live"),
         {
@@ -56,7 +63,10 @@ describe("weak listeners", () => {
     const secondOwner = { id: "second" };
     const firstRef = createFakeRef(firstOwner);
     const secondRef = createFakeRef(secondOwner);
-    const listeners = new Map<symbol, WeakListenerRecord<{ id: string }, string>>([
+    const listeners = new Map<
+      symbol,
+      WeakListenerRecord<{ id: string }, string>
+    >([
       [
         Symbol("first"),
         {

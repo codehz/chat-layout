@@ -1,10 +1,22 @@
 import { describe, expect, test } from "bun:test";
 
 import { Fixed, Flex, FlexItem, MultilineText, Place } from "../../src/nodes";
-import { BaseRenderer, ChatRenderer, DebugRenderer, ListState, TimelineRenderer } from "../../src/renderer";
+import {
+  BaseRenderer,
+  ChatRenderer,
+  DebugRenderer,
+  ListState,
+  TimelineRenderer,
+} from "../../src/renderer";
 import type { Node } from "../../src/types";
-import { createTextGraphics, ensureMockOffscreenCanvas } from "../helpers/graphics";
-import { ConstraintTestRenderer, createTextNode } from "../helpers/renderer-fixtures";
+import {
+  createTextGraphics,
+  ensureMockOffscreenCanvas,
+} from "../helpers/graphics";
+import {
+  ConstraintTestRenderer,
+  createTextNode,
+} from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
 
@@ -137,7 +149,13 @@ describe("layout context", () => {
     renderer.drawNode(node, { maxWidth: 200 });
     expect(drawXs.at(-1)).toBe(180);
 
-    expect(renderer.hittestNode(node, { x: 190, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
+    expect(
+      renderer.hittestNode(
+        node,
+        { x: 190, y: 10, type: "click" },
+        { maxWidth: 200 },
+      ),
+    ).toBe(true);
     expect(hitXs.at(-1)).toBe(10);
   });
 
@@ -161,12 +179,12 @@ describe("layout context", () => {
     const nested = new Place<C>(tail, {
       align: "end",
     });
-    const root = new Flex<C>([
-      new Fixed(30, 20),
-      new FlexItem(nested, { grow: 1 }),
-    ], {
-      direction: "row",
-    });
+    const root = new Flex<C>(
+      [new Fixed(30, 20), new FlexItem(nested, { grow: 1 })],
+      {
+        direction: "row",
+      },
+    );
     const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
 
     renderer.measureNode(root, { maxWidth: 200 });
@@ -175,40 +193,49 @@ describe("layout context", () => {
     renderer.drawNode(root, { maxWidth: 200 });
     expect(drawXs.at(-1)).toBe(180);
 
-    expect(renderer.hittestNode(root, { x: 190, y: 10, type: "click" }, { maxWidth: 200 })).toBe(true);
+    expect(
+      renderer.hittestNode(
+        root,
+        { x: 190, y: 10, type: "click" },
+        { maxWidth: 200 },
+      ),
+    ).toBe(true);
     expect(hitXs.at(-1)).toBe(10);
   });
 
   test("draw walks all siblings even when an earlier child requests redraw", () => {
     const drawOrder: string[] = [];
-    const root = new Flex<C>([
+    const root = new Flex<C>(
+      [
+        {
+          measure() {
+            return { width: 20, height: 20 };
+          },
+          draw() {
+            drawOrder.push("first");
+            return true;
+          },
+          hittest() {
+            return false;
+          },
+        },
+        {
+          measure() {
+            return { width: 20, height: 20 };
+          },
+          draw() {
+            drawOrder.push("second");
+            return false;
+          },
+          hittest() {
+            return false;
+          },
+        },
+      ],
       {
-        measure() {
-          return { width: 20, height: 20 };
-        },
-        draw() {
-          drawOrder.push("first");
-          return true;
-        },
-        hittest() {
-          return false;
-        },
+        direction: "row",
       },
-      {
-        measure() {
-          return { width: 20, height: 20 };
-        },
-        draw() {
-          drawOrder.push("second");
-          return false;
-        },
-        hittest() {
-          return false;
-        },
-      },
-    ], {
-      direction: "row",
-    });
+    );
     const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
 
     renderer.measureNode(root, { maxWidth: 200 });
@@ -239,12 +266,12 @@ describe("layout context", () => {
       },
     };
 
-    const root = new Flex<C>([
-      new Fixed(20, 20),
-      new FlexItem(tail, { shrink: 1 }),
-    ], {
-      direction: "row",
-    });
+    const root = new Flex<C>(
+      [new Fixed(20, 20), new FlexItem(tail, { shrink: 1 })],
+      {
+        direction: "row",
+      },
+    );
     const renderer = new ConstraintTestRenderer(createTextGraphics(), {});
     const constraints = { maxWidth: 60 };
 
@@ -259,13 +286,18 @@ describe("layout context", () => {
 
   test("text nodes measure safely across multiple constraint variants", () => {
     const renderer = new BaseRenderer(createTextGraphics(), {});
-    const singleLine = createTextNode("alpha beta gamma delta epsilon zeta eta theta");
-    const multiLine = new MultilineText<C>("alpha beta gamma delta epsilon zeta eta theta\niota kappa lambda mu nu xi omicron", {
-      align: "start",
-      lineHeight: 20,
-      font: "16px sans-serif",
-      color: "#000",
-    });
+    const singleLine = createTextNode(
+      "alpha beta gamma delta epsilon zeta eta theta",
+    );
+    const multiLine = new MultilineText<C>(
+      "alpha beta gamma delta epsilon zeta eta theta\niota kappa lambda mu nu xi omicron",
+      {
+        align: "start",
+        lineHeight: 20,
+        font: "16px sans-serif",
+        color: "#000",
+      },
+    );
 
     const wideSingle = renderer.measureNode(singleLine, { maxWidth: 200 });
     const narrowSingle = renderer.measureNode(singleLine, { maxWidth: 60 });

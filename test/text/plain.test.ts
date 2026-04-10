@@ -89,7 +89,9 @@ describe("plain text metrics", () => {
       width: layout.width,
       lineCount: layout.lines.length,
     });
-    expect(layout.lines.every((line) => line.text.trim().length > 0)).toBe(true);
+    expect(layout.lines.every((line) => line.text.trim().length > 0)).toBe(
+      true,
+    );
   });
 
   test("pre-wrap min-content measurement uses the longest token and preserves blank lines", () => {
@@ -106,7 +108,9 @@ describe("plain text metrics", () => {
       },
     } as Context<C>;
 
-    expect(measureTextMinContent(ctx, "alpha beta\n\ngamma delta", "pre-wrap")).toEqual({
+    expect(
+      measureTextMinContent(ctx, "alpha beta\n\ngamma delta", "pre-wrap"),
+    ).toEqual({
       width: 40,
       lineCount: 5,
     });
@@ -146,7 +150,9 @@ describe("plain text metrics", () => {
       },
     } as Context<C>;
 
-    expect(measureTextMinContent(ctx, "abcdefghij", "normal", "normal", "anywhere")).toEqual({
+    expect(
+      measureTextMinContent(ctx, "abcdefghij", "normal", "normal", "anywhere"),
+    ).toEqual({
       width: 8,
       lineCount: 10,
     });
@@ -166,7 +172,9 @@ describe("plain text metrics", () => {
       },
     } as Context<C>;
 
-    expect(measureTextMinContent(ctx, "  alpha beta  \n \n  gamma ", "normal")).toEqual({
+    expect(
+      measureTextMinContent(ctx, "  alpha beta  \n \n  gamma ", "normal"),
+    ).toEqual({
       width: 40,
       lineCount: 3,
     });
@@ -176,29 +184,29 @@ describe("plain text metrics", () => {
     const ctx = createMeasuredContext("16px keep-all-layout");
     const text = "你好，世界你好";
 
-    expect(layoutText(ctx, text, 16, "normal", "normal").lines.map((line) => line.text)).toEqual([
-      "你",
-      "好，",
-      "世界",
-      "你好",
-    ]);
-    expect(layoutText(ctx, text, 16, "normal", "keep-all").lines.map((line) => line.text)).toEqual([
-      "你好",
-      "，",
-      "世界",
-      "你好",
-    ]);
+    expect(
+      layoutText(ctx, text, 16, "normal", "normal").lines.map(
+        (line) => line.text,
+      ),
+    ).toEqual(["你", "好，", "世界", "你好"]);
+    expect(
+      layoutText(ctx, text, 16, "normal", "keep-all").lines.map(
+        (line) => line.text,
+      ),
+    ).toEqual(["你好", "，", "世界", "你好"]);
   });
 
   test("keep-all affects overflow truncation the same way as constrained line breaking", () => {
     const ctx = createMeasuredContext("16px keep-all-overflow");
     const text = "你好，世界你好";
 
-    expect(layoutTextWithOverflow(ctx, text, 16, {
-      overflow: "ellipsis",
-      maxLines: 2,
-      wordBreak: "keep-all",
-    })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, text, 16, {
+        overflow: "ellipsis",
+        maxLines: 2,
+        wordBreak: "keep-all",
+      }),
+    ).toEqual({
       width: 16,
       lines: [
         { width: 16, text: "你好", shift: 6, overflowed: false },
@@ -214,8 +222,17 @@ describe("plain text metrics", () => {
     const measured = measureText(ctx, text, 40, "pre-wrap");
     const layout = layoutText(ctx, text, 40, "pre-wrap");
 
-    expect(measured).toEqual({ width: layout.width, lineCount: layout.lines.length });
-    expect(layout.lines.map((line) => line.text)).toEqual(["hello ", "world", "  foo ", "bar ", "baz"]);
+    expect(measured).toEqual({
+      width: layout.width,
+      lineCount: layout.lines.length,
+    });
+    expect(layout.lines.map((line) => line.text)).toEqual([
+      "hello ",
+      "world",
+      "  foo ",
+      "bar ",
+      "baz",
+    ]);
   });
 
   test("pre-wrap constrained layout keeps repeated spaces inside wrapped lines", () => {
@@ -223,7 +240,12 @@ describe("plain text metrics", () => {
     const text = "a  a  a\n  a  a";
     const layout = layoutText(ctx, text, 40, "pre-wrap");
 
-    expect(layout.lines.map((line) => line.text)).toEqual(["a  a  ", "a", "  a  ", "a"]);
+    expect(layout.lines.map((line) => line.text)).toEqual([
+      "a  a  ",
+      "a",
+      "  a  ",
+      "a",
+    ]);
   });
 
   test("single-line end ellipsis keeps the visible prefix within maxWidth", () => {
@@ -302,12 +324,22 @@ describe("plain text metrics", () => {
   test("multiline overflow ellipsis rewrites the last visible line only when truncated", () => {
     const ctx = createMeasuredContext("16px multiline-ellipsis");
 
-    expect(layoutTextWithOverflow(ctx, "abcdefghij", 40, { overflow: "ellipsis", maxLines: 1 })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, "abcdefghij", 40, {
+        overflow: "ellipsis",
+        maxLines: 1,
+      }),
+    ).toEqual({
       width: 40,
       lines: [{ width: 40, text: "abcd…", shift: 6, overflowed: true }],
       overflowed: true,
     });
-    expect(layoutTextWithOverflow(ctx, "abcdefghij", 40, { overflow: "ellipsis", maxLines: 3 })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, "abcdefghij", 40, {
+        overflow: "ellipsis",
+        maxLines: 3,
+      }),
+    ).toEqual({
       width: 40,
       lines: [
         { width: 40, text: "abcde", shift: 6, overflowed: false },
@@ -320,7 +352,9 @@ describe("plain text metrics", () => {
   test("multiline maxLines clips without ellipsis when overflow stays in clip mode", () => {
     const ctx = createMeasuredContext("16px multiline-clip");
 
-    expect(layoutTextWithOverflow(ctx, "abcdefghij", 40, { maxLines: 1 })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, "abcdefghij", 40, { maxLines: 1 }),
+    ).toEqual({
       width: 40,
       lines: [{ width: 40, text: "abcde", shift: 6, overflowed: false }],
       overflowed: true,
@@ -330,7 +364,12 @@ describe("plain text metrics", () => {
   test("multiline ellipsis clamps maxLines values below one to a single visible line", () => {
     const ctx = createMeasuredContext("16px multiline-clamp");
 
-    expect(layoutTextWithOverflow(ctx, "abcdefghijklmno", 40, { overflow: "ellipsis", maxLines: 0 })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, "abcdefghijklmno", 40, {
+        overflow: "ellipsis",
+        maxLines: 0,
+      }),
+    ).toEqual({
       width: 40,
       lines: [{ width: 40, text: "abcd…", shift: 6, overflowed: true }],
       overflowed: true,
@@ -340,7 +379,12 @@ describe("plain text metrics", () => {
   test("multiline ellipsis truncates the last visible line for maxLines=2", () => {
     const ctx = createMeasuredContext("16px multiline-two-lines");
 
-    expect(layoutTextWithOverflow(ctx, "abcdefghijklmno", 40, { overflow: "ellipsis", maxLines: 2 })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, "abcdefghijklmno", 40, {
+        overflow: "ellipsis",
+        maxLines: 2,
+      }),
+    ).toEqual({
       width: 40,
       lines: [
         { width: 40, text: "abcde", shift: 6, overflowed: false },
@@ -353,11 +397,13 @@ describe("plain text metrics", () => {
   test("normal ellipsis collapses blank lines before applying maxLines", () => {
     const ctx = createMeasuredContext("16px multiline-normal-ellipsis");
 
-    expect(layoutTextWithOverflow(ctx, "  alpha beta  \n \n  gamma delta  ", 40, {
-      overflow: "ellipsis",
-      maxLines: 1,
-      whiteSpace: "normal",
-    })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, "  alpha beta  \n \n  gamma delta  ", 40, {
+        overflow: "ellipsis",
+        maxLines: 1,
+        whiteSpace: "normal",
+      }),
+    ).toEqual({
       width: 40,
       lines: [{ width: 40, text: "alph…", shift: 6, overflowed: true }],
       overflowed: true,
@@ -367,7 +413,12 @@ describe("plain text metrics", () => {
   test("multiline ellipsis never returns an over-wide last line in ultra-narrow constraints", () => {
     const ctx = createMeasuredContext("16px multiline-tight");
 
-    expect(layoutTextWithOverflow(ctx, "alphabet", 4, { overflow: "ellipsis", maxLines: 1 })).toEqual({
+    expect(
+      layoutTextWithOverflow(ctx, "alphabet", 4, {
+        overflow: "ellipsis",
+        maxLines: 1,
+      }),
+    ).toEqual({
       width: 0,
       lines: [{ width: 0, text: "", shift: 6, overflowed: true }],
       overflowed: true,

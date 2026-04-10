@@ -20,7 +20,9 @@ const LINE_FIT_EPSILON = 0.005;
 const PREPARED_INLINE_CACHE_CAPACITY = 512;
 const PREPARED_LINE_STATS_CACHE_CAPACITY = 16;
 
-type MeasureContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+type MeasureContext =
+  | CanvasRenderingContext2D
+  | OffscreenCanvasRenderingContext2D;
 
 type SourceItem = {
   text: string;
@@ -119,7 +121,7 @@ const kinsokuStart = new Set([
 ]);
 
 const kinsokuEnd = new Set([
-  "\"",
+  '"',
   "(",
   "[",
   "{",
@@ -160,7 +162,7 @@ const leftStickyPunctuation = new Set([
   "]",
   "}",
   "%",
-  "\"",
+  '"',
   "”",
   "’",
   "»",
@@ -168,12 +170,7 @@ const leftStickyPunctuation = new Set([
   "…",
 ]);
 
-const keepAllGlueChars = new Set([
-  "\u00A0",
-  "\u202F",
-  "\u2060",
-  "\uFEFF",
-]);
+const keepAllGlueChars = new Set(["\u00A0", "\u202F", "\u2060", "\uFEFF"]);
 
 const closingQuoteChars = new Set([
   "”",
@@ -186,24 +183,24 @@ const closingQuoteChars = new Set([
 ]);
 
 const cjkCodePointRanges: Array<[number, number]> = [
-  [0x4E00, 0x9FFF],
-  [0x3400, 0x4DBF],
-  [0x20000, 0x2A6DF],
-  [0x2A700, 0x2B73F],
-  [0x2B740, 0x2B81F],
-  [0x2B820, 0x2CEAF],
-  [0x2CEB0, 0x2EBEF],
-  [0x2EBF0, 0x2EE5D],
-  [0x2F800, 0x2FA1F],
-  [0x30000, 0x3134F],
-  [0x31350, 0x323AF],
-  [0x323B0, 0x33479],
-  [0xF900, 0xFAFF],
-  [0x3000, 0x303F],
-  [0x3040, 0x309F],
-  [0x30A0, 0x30FF],
-  [0xAC00, 0xD7AF],
-  [0xFF00, 0xFFEF],
+  [0x4e00, 0x9fff],
+  [0x3400, 0x4dbf],
+  [0x20000, 0x2a6df],
+  [0x2a700, 0x2b73f],
+  [0x2b740, 0x2b81f],
+  [0x2b820, 0x2ceaf],
+  [0x2ceb0, 0x2ebef],
+  [0x2ebf0, 0x2ee5d],
+  [0x2f800, 0x2fa1f],
+  [0x30000, 0x3134f],
+  [0x31350, 0x323af],
+  [0x323b0, 0x33479],
+  [0xf900, 0xfaff],
+  [0x3000, 0x303f],
+  [0x3040, 0x309f],
+  [0x30a0, 0x30ff],
+  [0xac00, 0xd7af],
+  [0xff00, 0xffef],
 ];
 
 let sharedMeasureContext: MeasureContext | null = null;
@@ -229,7 +226,9 @@ function getMeasureContext(): MeasureContext {
       return ctx;
     }
   }
-  throw new Error("Text measurement requires OffscreenCanvas or a DOM canvas context.");
+  throw new Error(
+    "Text measurement requires OffscreenCanvas or a DOM canvas context.",
+  );
 }
 
 function getTextWidthCache(font: string): Map<string, number> {
@@ -308,24 +307,33 @@ function endsWithKeepAllGlueText(text: string): boolean {
 
 function endsWithLineStartProhibitedText(text: string): boolean {
   const last = getLastCodePoint(text);
-  return last != null && (kinsokuStart.has(last) || leftStickyPunctuation.has(last));
+  return (
+    last != null && (kinsokuStart.has(last) || leftStickyPunctuation.has(last))
+  );
 }
 
 function canContinueKeepAllTextRun(text: string): boolean {
-  return !endsWithLineStartProhibitedText(text) && !endsWithKeepAllGlueText(text);
+  return (
+    !endsWithLineStartProhibitedText(text) && !endsWithKeepAllGlueText(text)
+  );
 }
 
 function getSharedWordSegmenter(): Intl.Segmenter | null {
   if (sharedWordSegmenter !== undefined) {
     return sharedWordSegmenter;
   }
-  sharedWordSegmenter = typeof Intl.Segmenter === "function"
-    ? new Intl.Segmenter(undefined, { granularity: "word" })
-    : null;
+  sharedWordSegmenter =
+    typeof Intl.Segmenter === "function"
+      ? new Intl.Segmenter(undefined, { granularity: "word" })
+      : null;
   return sharedWordSegmenter;
 }
 
-function sumAtomWidths(atoms: readonly InlineAtom[], start = 0, end = atoms.length): number {
+function sumAtomWidths(
+  atoms: readonly InlineAtom[],
+  start = 0,
+  end = atoms.length,
+): number {
   let width = 0;
   for (let index = start; index < end; index += 1) {
     const atom = atoms[index];
@@ -336,7 +344,11 @@ function sumAtomWidths(atoms: readonly InlineAtom[], start = 0, end = atoms.leng
   return width;
 }
 
-function joinAtomText(atoms: readonly InlineAtom[], start = 0, end = atoms.length): string {
+function joinAtomText(
+  atoms: readonly InlineAtom[],
+  start = 0,
+  end = atoms.length,
+): string {
   let text = "";
   for (let index = start; index < end; index += 1) {
     const atom = atoms[index];
@@ -393,26 +405,25 @@ function pushTextPartAtoms(
   }
 }
 
-function buildCollapsedWhitespaceAtoms(items: readonly SourceItem[]): InlineAtom[][] {
+function buildCollapsedWhitespaceAtoms(
+  items: readonly SourceItem[],
+): InlineAtom[][] {
   const chunks: InlineAtom[][] = [[]];
   const atoms = chunks[0]!;
-  let pendingSpace:
-    | {
-        font: string;
-        itemIndex: number;
-        atomicGroupId: number | null;
-      }
-    | null = null;
-  let lastVisible:
-    | {
-        font: string;
-        itemIndex: number;
-        atomicGroupId: number | null;
-      }
-    | null = null;
+  let pendingSpace: {
+    font: string;
+    itemIndex: number;
+    atomicGroupId: number | null;
+  } | null = null;
+  let lastVisible: {
+    font: string;
+    itemIndex: number;
+    atomicGroupId: number | null;
+  } | null = null;
 
   for (const item of items) {
-    const atomicGroupId = item.breakMode === "never" ? item.itemIndex + 1 : null;
+    const atomicGroupId =
+      item.breakMode === "never" ? item.itemIndex + 1 : null;
     const parts = item.text.match(/[ \t\n\f\r]+|[^ \t\n\f\r]+/gu) ?? [];
     for (let partIndex = 0; partIndex < parts.length; partIndex += 1) {
       const part = parts[partIndex] ?? "";
@@ -465,7 +476,8 @@ function buildPreWrapAtoms(items: readonly SourceItem[]): InlineAtom[][] {
   let currentChunk = chunks[0]!;
 
   for (const item of items) {
-    const atomicGroupId = item.breakMode === "never" ? item.itemIndex + 1 : null;
+    const atomicGroupId =
+      item.breakMode === "never" ? item.itemIndex + 1 : null;
     const normalizedText = normalizePreWrapText(item.text);
     const graphemes = splitGraphemes(normalizedText);
     for (let index = 0; index < graphemes.length; index += 1) {
@@ -593,7 +605,9 @@ function mergeKeepAllUnits(units: readonly InlineAtom[][]): InlineAtom[][] {
   return merged;
 }
 
-function splitAtomsByWordSegments(atoms: readonly InlineAtom[]): InlineAtom[][] {
+function splitAtomsByWordSegments(
+  atoms: readonly InlineAtom[],
+): InlineAtom[][] {
   if (atoms.length <= 1) {
     return atoms.length === 0 ? [] : [atoms.slice()];
   }
@@ -671,7 +685,10 @@ function tokenizeChunkAtoms(
     if (atom.atomicGroupId != null) {
       const start = index;
       const atomicGroupId = atom.atomicGroupId;
-      while (index < chunkAtoms.length && chunkAtoms[index]?.atomicGroupId === atomicGroupId) {
+      while (
+        index < chunkAtoms.length &&
+        chunkAtoms[index]?.atomicGroupId === atomicGroupId
+      ) {
         index += 1;
       }
       units.push(makeTextUnit(chunkAtoms.slice(start, index), true));
@@ -680,7 +697,11 @@ function tokenizeChunkAtoms(
 
     if (atom.kind === "space") {
       const start = index;
-      while (index < chunkAtoms.length && chunkAtoms[index]?.kind === "space" && chunkAtoms[index]?.atomicGroupId == null) {
+      while (
+        index < chunkAtoms.length &&
+        chunkAtoms[index]?.kind === "space" &&
+        chunkAtoms[index]?.atomicGroupId == null
+      ) {
         index += 1;
       }
       units.push(makeSpaceUnit(chunkAtoms.slice(start, index)));
@@ -688,7 +709,11 @@ function tokenizeChunkAtoms(
     }
 
     const start = index;
-    while (index < chunkAtoms.length && chunkAtoms[index]?.kind === "text" && chunkAtoms[index]?.atomicGroupId == null) {
+    while (
+      index < chunkAtoms.length &&
+      chunkAtoms[index]?.kind === "text" &&
+      chunkAtoms[index]?.atomicGroupId == null
+    ) {
       index += 1;
     }
     const textRunAtoms = chunkAtoms.slice(start, index);
@@ -696,9 +721,10 @@ function tokenizeChunkAtoms(
     const rawUnits = isCJK(runText)
       ? buildBaseCjkUnits(textRunAtoms)
       : splitAtomsByWordSegments(textRunAtoms);
-    const normalizedUnits = wordBreak === "keep-all" && isCJK(runText)
-      ? mergeKeepAllUnits(rawUnits)
-      : rawUnits;
+    const normalizedUnits =
+      wordBreak === "keep-all" && isCJK(runText)
+        ? mergeKeepAllUnits(rawUnits)
+        : rawUnits;
     for (const unitAtoms of normalizedUnits) {
       units.push(makeTextUnit(unitAtoms.slice(), false));
     }
@@ -712,9 +738,10 @@ function buildPreparedInlineLayout(
   whiteSpace: TextWhiteSpaceMode,
   wordBreak: TextWordBreakMode,
 ): PreparedInlineLayout {
-  const atomChunks = whiteSpace === "pre-wrap"
-    ? buildPreWrapAtoms(items)
-    : buildCollapsedWhitespaceAtoms(items);
+  const atomChunks =
+    whiteSpace === "pre-wrap"
+      ? buildPreWrapAtoms(items)
+      : buildCollapsedWhitespaceAtoms(items);
   const chunks: PreparedInlineChunk[] = [];
   const units: PreparedInlineUnit[] = [];
 
@@ -738,7 +765,10 @@ function buildPreparedInlineLayout(
   };
 }
 
-function readNumberLruValue<T>(cache: Map<number, T>, key: number): T | undefined {
+function readNumberLruValue<T>(
+  cache: Map<number, T>,
+  key: number,
+): T | undefined {
   const cached = cache.get(key);
   if (cached == null) {
     return undefined;
@@ -748,7 +778,12 @@ function readNumberLruValue<T>(cache: Map<number, T>, key: number): T | undefine
   return cached;
 }
 
-function writeNumberLruValue<T>(cache: Map<number, T>, key: number, value: T, capacity: number): T {
+function writeNumberLruValue<T>(
+  cache: Map<number, T>,
+  key: number,
+  value: T,
+  capacity: number,
+): T {
   if (cache.has(key)) {
     cache.delete(key);
   } else if (cache.size >= capacity) {
@@ -769,8 +804,15 @@ function cloneCursor(cursor: PreparedInlineCursor): PreparedInlineCursor {
   };
 }
 
-function cursorEquals(a: PreparedInlineCursor, b: PreparedInlineCursor): boolean {
-  return a.chunkIndex === b.chunkIndex && a.unitIndex === b.unitIndex && a.atomIndex === b.atomIndex;
+function cursorEquals(
+  a: PreparedInlineCursor,
+  b: PreparedInlineCursor,
+): boolean {
+  return (
+    a.chunkIndex === b.chunkIndex &&
+    a.unitIndex === b.unitIndex &&
+    a.atomIndex === b.atomIndex
+  );
 }
 
 function fits(width: number, maxWidth: number): boolean {
@@ -833,13 +875,11 @@ function stepChunkLine(
   let atomIndex = startAtomIndex;
   let lineWidth = 0;
   let hasContent = false;
-  let pendingBreak:
-    | {
-        end: PreparedInlineCursor;
-        next: PreparedInlineCursor;
-        width: number;
-      }
-    | null = null;
+  let pendingBreak: {
+    end: PreparedInlineCursor;
+    next: PreparedInlineCursor;
+    width: number;
+  } | null = null;
 
   while (unitIndex < chunk.endUnit) {
     const unit = prepared.units[unitIndex]!;
@@ -964,7 +1004,11 @@ function stepChunkLine(
     return null;
   }
 
-  if (pendingBreak != null && pendingBreak.next.unitIndex === chunk.endUnit && pendingBreak.next.atomIndex === 0) {
+  if (
+    pendingBreak != null &&
+    pendingBreak.next.unitIndex === chunk.endUnit &&
+    pendingBreak.next.atomIndex === 0
+  ) {
     return {
       width: pendingBreak.width,
       start,
@@ -981,8 +1025,14 @@ function stepChunkLine(
   };
 }
 
-export function getPreparedLineStart(prepared: PreparedInlineLayout): PreparedInlineCursor | undefined {
-  for (let chunkIndex = 0; chunkIndex < prepared.chunks.length; chunkIndex += 1) {
+export function getPreparedLineStart(
+  prepared: PreparedInlineLayout,
+): PreparedInlineCursor | undefined {
+  for (
+    let chunkIndex = 0;
+    chunkIndex < prepared.chunks.length;
+    chunkIndex += 1
+  ) {
     const chunk = prepared.chunks[chunkIndex]!;
     if (chunk.startUnit === chunk.endUnit) {
       return { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
@@ -992,7 +1042,9 @@ export function getPreparedLineStart(prepared: PreparedInlineLayout): PreparedIn
   return undefined;
 }
 
-export function getPreparedEndCursor(prepared: PreparedInlineLayout): PreparedInlineCursor {
+export function getPreparedEndCursor(
+  prepared: PreparedInlineLayout,
+): PreparedInlineCursor {
   if (prepared.chunks.length === 0) {
     return { chunkIndex: 0, unitIndex: 0, atomIndex: 0 };
   }
@@ -1015,13 +1067,25 @@ export function layoutNextPreparedLine(
     return null;
   }
   if (chunk.startUnit === chunk.endUnit) {
-    return cursorEquals(start, { chunkIndex: start.chunkIndex, unitIndex: chunk.endUnit, atomIndex: 0 })
+    return cursorEquals(start, {
+      chunkIndex: start.chunkIndex,
+      unitIndex: chunk.endUnit,
+      atomIndex: 0,
+    })
       ? null
       : {
           width: 0,
           start: cloneCursor(start),
-          end: { chunkIndex: start.chunkIndex, unitIndex: chunk.endUnit, atomIndex: 0 },
-          next: { chunkIndex: start.chunkIndex, unitIndex: chunk.endUnit, atomIndex: 0 },
+          end: {
+            chunkIndex: start.chunkIndex,
+            unitIndex: chunk.endUnit,
+            atomIndex: 0,
+          },
+          next: {
+            chunkIndex: start.chunkIndex,
+            unitIndex: chunk.endUnit,
+            atomIndex: 0,
+          },
         };
   }
   return stepChunkLine(
@@ -1039,11 +1103,17 @@ export function walkPreparedLineRanges(
   onLine: (line: PreparedInlineLineRange) => boolean | void,
 ): number {
   let lineCount = 0;
-  for (let chunkIndex = 0; chunkIndex < prepared.chunks.length; chunkIndex += 1) {
+  for (
+    let chunkIndex = 0;
+    chunkIndex < prepared.chunks.length;
+    chunkIndex += 1
+  ) {
     const chunk = prepared.chunks[chunkIndex]!;
     if (chunk.startUnit === chunk.endUnit) {
       const cursor = { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
-      if (onLine({ width: 0, start: cursor, end: cursor, next: cursor }) === false) {
+      if (
+        onLine({ width: 0, start: cursor, end: cursor, next: cursor }) === false
+      ) {
         lineCount += 1;
         return lineCount;
       }
@@ -1082,20 +1152,28 @@ export function forEachAtomFromCursorToEnd(
   start: PreparedInlineCursor,
   cb: (atom: InlineAtom) => void,
 ): void {
-  for (let chunkIndex = start.chunkIndex; chunkIndex < prepared.chunks.length; chunkIndex += 1) {
+  for (
+    let chunkIndex = start.chunkIndex;
+    chunkIndex < prepared.chunks.length;
+    chunkIndex += 1
+  ) {
     const chunk = prepared.chunks[chunkIndex];
     if (chunk == null) {
       continue;
     }
-    const chunkStart = chunkIndex === start.chunkIndex
-      ? start
-      : { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
+    const chunkStart =
+      chunkIndex === start.chunkIndex
+        ? start
+        : { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
     const chunkEnd = { chunkIndex, unitIndex: chunk.endUnit, atomIndex: 0 };
     forEachAtomInRange(prepared, chunkStart, chunkEnd, cb);
   }
 }
 
-export function measurePreparedLineStats(prepared: PreparedInlineLayout, maxWidth: number): PreparedInlineStats {
+export function measurePreparedLineStats(
+  prepared: PreparedInlineLayout,
+  maxWidth: number,
+): PreparedInlineStats {
   const cached = readNumberLruValue(prepared.lineStatsCache, maxWidth);
   if (cached != null) {
     return cached;
@@ -1116,8 +1194,11 @@ export function measurePreparedLineStats(prepared: PreparedInlineLayout, maxWidt
   );
 }
 
-export function measurePreparedNaturalWidth(prepared: PreparedInlineLayout): number {
-  return measurePreparedLineStats(prepared, Number.POSITIVE_INFINITY).maxLineWidth;
+export function measurePreparedNaturalWidth(
+  prepared: PreparedInlineLayout,
+): number {
+  return measurePreparedLineStats(prepared, Number.POSITIVE_INFINITY)
+    .maxLineWidth;
 }
 
 export function forEachAtomInRange(
@@ -1129,10 +1210,15 @@ export function forEachAtomInRange(
   if (start.chunkIndex !== end.chunkIndex) {
     throw new Error("Atom range iteration only supports a single chunk.");
   }
-  for (let unitIndex = start.unitIndex; unitIndex < end.unitIndex; unitIndex += 1) {
+  for (
+    let unitIndex = start.unitIndex;
+    unitIndex < end.unitIndex;
+    unitIndex += 1
+  ) {
     const unit = prepared.units[unitIndex]!;
     const atomStart = unitIndex === start.unitIndex ? start.atomIndex : 0;
-    const atomEnd = unitIndex === end.unitIndex ? end.atomIndex : unit.atoms.length;
+    const atomEnd =
+      unitIndex === end.unitIndex ? end.atomIndex : unit.atoms.length;
     for (let atomIndex = atomStart; atomIndex < atomEnd; atomIndex += 1) {
       const atom = unit.atoms[atomIndex];
       if (atom != null) {
@@ -1143,7 +1229,11 @@ export function forEachAtomInRange(
   if (end.unitIndex < prepared.units.length) {
     const unit = prepared.units[end.unitIndex];
     if (unit != null && start.unitIndex === end.unitIndex) {
-      for (let atomIndex = start.atomIndex; atomIndex < end.atomIndex; atomIndex += 1) {
+      for (
+        let atomIndex = start.atomIndex;
+        atomIndex < end.atomIndex;
+        atomIndex += 1
+      ) {
         const atom = unit.atoms[atomIndex];
         if (atom != null) {
           cb(atom);
@@ -1164,7 +1254,11 @@ export function collectAtomsInRange(
     if (unit == null) {
       return atoms;
     }
-    for (let atomIndex = start.atomIndex; atomIndex < end.atomIndex; atomIndex += 1) {
+    for (
+      let atomIndex = start.atomIndex;
+      atomIndex < end.atomIndex;
+      atomIndex += 1
+    ) {
       const atom = unit.atoms[atomIndex];
       if (atom != null) {
         atoms.push(atom);
@@ -1177,10 +1271,18 @@ export function collectAtomsInRange(
   if (startChunk == null) {
     return atoms;
   }
-  for (let unitIndex = start.unitIndex; unitIndex < end.unitIndex; unitIndex += 1) {
+  for (
+    let unitIndex = start.unitIndex;
+    unitIndex < end.unitIndex;
+    unitIndex += 1
+  ) {
     const unit = prepared.units[unitIndex]!;
     const atomStart = unitIndex === start.unitIndex ? start.atomIndex : 0;
-    for (let atomIndex = atomStart; atomIndex < unit.atoms.length; atomIndex += 1) {
+    for (
+      let atomIndex = atomStart;
+      atomIndex < unit.atoms.length;
+      atomIndex += 1
+    ) {
       const atom = unit.atoms[atomIndex];
       if (atom != null) {
         atoms.push(atom);
@@ -1199,7 +1301,10 @@ export function collectAtomsInRange(
   return atoms;
 }
 
-export function collectLineAtoms(prepared: PreparedInlineLayout, line: PreparedInlineLineRange): PreparedInlineAtomSlice {
+export function collectLineAtoms(
+  prepared: PreparedInlineLayout,
+  line: PreparedInlineLineRange,
+): PreparedInlineAtomSlice {
   const atoms = collectAtomsInRange(prepared, line.start, line.end);
   return {
     atoms,
@@ -1212,22 +1317,33 @@ export function collectAtomsFromCursorToEnd(
   start: PreparedInlineCursor,
 ): InlineAtom[] {
   const atoms: InlineAtom[] = [];
-  for (let chunkIndex = start.chunkIndex; chunkIndex < prepared.chunks.length; chunkIndex += 1) {
+  for (
+    let chunkIndex = start.chunkIndex;
+    chunkIndex < prepared.chunks.length;
+    chunkIndex += 1
+  ) {
     const chunk = prepared.chunks[chunkIndex]!;
-    const chunkStart = chunkIndex === start.chunkIndex
-      ? start
-      : { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
+    const chunkStart =
+      chunkIndex === start.chunkIndex
+        ? start
+        : { chunkIndex, unitIndex: chunk.startUnit, atomIndex: 0 };
     const chunkEnd = { chunkIndex, unitIndex: chunk.endUnit, atomIndex: 0 };
     atoms.push(...collectAtomsInRange(prepared, chunkStart, chunkEnd));
   }
   return atoms;
 }
 
-export function materializePreparedLineText(prepared: PreparedInlineLayout, line: PreparedInlineLineRange): string {
+export function materializePreparedLineText(
+  prepared: PreparedInlineLayout,
+  line: PreparedInlineLineRange,
+): string {
   return joinAtomText(collectLineAtoms(prepared, line).atoms);
 }
 
-export function flattenPreparedLineAtoms(prepared: PreparedInlineLayout, line: PreparedInlineLineRange): InlineAtom[] {
+export function flattenPreparedLineAtoms(
+  prepared: PreparedInlineLayout,
+  line: PreparedInlineLineRange,
+): InlineAtom[] {
   return collectLineAtoms(prepared, line).atoms;
 }
 
@@ -1248,9 +1364,14 @@ export function measurePreparedMinContentWidth(
     if (unit.kind !== "text") {
       continue;
     }
-    const candidateWidth = overflowWrap === "anywhere" && unit.breakable
-      ? unit.atoms.reduce((widest, atom) => Math.max(widest, atom.width + atom.extraWidthAfter), 0)
-      : unit.width;
+    const candidateWidth =
+      overflowWrap === "anywhere" && unit.breakable
+        ? unit.atoms.reduce(
+            (widest, atom) =>
+              Math.max(widest, atom.width + atom.extraWidthAfter),
+            0,
+          )
+        : unit.width;
     if (candidateWidth > maxWidth) {
       maxWidth = candidateWidth;
     }
@@ -1260,7 +1381,9 @@ export function measurePreparedMinContentWidth(
   return resolvedWidth;
 }
 
-export function getPreparedUnits(prepared: PreparedInlineLayout): Array<{ text: string; width: number }> {
+export function getPreparedUnits(
+  prepared: PreparedInlineLayout,
+): Array<{ text: string; width: number }> {
   const resolvedUnits: Array<{ text: string; width: number }> = [];
   for (let unitIndex = 0; unitIndex < prepared.units.length; unitIndex += 1) {
     const unit = prepared.units[unitIndex]!;
@@ -1363,14 +1486,19 @@ export function getRichPreparedKey<C extends CanvasRenderingContext2D>(
   return key;
 }
 
-export function createPlainSourceItems(text: string, font: string): SourceItem[] {
-  return [{
-    text,
-    font,
-    itemIndex: 0,
-    breakMode: "normal",
-    extraWidth: 0,
-  }];
+export function createPlainSourceItems(
+  text: string,
+  font: string,
+): SourceItem[] {
+  return [
+    {
+      text,
+      font,
+      itemIndex: 0,
+      breakMode: "normal",
+      extraWidth: 0,
+    },
+  ];
 }
 
 export function createRichSourceItems<C extends CanvasRenderingContext2D>(

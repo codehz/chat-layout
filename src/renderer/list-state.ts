@@ -1,4 +1,8 @@
-import { emitWeakListeners, pruneWeakListenerMap, type WeakListenerRecord } from "./weak-listeners";
+import {
+  emitWeakListeners,
+  pruneWeakListenerMap,
+  type WeakListenerRecord,
+} from "./weak-listeners";
 
 /**
  * Mutable list state shared with virtualized renderers.
@@ -40,14 +44,25 @@ export type ListStateChange<T extends {}> =
   | ListResetChange
   | ListSetChange;
 
-export type ListStateChangeListener<T extends {}> = (change: ListStateChange<T>) => void;
+export type ListStateChangeListener<T extends {}> = (
+  change: ListStateChange<T>,
+) => void;
 
-type WeakListStateListenerRecord = WeakListenerRecord<object, ListStateChange<{}>>;
+type WeakListStateListenerRecord = WeakListenerRecord<
+  object,
+  ListStateChange<{}>
+>;
 
-const listStateListeners = new WeakMap<ListState<{}>, Map<symbol, WeakListStateListenerRecord>>();
+const listStateListeners = new WeakMap<
+  ListState<{}>,
+  Map<symbol, WeakListStateListenerRecord>
+>();
 const listStateListenerRegistry =
   typeof FinalizationRegistry === "function"
-    ? new FinalizationRegistry<{ listRef: WeakRef<ListState<{}>>; token: symbol }>(({ listRef, token }) => {
+    ? new FinalizationRegistry<{
+        listRef: WeakRef<ListState<{}>>;
+        token: symbol;
+      }>(({ listRef, token }) => {
         const list = listRef.deref();
         if (list == null) {
           return;
@@ -67,7 +82,10 @@ function deleteListStateListener(list: ListState<{}>, token: symbol): void {
   }
 }
 
-function emitListStateChange<T extends {}>(list: ListState<T>, change: ListStateChange<T>): void {
+function emitListStateChange<T extends {}>(
+  list: ListState<T>,
+  change: ListStateChange<T>,
+): void {
   const listeners = listStateListeners.get(list as unknown as ListState<{}>);
   if (listeners == null) {
     return;
@@ -103,10 +121,15 @@ export function subscribeListState<T extends {}, O extends object>(
 }
 
 function isObjectIdentityCandidate(value: unknown): value is object {
-  return (typeof value === "object" && value !== null) || typeof value === "function";
+  return (
+    (typeof value === "object" && value !== null) || typeof value === "function"
+  );
 }
 
-function assertUniqueItemReferences<T extends {}>(items: readonly T[], existingItems?: readonly T[]): void {
+function assertUniqueItemReferences<T extends {}>(
+  items: readonly T[],
+  existingItems?: readonly T[],
+): void {
   const seen = new Set<T>();
   if (existingItems != null) {
     for (const item of existingItems) {
@@ -132,7 +155,9 @@ function normalizeUpdateAnimation(
   if (animation == null) {
     return undefined;
   }
-  return Number.isFinite(animation.duration) ? { duration: animation.duration } : {};
+  return Number.isFinite(animation.duration)
+    ? { duration: animation.duration }
+    : {};
 }
 
 export class ListState<T extends {}> {
@@ -207,12 +232,21 @@ export class ListState<T extends {}> {
   /**
    * Updates an existing item by object identity.
    */
-  update(targetItem: T, nextItem: T, animation?: UpdateListItemAnimationOptions): void {
-    if (!isObjectIdentityCandidate(targetItem) || !isObjectIdentityCandidate(nextItem)) {
+  update(
+    targetItem: T,
+    nextItem: T,
+    animation?: UpdateListItemAnimationOptions,
+  ): void {
+    if (
+      !isObjectIdentityCandidate(targetItem) ||
+      !isObjectIdentityCandidate(nextItem)
+    ) {
       throw new TypeError("update() only supports object items.");
     }
     if (targetItem === nextItem) {
-      throw new Error("update() requires nextItem to be a new object reference.");
+      throw new Error(
+        "update() requires nextItem to be a new object reference.",
+      );
     }
     const index = this.#items.indexOf(targetItem);
     if (index < 0) {
@@ -235,7 +269,9 @@ export class ListState<T extends {}> {
    * Sets the current anchor item and pixel offset.
    */
   setAnchor(position: number, offset = 0): void {
-    this.position = Number.isFinite(position) ? Math.trunc(position) : undefined;
+    this.position = Number.isFinite(position)
+      ? Math.trunc(position)
+      : undefined;
     this.offset = Number.isFinite(offset) ? offset : 0;
   }
 

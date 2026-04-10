@@ -22,7 +22,9 @@ ensureMockOffscreenCanvas();
 
 // --- Helpers ---
 
-function createMockCtx(options: { supportSpacing?: boolean } = {}): CanvasRenderingContext2D {
+function createMockCtx(
+  options: { supportSpacing?: boolean } = {},
+): CanvasRenderingContext2D {
   const support = options.supportSpacing ?? true;
   const base: any = {
     font: "16px sans-serif",
@@ -52,7 +54,9 @@ type JustifyRecordedDraw = {
   letterSpacing: string;
 };
 
-function createJustifyRecordingGraphics(recordedDraws: JustifyRecordedDraw[]): C {
+function createJustifyRecordingGraphics(
+  recordedDraws: JustifyRecordedDraw[],
+): C {
   const graphics: any = {
     canvas: { clientWidth: 320, clientHeight: 100 },
     fillStyle: "#000",
@@ -87,13 +91,16 @@ function createJustifyRecordingGraphics(recordedDraws: JustifyRecordedDraw[]): C
   return graphics as C;
 }
 
-function createLineInfo(overrides: Partial<JustifyLineInfo> = {}): JustifyLineInfo {
+function createLineInfo(
+  overrides: Partial<JustifyLineInfo> = {},
+): JustifyLineInfo {
   const renderAtomCount = overrides.renderAtomCount ?? 0;
   return {
     wordGapCount: 0,
     wordCount: 0,
     renderAtomCount,
-    letterGapCount: overrides.letterGapCount ?? Math.max(renderAtomCount - 1, 0),
+    letterGapCount:
+      overrides.letterGapCount ?? Math.max(renderAtomCount - 1, 0),
     spaceCount: 0,
     nonSpaceCount: 0,
     cjkCount: 0,
@@ -151,12 +158,16 @@ describe("resolveJustifyMode", () => {
 describe("isJustifySupported", () => {
   test("returns true when wordSpacing/letterSpacing are strings", () => {
     resetJustifySupportedCache();
-    expect(isJustifySupported(createMockCtx({ supportSpacing: true }))).toBe(true);
+    expect(isJustifySupported(createMockCtx({ supportSpacing: true }))).toBe(
+      true,
+    );
   });
 
   test("returns false when properties are missing", () => {
     resetJustifySupportedCache();
-    expect(isJustifySupported(createMockCtx({ supportSpacing: false }))).toBe(false);
+    expect(isJustifySupported(createMockCtx({ supportSpacing: false }))).toBe(
+      false,
+    );
   });
 });
 
@@ -206,74 +217,120 @@ describe("shouldJustifyLine", () => {
   });
 
   test("returns false when no gaps available", () => {
-    expect(shouldJustifyLine(80, 100, createLineInfo({
-      wordCount: 1,
-      renderAtomCount: 5,
-      nonSpaceCount: 5,
-      latinLikeCount: 5,
-      lineWidth: 80,
-      nonSpaceWidth: 80,
-    }), "inter-word", 2.0)).toBe(false);
-    expect(shouldJustifyLine(80, 100, createLineInfo({
-      wordGapCount: 2,
-      wordCount: 3,
-      lineWidth: 80,
-      nonSpaceWidth: 64,
-    }), "inter-character", 2.0)).toBe(false);
+    expect(
+      shouldJustifyLine(
+        80,
+        100,
+        createLineInfo({
+          wordCount: 1,
+          renderAtomCount: 5,
+          nonSpaceCount: 5,
+          latinLikeCount: 5,
+          lineWidth: 80,
+          nonSpaceWidth: 80,
+        }),
+        "inter-word",
+        2.0,
+      ),
+    ).toBe(false);
+    expect(
+      shouldJustifyLine(
+        80,
+        100,
+        createLineInfo({
+          wordGapCount: 2,
+          wordCount: 3,
+          lineWidth: 80,
+          nonSpaceWidth: 64,
+        }),
+        "inter-character",
+        2.0,
+      ),
+    ).toBe(false);
   });
 
   test("returns true for reasonable spacing", () => {
-    expect(shouldJustifyLine(90, 100, createLineInfo({
-      wordGapCount: 2,
-      wordCount: 3,
-      renderAtomCount: 10,
-      spaceCount: 2,
-      nonSpaceCount: 8,
-      latinLikeCount: 8,
-      lineWidth: 90,
-      nonSpaceWidth: 72,
-    }), "inter-word", 2.0)).toBe(true);
+    expect(
+      shouldJustifyLine(
+        90,
+        100,
+        createLineInfo({
+          wordGapCount: 2,
+          wordCount: 3,
+          renderAtomCount: 10,
+          spaceCount: 2,
+          nonSpaceCount: 8,
+          latinLikeCount: 8,
+          lineWidth: 90,
+          nonSpaceWidth: 72,
+        }),
+        "inter-word",
+        2.0,
+      ),
+    ).toBe(true);
   });
 
   test("returns false when threshold exceeded", () => {
     // extraSpace=80, wordGapCount=1 → perGap=80, avgWordWidth is small → exceeds threshold
-    expect(shouldJustifyLine(20, 100, createLineInfo({
-      wordGapCount: 1,
-      wordCount: 2,
-      renderAtomCount: 3,
-      spaceCount: 1,
-      nonSpaceCount: 2,
-      latinLikeCount: 2,
-      lineWidth: 20,
-      nonSpaceWidth: 16,
-    }), "inter-word", 0.5)).toBe(false);
+    expect(
+      shouldJustifyLine(
+        20,
+        100,
+        createLineInfo({
+          wordGapCount: 1,
+          wordCount: 2,
+          renderAtomCount: 3,
+          spaceCount: 1,
+          nonSpaceCount: 2,
+          latinLikeCount: 2,
+          lineWidth: 20,
+          nonSpaceWidth: 16,
+        }),
+        "inter-word",
+        0.5,
+      ),
+    ).toBe(false);
   });
 
   test("returns false for null mode", () => {
-    expect(shouldJustifyLine(80, 100, createLineInfo({
-      wordGapCount: 2,
-      wordCount: 3,
-      renderAtomCount: 10,
-      nonSpaceCount: 8,
-      latinLikeCount: 8,
-      lineWidth: 80,
-      nonSpaceWidth: 64,
-    }), null, 2.0)).toBe(false);
+    expect(
+      shouldJustifyLine(
+        80,
+        100,
+        createLineInfo({
+          wordGapCount: 2,
+          wordCount: 3,
+          renderAtomCount: 10,
+          nonSpaceCount: 8,
+          latinLikeCount: 8,
+          lineWidth: 80,
+          nonSpaceWidth: 64,
+        }),
+        null,
+        2.0,
+      ),
+    ).toBe(false);
   });
 });
 
 describe("computeJustifySpacing", () => {
   test("inter-word distributes extra space across word gaps", () => {
-    const spacing = computeJustifySpacing(80, 100, createLineInfo({
-      wordGapCount: 2,
-      wordCount: 3,
-      renderAtomCount: 10,
-      spaceCount: 2,
-      nonSpaceCount: 8,
-      latinLikeCount: 8,
-      lineWidth: 80,
-      nonSpaceWidth: 64,
-    }), "inter-word", 2.0);
+    const spacing = computeJustifySpacing(
+      80,
+      100,
+      createLineInfo({
+        wordGapCount: 2,
+        wordCount: 3,
+        renderAtomCount: 10,
+        spaceCount: 2,
+        nonSpaceCount: 8,
+        latinLikeCount: 8,
+        lineWidth: 80,
+        nonSpaceWidth: 64,
+      }),
+      "inter-word",
+      2.0,
+    );
     expect(spacing).not.toBeNull();
     expect(spacing?.wordSpacing).toBe("10px");
     expect(spacing?.letterSpacing).toBe("0px");
@@ -283,16 +340,30 @@ describe("computeJustifySpacing", () => {
 
   test("pure English lines use hybrid spacing with a larger word share", () => {
     const info = getSingleLineInfo("aa bb cc");
-    const spacing = computeJustifySpacing(info.lineWidth, info.lineWidth + 16, info, "inter-character", 2.0);
+    const spacing = computeJustifySpacing(
+      info.lineWidth,
+      info.lineWidth + 16,
+      info,
+      "inter-character",
+      2.0,
+    );
     expect(spacing).not.toBeNull();
     expect(spacing?.wordSpacingPx).toBeGreaterThan(0);
     expect(spacing?.letterSpacingPx).toBeGreaterThan(0);
-    expect(spacing?.wordSpacingPx).toBeGreaterThan(spacing?.letterSpacingPx ?? 0);
+    expect(spacing?.wordSpacingPx).toBeGreaterThan(
+      spacing?.letterSpacingPx ?? 0,
+    );
   });
 
   test("pure CJK lines stay on letter spacing only", () => {
     const info = getSingleLineInfo("你好世界");
-    const spacing = computeJustifySpacing(info.lineWidth, info.lineWidth + 8, info, "inter-character", 2.0);
+    const spacing = computeJustifySpacing(
+      info.lineWidth,
+      info.lineWidth + 8,
+      info,
+      "inter-character",
+      2.0,
+    );
     expect(spacing).not.toBeNull();
     expect(spacing?.wordSpacingPx).toBe(0);
     expect(spacing?.letterSpacingPx).toBeCloseTo(8 / info.letterGapCount);
@@ -300,19 +371,31 @@ describe("computeJustifySpacing", () => {
 
   test("mixed CJK and English lines use both spacing channels", () => {
     const info = getSingleLineInfo("你好 world 好");
-    const spacing = computeJustifySpacing(info.lineWidth, info.lineWidth + 16, info, "inter-character", 2.0);
+    const spacing = computeJustifySpacing(
+      info.lineWidth,
+      info.lineWidth + 16,
+      info,
+      "inter-character",
+      2.0,
+    );
     expect(spacing).not.toBeNull();
     expect(spacing?.wordSpacingPx).toBeGreaterThan(0);
     expect(spacing?.letterSpacingPx).toBeGreaterThan(0);
     expect(
-      info.wordGapCount * (spacing?.wordSpacingPx ?? 0)
-      + info.letterGapCount * (spacing?.letterSpacingPx ?? 0),
+      info.wordGapCount * (spacing?.wordSpacingPx ?? 0) +
+        info.letterGapCount * (spacing?.letterSpacingPx ?? 0),
     ).toBeCloseTo(16);
   });
 
   test("single-run lines divide letter spacing by letter gaps instead of atoms", () => {
     const info = getSingleLineInfo("abcd");
-    const spacing = computeJustifySpacing(info.lineWidth, info.lineWidth + 12, info, "inter-character", 2.0);
+    const spacing = computeJustifySpacing(
+      info.lineWidth,
+      info.lineWidth + 12,
+      info,
+      "inter-character",
+      2.0,
+    );
     expect(spacing).not.toBeNull();
     expect(info.renderAtomCount).toBe(4);
     expect(info.letterGapCount).toBe(3);
@@ -339,13 +422,19 @@ describe("computeJustifySpacing", () => {
     );
     expect(spaced).not.toBeNull();
     expect(unspaced).not.toBeNull();
-    expect(spaced?.letterSpacingPx ?? 0).toBeLessThan(unspaced?.letterSpacingPx ?? 0);
+    expect(spaced?.letterSpacingPx ?? 0).toBeLessThan(
+      unspaced?.letterSpacingPx ?? 0,
+    );
   });
 
   test("returns null when every hybrid candidate exceeds the threshold", () => {
     const info = getSingleLineInfo("a a");
-    expect(computeJustifySpacing(info.lineWidth, 120, info, "inter-character", 0.5)).toBeNull();
-    expect(shouldJustifyLine(info.lineWidth, 120, info, "inter-character", 0.5)).toBe(false);
+    expect(
+      computeJustifySpacing(info.lineWidth, 120, info, "inter-character", 0.5),
+    ).toBeNull();
+    expect(
+      shouldJustifyLine(info.lineWidth, 120, info, "inter-character", 0.5),
+    ).toBe(false);
   });
 });
 
@@ -355,7 +444,10 @@ describe("plain text justify integration", () => {
   test("justify: true sets wordSpacing on middle lines", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
     // 8px per char, maxWidth=48 → fits 6 chars per line
     // "hello world" → line1: "hello" (40px, 5 chars), line2: "world" (40px)
     const node = new MultilineText<C>("hello world", {
@@ -378,7 +470,10 @@ describe("plain text justify integration", () => {
   test("justify with multi-word lines applies wordSpacing", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
     // "aa bb cc dd" = 11 chars = 88px
     // maxWidth=56 → line1: "aa bb cc" (64px, 2 spaces), line2: "dd" (16px)
     // Actually with 8px/char: "aa bb cc" = 8*8=64px, fits in 56? No, 64>56
@@ -401,7 +496,10 @@ describe("plain text justify integration", () => {
   test("justifyLastLine: true also justifies the last line", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
     const node = new MultilineText<C>("aa bb cc dd", {
       lineHeight: 20,
       font: "16px sans-serif",
@@ -428,9 +526,15 @@ describe("plain text justify integration", () => {
       textAlign: "left",
       textRendering: "auto",
       clearRect() {},
-      fillText(text: string) { draws.push(text); },
+      fillText(text: string) {
+        draws.push(text);
+      },
       measureText(text: string) {
-        return { width: text.length * 8, fontBoundingBoxAscent: 8, fontBoundingBoxDescent: 2 } as TextMetrics;
+        return {
+          width: text.length * 8,
+          fontBoundingBoxAscent: 8,
+          fontBoundingBoxDescent: 2,
+        } as TextMetrics;
       },
       save() {},
       restore() {},
@@ -450,7 +554,10 @@ describe("plain text justify integration", () => {
 
   test("measure is not affected by justify option", () => {
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
 
     const nodeWithJustify = new MultilineText<C>("hello world foo", {
       lineHeight: 20,
@@ -472,17 +579,23 @@ describe("plain text justify integration", () => {
   test("last plain line resets both spacing properties after a previous rich justify draw", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
 
-    const richNode = new MultilineText<C>([
-      { text: "aa bb ", color: "#111" },
-      { text: "cc dd", color: "#222" },
-    ] satisfies InlineSpan<C>[], {
-      lineHeight: 20,
-      font: "16px sans-serif",
-      color: "#000",
-      justify: "inter-character",
-    });
+    const richNode = new MultilineText<C>(
+      [
+        { text: "aa bb ", color: "#111" },
+        { text: "cc dd", color: "#222" },
+      ] satisfies InlineSpan<C>[],
+      {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        color: "#000",
+        justify: "inter-character",
+      },
+    );
 
     renderer.drawNode(richNode, { maxWidth: 80 });
 
@@ -508,8 +621,14 @@ describe("rich text justify integration", () => {
     resetJustifySupportedCache();
     const plainDraws: JustifyRecordedDraw[] = [];
     const richDraws: JustifyRecordedDraw[] = [];
-    const plainRenderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(plainDraws), {});
-    const richRenderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(richDraws), {});
+    const plainRenderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(plainDraws),
+      {},
+    );
+    const richRenderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(richDraws),
+      {},
+    );
 
     const plainNode = new MultilineText<C>("aa bb cc dd", {
       lineHeight: 20,
@@ -517,21 +636,28 @@ describe("rich text justify integration", () => {
       color: "#000",
       justify: "inter-character",
     });
-    const richNode = new MultilineText<C>([
-      { text: "aa bb ", color: "#111" },
-      { text: "cc dd", color: "#222" },
-    ] satisfies InlineSpan<C>[], {
-      lineHeight: 20,
-      font: "16px sans-serif",
-      color: "#000",
-      justify: "inter-character",
-    });
+    const richNode = new MultilineText<C>(
+      [
+        { text: "aa bb ", color: "#111" },
+        { text: "cc dd", color: "#222" },
+      ] satisfies InlineSpan<C>[],
+      {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        color: "#000",
+        justify: "inter-character",
+      },
+    );
 
     plainRenderer.drawNode(plainNode, { maxWidth: 80 });
     richRenderer.drawNode(richNode, { maxWidth: 80 });
 
-    const plainJustified = plainDraws.find((draw) => draw.letterSpacing !== "0px" || draw.wordSpacing !== "0px");
-    const richJustified = richDraws.find((draw) => draw.letterSpacing !== "0px" || draw.wordSpacing !== "0px");
+    const plainJustified = plainDraws.find(
+      (draw) => draw.letterSpacing !== "0px" || draw.wordSpacing !== "0px",
+    );
+    const richJustified = richDraws.find(
+      (draw) => draw.letterSpacing !== "0px" || draw.wordSpacing !== "0px",
+    );
     expect(plainJustified).toBeDefined();
     expect(richJustified).toBeDefined();
     expect(richJustified?.wordSpacing).toBe(plainJustified?.wordSpacing);
@@ -541,17 +667,23 @@ describe("rich text justify integration", () => {
   test("span boundaries honor hybrid spacing across a collapsible gap", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
-    const node = new MultilineText<C>([
-      { text: "aa ", color: "#111" },
-      { text: "bb", color: "#222" },
-    ] satisfies InlineSpan<C>[], {
-      lineHeight: 20,
-      font: "16px sans-serif",
-      color: "#000",
-      justify: "inter-character",
-      justifyLastLine: true,
-    });
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
+    const node = new MultilineText<C>(
+      [
+        { text: "aa ", color: "#111" },
+        { text: "bb", color: "#222" },
+      ] satisfies InlineSpan<C>[],
+      {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        color: "#000",
+        justify: "inter-character",
+        justifyLastLine: true,
+      },
+    );
 
     renderer.drawNode(node, { maxWidth: 56 });
 
@@ -564,53 +696,72 @@ describe("rich text justify integration", () => {
   test("pre-wrap preserved spaces advance rich fragments using atom counts", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
-    const node = new MultilineText<C>([
-      { text: "aa  ", color: "#111" },
-      { text: "bb", color: "#222" },
-    ] satisfies InlineSpan<C>[], {
-      lineHeight: 20,
-      font: "16px sans-serif",
-      color: "#000",
-      whiteSpace: "pre-wrap",
-      justify: "inter-character",
-      justifyLastLine: true,
-    });
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
+    const node = new MultilineText<C>(
+      [
+        { text: "aa  ", color: "#111" },
+        { text: "bb", color: "#222" },
+      ] satisfies InlineSpan<C>[],
+      {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        color: "#000",
+        whiteSpace: "pre-wrap",
+        justify: "inter-character",
+        justifyLastLine: true,
+      },
+    );
 
     renderer.drawNode(node, { maxWidth: 64 });
 
     expect(draws).toHaveLength(2);
     const wordSpacingPx = parsePx(draws[0]!.wordSpacing);
     const letterSpacingPx = parsePx(draws[0]!.letterSpacing);
-    expect(draws[1]!.x).toBeCloseTo(32 + 4 * letterSpacingPx + 2 * wordSpacingPx);
+    expect(draws[1]!.x).toBeCloseTo(
+      32 + 4 * letterSpacingPx + 2 * wordSpacingPx,
+    );
   });
 
   test("emoji fragments use grapheme atom counts instead of string length", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
-    const node = new MultilineText<C>([
-      { text: "👨‍👩‍👧‍👦", color: "#111" },
-      { text: "a", color: "#222" },
-    ] satisfies InlineSpan<C>[], {
-      lineHeight: 20,
-      font: "16px sans-serif",
-      color: "#000",
-      justify: "inter-character",
-      justifyLastLine: true,
-    });
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
+    const node = new MultilineText<C>(
+      [
+        { text: "👨‍👩‍👧‍👦", color: "#111" },
+        { text: "a", color: "#222" },
+      ] satisfies InlineSpan<C>[],
+      {
+        lineHeight: 20,
+        font: "16px sans-serif",
+        color: "#000",
+        justify: "inter-character",
+        justifyLastLine: true,
+      },
+    );
 
     renderer.drawNode(node, { maxWidth: 112 });
 
     expect(draws).toHaveLength(2);
     const letterSpacingPx = parsePx(draws[0]!.letterSpacing);
-    expect(draws[1]!.x).toBeCloseTo(draws[0]!.text.length * 8 + letterSpacingPx);
+    expect(draws[1]!.x).toBeCloseTo(
+      draws[0]!.text.length * 8 + letterSpacingPx,
+    );
   });
 
   test("overflow + ellipsis last line is not justified", () => {
     resetJustifySupportedCache();
     const draws: JustifyRecordedDraw[] = [];
-    const renderer = new ConstraintTestRenderer(createJustifyRecordingGraphics(draws), {});
+    const renderer = new ConstraintTestRenderer(
+      createJustifyRecordingGraphics(draws),
+      {},
+    );
     const node = new MultilineText<C>("aa bb cc dd ee ff gg hh", {
       lineHeight: 20,
       font: "16px sans-serif",

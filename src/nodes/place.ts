@@ -3,7 +3,11 @@ import type { Box, Context, HitTest, Node, TextAlign } from "../types";
 import { measureNodeMinContent, Wrapper } from "./base";
 import { readLayoutResult, withConstraints, writeLayoutResult } from "./shared";
 
-function resolveHorizontalOffset(align: TextAlign, availableWidth: number, childWidth: number): number {
+function resolveHorizontalOffset(
+  align: TextAlign,
+  availableWidth: number,
+  childWidth: number,
+): number {
   switch (align) {
     case "center":
       return (availableWidth - childWidth) / 2;
@@ -41,7 +45,8 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
         }
       : undefined;
     const childBox = ctx.measureNode(this.inner, childConstraints);
-    let width = expand && availableWidth != null ? availableWidth : childBox.width;
+    let width =
+      expand && availableWidth != null ? availableWidth : childBox.width;
     if (ctx.constraints?.minWidth != null) {
       width = Math.max(width, ctx.constraints.minWidth);
     }
@@ -50,7 +55,12 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     }
 
     const align = this.options.align ?? "start";
-    const childRect = createRect(resolveHorizontalOffset(align, width, childBox.width), 0, childBox.width, childBox.height);
+    const childRect = createRect(
+      resolveHorizontalOffset(align, width, childBox.width),
+      0,
+      childBox.width,
+      childBox.height,
+    );
 
     writeLayoutResult(this, ctx, {
       containerBox: createRect(0, 0, width, childBox.height),
@@ -87,7 +97,11 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       return false;
     }
     const childCtx = withConstraints(ctx, childResult.constraints);
-    return childResult.node.draw(childCtx, x + childResult.rect.x, y + childResult.rect.y);
+    return childResult.node.draw(
+      childCtx,
+      x + childResult.rect.x,
+      y + childResult.rect.y,
+    );
   }
 
   hittest(ctx: Context<C>, test: HitTest): boolean {
@@ -101,13 +115,10 @@ export class Place<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       return false;
     }
 
-    return hit.child.node.hittest(
-      withConstraints(ctx, hit.child.constraints),
-      {
-        ...test,
-        x: hit.localX,
-        y: hit.localY,
-      },
-    );
+    return hit.child.node.hittest(withConstraints(ctx, hit.child.constraints), {
+      ...test,
+      x: hit.localX,
+      y: hit.localY,
+    });
   }
 }

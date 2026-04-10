@@ -38,23 +38,8 @@ export function resolveJustifyMode(
 // -------- Line analysis --------
 
 const HYBRID_WORD_SHARE_CANDIDATES = [
-  0.15,
-  0.20,
-  0.25,
-  0.30,
-  0.35,
-  0.40,
-  0.45,
-  0.50,
-  0.55,
-  0.60,
-  0.65,
-  0.70,
-  0.75,
-  0.80,
-  0.85,
-  1.0,
-  0.0,
+  0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+  0.85, 1.0, 0.0,
 ] as const;
 
 const PUNCTUATION_OR_SYMBOL_PATTERN = /^[\p{P}\p{S}]$/u;
@@ -101,7 +86,11 @@ export function analyzeLineForJustify(
   let insideWord = false;
 
   forEachAtomInRange(prepared, line.start, line.end, (atom) => {
-    if (atom.kind === "space" && !atom.preservesLineEnd && atom.atomicGroupId == null) {
+    if (
+      atom.kind === "space" &&
+      !atom.preservesLineEnd &&
+      atom.atomicGroupId == null
+    ) {
       wordGapCount++;
     }
     renderAtomCount++;
@@ -146,14 +135,21 @@ export function analyzeLineForJustify(
 }
 
 function getAverageWordWidth(info: JustifyLineInfo): number {
-  return info.wordCount > 0 ? info.nonSpaceWidth / info.wordCount : info.lineWidth;
+  return info.wordCount > 0
+    ? info.nonSpaceWidth / info.wordCount
+    : info.lineWidth;
 }
 
 function getAverageCharWidth(info: JustifyLineInfo): number {
-  return info.renderAtomCount > 0 ? info.lineWidth / info.renderAtomCount : info.lineWidth;
+  return info.renderAtomCount > 0
+    ? info.lineWidth / info.renderAtomCount
+    : info.lineWidth;
 }
 
-function resolvePerGapSpacing(totalSpace: number, gapCount: number): number | null {
+function resolvePerGapSpacing(
+  totalSpace: number,
+  gapCount: number,
+): number | null {
   if (totalSpace === 0) {
     return 0;
   }
@@ -163,14 +159,21 @@ function resolvePerGapSpacing(totalSpace: number, gapCount: number): number | nu
   return totalSpace / gapCount;
 }
 
-function exceedsThreshold(perGap: number, averageWidth: number, threshold: number): boolean {
+function exceedsThreshold(
+  perGap: number,
+  averageWidth: number,
+  threshold: number,
+): boolean {
   if (!Number.isFinite(threshold)) {
     return false;
   }
   return perGap > threshold * averageWidth;
 }
 
-function createJustifySpacing(wordSpacingPx: number, letterSpacingPx: number): JustifySpacing {
+function createJustifySpacing(
+  wordSpacingPx: number,
+  letterSpacingPx: number,
+): JustifySpacing {
   return {
     wordSpacing: `${wordSpacingPx}px`,
     letterSpacing: `${letterSpacingPx}px`,
@@ -188,7 +191,9 @@ export function shouldJustifyLine(
   mode: ResolvedJustifyMode,
   threshold: number,
 ): boolean {
-  return computeJustifySpacing(lineWidth, maxWidth, info, mode, threshold) != null;
+  return (
+    computeJustifySpacing(lineWidth, maxWidth, info, mode, threshold) != null
+  );
 }
 
 // -------- Spacing computation --------
@@ -245,39 +250,42 @@ export function computeJustifySpacing(
   const wordPenalty = 1 + cjkRatio;
   const letterPenalty = 1 + latinLikeRatio + 0.5 * punctuationRatio;
 
-  let bestCandidate:
-    | {
-        spacing: JustifySpacing;
-        score: number;
-        wordShare: number;
-      }
-    | null = null;
+  let bestCandidate: {
+    spacing: JustifySpacing;
+    score: number;
+    wordShare: number;
+  } | null = null;
 
   for (const wordShare of HYBRID_WORD_SHARE_CANDIDATES) {
     const wordExtraSpace = extraSpace * wordShare;
     const letterExtraSpace = extraSpace - wordExtraSpace;
-    const wordSpacingPx = resolvePerGapSpacing(wordExtraSpace, info.wordGapCount);
-    const letterSpacingPx = resolvePerGapSpacing(letterExtraSpace, info.letterGapCount);
+    const wordSpacingPx = resolvePerGapSpacing(
+      wordExtraSpace,
+      info.wordGapCount,
+    );
+    const letterSpacingPx = resolvePerGapSpacing(
+      letterExtraSpace,
+      info.letterGapCount,
+    );
     if (wordSpacingPx == null || letterSpacingPx == null) {
       continue;
     }
     if (
-      exceedsThreshold(wordSpacingPx, avgWordWidth, threshold)
-      || exceedsThreshold(letterSpacingPx, avgCharWidth, threshold)
+      exceedsThreshold(wordSpacingPx, avgWordWidth, threshold) ||
+      exceedsThreshold(letterSpacingPx, avgCharWidth, threshold)
     ) {
       continue;
     }
 
     const wordRatio = wordSpacingPx / avgWordWidth;
     const letterRatio = letterSpacingPx / avgCharWidth;
-    const score = wordPenalty * (wordRatio ** 2) + letterPenalty * (letterRatio ** 2);
+    const score =
+      wordPenalty * wordRatio ** 2 + letterPenalty * letterRatio ** 2;
     if (
-      bestCandidate == null
-      || score < bestCandidate.score - JUSTIFY_SCORE_EPSILON
-      || (
-        Math.abs(score - bestCandidate.score) <= JUSTIFY_SCORE_EPSILON
-        && wordShare > bestCandidate.wordShare
-      )
+      bestCandidate == null ||
+      score < bestCandidate.score - JUSTIFY_SCORE_EPSILON ||
+      (Math.abs(score - bestCandidate.score) <= JUSTIFY_SCORE_EPSILON &&
+        wordShare > bestCandidate.wordShare)
     ) {
       bestCandidate = {
         spacing: createJustifySpacing(wordSpacingPx, letterSpacingPx),

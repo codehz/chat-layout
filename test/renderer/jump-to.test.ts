@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
-import { ChatRenderer, ListState, TimelineRenderer, memoRenderItem } from "../../src/renderer";
-import type { Box, Context, HitTest, Node, RenderFeedback } from "../../src/types";
+import {
+  ChatRenderer,
+  ListState,
+  TimelineRenderer,
+  memoRenderItem,
+} from "../../src/renderer";
+import type {
+  Box,
+  Context,
+  HitTest,
+  Node,
+  RenderFeedback,
+} from "../../src/types";
 import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
 import {
   createFeedback,
@@ -125,24 +136,32 @@ describe("jumpTo", () => {
     const viewportHeight = 100;
     const defaultList = new ListState<number>();
     defaultList.pushAll(heights);
-    const defaultRenderer = new TimelineRenderer(createGraphics(viewportHeight), {
-      list: defaultList,
-      renderItem: (height) => createNode(height),
-    });
+    const defaultRenderer = new TimelineRenderer(
+      createGraphics(viewportHeight),
+      {
+        list: defaultList,
+        renderItem: (height) => createNode(height),
+      },
+    );
 
     const explicitList = new ListState<number>();
     explicitList.pushAll(heights);
-    const explicitRenderer = new TimelineRenderer(createGraphics(viewportHeight), {
-      list: explicitList,
-      renderItem: (height) => createNode(height),
-    });
+    const explicitRenderer = new TimelineRenderer(
+      createGraphics(viewportHeight),
+      {
+        list: explicitList,
+        renderItem: (height) => createNode(height),
+      },
+    );
 
     defaultRenderer.jumpTo(2, { animated: false });
     explicitRenderer.jumpTo(2, { animated: false, block: "start" });
     defaultRenderer.render();
     explicitRenderer.render();
 
-    expect(readTimelineAnchor(defaultList, heights)).toBeCloseTo(readTimelineAnchor(explicitList, heights));
+    expect(readTimelineAnchor(defaultList, heights)).toBeCloseTo(
+      readTimelineAnchor(explicitList, heights),
+    );
   });
 
   test("ChatRenderer block end matches the default jump target", () => {
@@ -167,7 +186,9 @@ describe("jumpTo", () => {
     defaultRenderer.render();
     explicitRenderer.render();
 
-    expect(readChatAnchor(defaultList, heights)).toBeCloseTo(readChatAnchor(explicitList, heights));
+    expect(readChatAnchor(defaultList, heights)).toBeCloseTo(
+      readChatAnchor(explicitList, heights),
+    );
   });
 
   test("TimelineRenderer block center aligns the item center to the viewport center", () => {
@@ -183,7 +204,9 @@ describe("jumpTo", () => {
     renderer.jumpTo(2, { animated: false, block: "center" });
     renderer.render();
 
-    expect(readTimelineAnchor(list, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 2, "center"));
+    expect(readTimelineAnchor(list, heights)).toBeCloseTo(
+      expectedTimelineAnchor(heights, viewportHeight, 2, "center"),
+    );
   });
 
   test("ChatRenderer block center aligns the item center to the viewport center", () => {
@@ -199,7 +222,9 @@ describe("jumpTo", () => {
     renderer.jumpTo(1, { animated: false, block: "center" });
     renderer.render();
 
-    expect(readChatAnchor(list, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "center"));
+    expect(readChatAnchor(list, heights)).toBeCloseTo(
+      expectedChatAnchor(heights, viewportHeight, 1, "center"),
+    );
   });
 
   test("TimelineRenderer block end aligns the item bottom to the viewport bottom", () => {
@@ -215,7 +240,9 @@ describe("jumpTo", () => {
     renderer.jumpTo(2, { animated: false, block: "end" });
     renderer.render();
 
-    expect(readTimelineAnchor(list, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 2, "end"));
+    expect(readTimelineAnchor(list, heights)).toBeCloseTo(
+      expectedTimelineAnchor(heights, viewportHeight, 2, "end"),
+    );
   });
 
   test("ChatRenderer block start aligns the item top to the viewport top", () => {
@@ -231,7 +258,9 @@ describe("jumpTo", () => {
     renderer.jumpTo(1, { animated: false, block: "start" });
     renderer.render();
 
-    expect(readChatAnchor(list, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "start"));
+    expect(readChatAnchor(list, heights)).toBeCloseTo(
+      expectedChatAnchor(heights, viewportHeight, 1, "start"),
+    );
   });
 
   test("block center on an oversized item keeps the target centered", () => {
@@ -246,7 +275,9 @@ describe("jumpTo", () => {
     });
     timeline.jumpTo(1, { animated: false, block: "center" });
     timeline.render();
-    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 1, "center"));
+    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(
+      expectedTimelineAnchor(heights, viewportHeight, 1, "center"),
+    );
 
     const chatList = new ListState<number>();
     chatList.pushAll(heights);
@@ -256,7 +287,9 @@ describe("jumpTo", () => {
     });
     chat.jumpTo(1, { animated: false, block: "center" });
     chat.render();
-    expect(readChatAnchor(chatList, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "center"));
+    expect(readChatAnchor(chatList, heights)).toBeCloseTo(
+      expectedChatAnchor(heights, viewportHeight, 1, "center"),
+    );
   });
 
   test("block alignment clamps cleanly near list edges", () => {
@@ -271,7 +304,9 @@ describe("jumpTo", () => {
     });
     timeline.jumpTo(0, { animated: false, block: "end" });
     timeline.render();
-    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(expectedTimelineAnchor(heights, viewportHeight, 0, "end"));
+    expect(readTimelineAnchor(timelineList, heights)).toBeCloseTo(
+      expectedTimelineAnchor(heights, viewportHeight, 0, "end"),
+    );
     expect(Number.isFinite(timelineList.position)).toBe(true);
     expect(Number.isFinite(timelineList.offset)).toBe(true);
 
@@ -283,7 +318,9 @@ describe("jumpTo", () => {
     });
     chat.jumpTo(2, { animated: false, block: "start" });
     chat.render();
-    expect(readChatAnchor(chatList, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 2, "start"));
+    expect(readChatAnchor(chatList, heights)).toBeCloseTo(
+      expectedChatAnchor(heights, viewportHeight, 2, "start"),
+    );
     expect(Number.isFinite(chatList.position)).toBe(true);
     expect(Number.isFinite(chatList.offset)).toBe(true);
   });
@@ -584,7 +621,8 @@ describe("jumpTo", () => {
   test("far jump renders without measuring the whole list", () => {
     type Item = { height: number };
 
-    const makeItems = (): Item[] => Array.from({ length: 1000 }, () => ({ height: 12 }));
+    const makeItems = (): Item[] =>
+      Array.from({ length: 1000 }, () => ({ height: 12 }));
     const measureCount = { count: 0 };
     const renderItem = memoRenderItem<C, Item>((item) => ({
       measure(_ctx: Context<C>): Box {
@@ -633,7 +671,9 @@ describe("jumpTo", () => {
         renderer.render();
       }
 
-      expect(readChatAnchor(list, heights)).toBeCloseTo(expectedChatAnchor(heights, viewportHeight, 1, "start"));
+      expect(readChatAnchor(list, heights)).toBeCloseTo(
+        expectedChatAnchor(heights, viewportHeight, 1, "start"),
+      );
     } finally {
       restoreNow();
     }

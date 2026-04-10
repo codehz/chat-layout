@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { ListState, TimelineRenderer, memoRenderItem } from "../../src/renderer";
+import {
+  ListState,
+  TimelineRenderer,
+  memoRenderItem,
+} from "../../src/renderer";
 import type { Box, Context, HitTest, Node } from "../../src/types";
 import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
 
@@ -33,13 +37,12 @@ describe("ListState weak subscriptions", () => {
     try {
       const draws: string[] = [];
       const oldItem = { id: "old", height: 20 };
-      const list = new ListState<Item>([
-        oldItem,
-        { id: "tail", height: 10 },
-      ]);
+      const list = new ListState<Item>([oldItem, { id: "tail", height: 10 }]);
       const renderer = new TimelineRenderer(createGraphics(120), {
         list,
-        renderItem: memoRenderItem<C, Item>((item) => createProbeNode(item, draws)),
+        renderItem: memoRenderItem<C, Item>((item) =>
+          createProbeNode(item, draws),
+        ),
       });
 
       list.update(oldItem, { id: "new", height: 30 }, { duration: 100 });
@@ -58,7 +61,11 @@ describe("ListState weak subscriptions", () => {
       expect(draws).toEqual(["set"]);
 
       draws.length = 0;
-      list.update(list.items[0]!, { id: "set-next", height: 35 }, { duration: 100 });
+      list.update(
+        list.items[0]!,
+        { id: "set-next", height: 35 },
+        { duration: 100 },
+      );
       now.current = 75;
       renderer.render();
       expect(draws).toEqual(["set", "set-next"]);

@@ -7,7 +7,9 @@ import { createNode } from "../helpers/renderer-fixtures";
 type C = CanvasRenderingContext2D;
 
 // @ts-expect-error memoRenderItem now requires object items; use memoRenderItemBy for primitive keys.
-const _primitiveMemoContract = memoRenderItem<C, number>((item) => createNode(item));
+const _primitiveMemoContract = memoRenderItem<C, number>((item) =>
+  createNode(item),
+);
 void _primitiveMemoContract;
 
 describe("memoized render items", () => {
@@ -104,7 +106,9 @@ describe("memoized render items", () => {
   });
 
   test("memoRenderItem throws a clear runtime error for primitive items", () => {
-    const renderItem = memoRenderItem<C, { value: number }>((item) => createNode(item.value));
+    const renderItem = memoRenderItem<C, { value: number }>((item) =>
+      createNode(item.value),
+    );
     const unsafe = renderItem as unknown as (item: number) => Node<C>;
 
     expect(() => unsafe(1)).toThrow(

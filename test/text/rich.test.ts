@@ -24,11 +24,21 @@ describe("rich text metrics", () => {
       { text: " again", color: "#222" },
     ];
 
-    expect(measureRichTextIntrinsic(ctx, spans, "16px rich-measure")).toEqual({ width: 136, lineCount: 1 });
-    expect(measureRichText(ctx, spans, 48, "16px rich-measure")).toEqual({ width: 40, lineCount: 3 });
+    expect(measureRichTextIntrinsic(ctx, spans, "16px rich-measure")).toEqual({
+      width: 136,
+      lineCount: 1,
+    });
+    expect(measureRichText(ctx, spans, 48, "16px rich-measure")).toEqual({
+      width: 40,
+      lineCount: 3,
+    });
 
     const layout = layoutRichText(ctx, spans, 48, "16px rich-measure", "#000");
-    expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual(["hello", "world", "again"]);
+    expect(
+      layout.lines.map((line) =>
+        line.fragments.map((frag) => frag.text).join(""),
+      ),
+    ).toEqual(["hello", "world", "again"]);
   });
 
   test("rich text metrics support maxLines ellipsis", () => {
@@ -38,37 +48,63 @@ describe("rich text metrics", () => {
       { text: "klmno", font: "600 16px rich-overflow-bold", color: "#f00" },
     ];
 
-    const layout = layoutRichTextWithOverflow(ctx, spans, 40, "16px rich-overflow", "#000", 2, "ellipsis");
+    const layout = layoutRichTextWithOverflow(
+      ctx,
+      spans,
+      40,
+      "16px rich-overflow",
+      "#000",
+      2,
+      "ellipsis",
+    );
     expect(layout.overflowed).toBe(true);
     expect(layout.lines).toHaveLength(2);
-    expect(layout.lines[1]?.fragments.map((frag) => frag.text).join("")).toBe("fghi…");
+    expect(layout.lines[1]?.fragments.map((frag) => frag.text).join("")).toBe(
+      "fghi…",
+    );
   });
 
   test("rich text maxLines clip keeps visible lines without injecting ellipsis", () => {
     const ctx = createMeasuredContext("16px rich-overflow-clip");
     const spans: InlineSpan<C>[] = [
       { text: "abcdefghij", color: "#111" },
-      { text: "klmno", font: "600 16px rich-overflow-clip-bold", color: "#f00" },
+      {
+        text: "klmno",
+        font: "600 16px rich-overflow-clip-bold",
+        color: "#f00",
+      },
     ];
 
-    expect(layoutRichTextWithOverflow(ctx, spans, 40, "16px rich-overflow-clip", "#000", 1, "clip")).toEqual({
+    expect(
+      layoutRichTextWithOverflow(
+        ctx,
+        spans,
+        40,
+        "16px rich-overflow-clip",
+        "#000",
+        1,
+        "clip",
+      ),
+    ).toEqual({
       width: 40,
       lines: [
         {
           width: 40,
-          fragments: [{
-            itemIndex: 0,
-            text: "abcde",
-            font: "16px rich-overflow-clip",
-            color: "#111",
-            gapBefore: 0,
-            gapAtomCount: 0,
-            gapSpaceCount: 0,
-            occupiedWidth: 40,
-            atomCount: 5,
-            spaceCount: 0,
-            shift: 6,
-          }],
+          fragments: [
+            {
+              itemIndex: 0,
+              text: "abcde",
+              font: "16px rich-overflow-clip",
+              color: "#111",
+              gapBefore: 0,
+              gapAtomCount: 0,
+              gapSpaceCount: 0,
+              occupiedWidth: 40,
+              atomCount: 5,
+              spaceCount: 0,
+              shift: 6,
+            },
+          ],
           overflowed: false,
         },
       ],
@@ -84,7 +120,9 @@ describe("rich text metrics", () => {
       { text: "bc", color: "#222" },
     ];
 
-    expect(measureRichTextMinContent(ctx, spans, "16px rich-min", "anywhere")).toEqual({ width: 8, lineCount: 11 });
+    expect(
+      measureRichTextMinContent(ctx, spans, "16px rich-min", "anywhere"),
+    ).toEqual({ width: 8, lineCount: 11 });
   });
 
   test("rich text wraps before a CJK span that would overflow the remaining width", () => {
@@ -95,8 +133,13 @@ describe("rich text metrics", () => {
       { text: "bbbb", color: "#222" },
     ];
 
-    expect(measureRichText(ctx, spans, 48, "16px rich-cjk-overflow")).toEqual({ width: 48, lineCount: 2 });
-    expect(layoutRichFirstLine(ctx, spans, 48, "16px rich-cjk-overflow", "#000")).toEqual({
+    expect(measureRichText(ctx, spans, 48, "16px rich-cjk-overflow")).toEqual({
+      width: 48,
+      lineCount: 2,
+    });
+    expect(
+      layoutRichFirstLine(ctx, spans, 48, "16px rich-cjk-overflow", "#000"),
+    ).toEqual({
       width: 40,
       fragments: [
         {
@@ -116,9 +159,19 @@ describe("rich text metrics", () => {
       overflowed: false,
     });
 
-    const layout = layoutRichText(ctx, spans, 48, "16px rich-cjk-overflow", "#000");
+    const layout = layoutRichText(
+      ctx,
+      spans,
+      48,
+      "16px rich-cjk-overflow",
+      "#000",
+    );
     expect(layout.width).toBe(48);
-    expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual(["aaaaa", "《帝bbbb"]);
+    expect(
+      layout.lines.map((line) =>
+        line.fragments.map((frag) => frag.text).join(""),
+      ),
+    ).toEqual(["aaaaa", "《帝bbbb"]);
     expect(layout.lines.every((line) => line.width <= 48)).toBe(true);
   });
 
@@ -129,14 +182,19 @@ describe("rich text metrics", () => {
       { text: " bar baz", font: "600 16px rich-pre-wrap-bold", color: "#f00" },
     ];
 
-    const layout = layoutRichText(ctx, spans, 40, "16px rich-pre-wrap", "#000", "pre-wrap");
-    expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual([
-      "hello ",
-      "world",
-      "  foo ",
-      "bar ",
-      "baz",
-    ]);
+    const layout = layoutRichText(
+      ctx,
+      spans,
+      40,
+      "16px rich-pre-wrap",
+      "#000",
+      "pre-wrap",
+    );
+    expect(
+      layout.lines.map((line) =>
+        line.fragments.map((frag) => frag.text).join(""),
+      ),
+    ).toEqual(["hello ", "world", "  foo ", "bar ", "baz"]);
   });
 
   test("rich text keep-all honors CJK punctuation across span boundaries", () => {
@@ -147,13 +205,20 @@ describe("rich text metrics", () => {
       { text: "世界你好", color: "#222" },
     ];
 
-    const layout = layoutRichText(ctx, spans, 16, "16px rich-keep-all", "#000", "normal", "keep-all");
-    expect(layout.lines.map((line) => line.fragments.map((frag) => frag.text).join(""))).toEqual([
-      "你好",
-      "，",
-      "世界",
-      "你好",
-    ]);
+    const layout = layoutRichText(
+      ctx,
+      spans,
+      16,
+      "16px rich-keep-all",
+      "#000",
+      "normal",
+      "keep-all",
+    );
+    expect(
+      layout.lines.map((line) =>
+        line.fragments.map((frag) => frag.text).join(""),
+      ),
+    ).toEqual(["你好", "，", "世界", "你好"]);
   });
 
   test("rich text min-content anywhere uses grapheme opportunities across spans", () => {
@@ -163,7 +228,9 @@ describe("rich text metrics", () => {
       { text: "def", font: "600 16px rich-anywhere-bold", color: "#f00" },
     ];
 
-    expect(measureRichTextMinContent(ctx, spans, "16px rich-anywhere", "anywhere")).toEqual({
+    expect(
+      measureRichTextMinContent(ctx, spans, "16px rich-anywhere", "anywhere"),
+    ).toEqual({
       width: 8,
       lineCount: 6,
     });
@@ -176,7 +243,13 @@ describe("rich text metrics", () => {
       { text: "c", color: "#222" },
     ];
 
-    const layout = layoutRichText(ctx, spans, 16, "16px rich-break-never", "#000");
+    const layout = layoutRichText(
+      ctx,
+      spans,
+      16,
+      "16px rich-break-never",
+      "#000",
+    );
     expect(layout.lines).toHaveLength(2);
     expect(layout.lines[0]).toMatchObject({
       width: 24,
@@ -190,29 +263,53 @@ describe("rich text metrics", () => {
         },
       ],
     });
-    expect(layout.lines[1]?.fragments.map((frag) => frag.text).join("")).toBe("c");
+    expect(layout.lines[1]?.fragments.map((frag) => frag.text).join("")).toBe(
+      "c",
+    );
   });
 
   test("rich text single-line ellipsis can truncate across span boundaries", () => {
     const ctx = createMeasuredContext("16px rich-ellipsis-cross-span");
     const spans: InlineSpan<C>[] = [
       { text: "alpha ", color: "#111" },
-      { text: "beta", font: "600 16px rich-ellipsis-cross-span-bold", color: "#f00" },
+      {
+        text: "beta",
+        font: "600 16px rich-ellipsis-cross-span-bold",
+        color: "#f00",
+      },
       { text: " gamma", color: "#222" },
     ];
 
-    const layout = layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-ellipsis-cross-span", "#000");
+    const layout = layoutRichEllipsizedFirstLine(
+      ctx,
+      spans,
+      64,
+      "16px rich-ellipsis-cross-span",
+      "#000",
+    );
     expect(layout.width).toBe(64);
-    expect(layout.fragments.map((frag) => frag.text)).toEqual(["alpha", "b", "…"]);
+    expect(layout.fragments.map((frag) => frag.text)).toEqual([
+      "alpha",
+      "b",
+      "…",
+    ]);
   });
 
   test("rich text multiline ellipsis never returns an over-wide line in ultra-narrow constraints", () => {
     const ctx = createMeasuredContext("16px rich-overflow-tight");
-    const spans: InlineSpan<C>[] = [
-      { text: "alphabet", color: "#111" },
-    ];
+    const spans: InlineSpan<C>[] = [{ text: "alphabet", color: "#111" }];
 
-    expect(layoutRichTextWithOverflow(ctx, spans, 4, "16px rich-overflow-tight", "#000", 1, "ellipsis")).toEqual({
+    expect(
+      layoutRichTextWithOverflow(
+        ctx,
+        spans,
+        4,
+        "16px rich-overflow-tight",
+        "#000",
+        1,
+        "ellipsis",
+      ),
+    ).toEqual({
       width: 0,
       lines: [{ width: 0, fragments: [], overflowed: true }],
       overflowed: true,
@@ -242,8 +339,20 @@ describe("rich text metrics", () => {
 
     layoutRichText(ctx, spans, 48, "16px rich-font-cache", "#000");
     layoutRichText(ctx, spans, 48, "16px rich-font-cache", "#000");
-    layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-font-cache", "#000");
-    layoutRichEllipsizedFirstLine(ctx, spans, 64, "16px rich-font-cache", "#000");
+    layoutRichEllipsizedFirstLine(
+      ctx,
+      spans,
+      64,
+      "16px rich-font-cache",
+      "#000",
+    );
+    layoutRichEllipsizedFirstLine(
+      ctx,
+      spans,
+      64,
+      "16px rich-font-cache",
+      "#000",
+    );
 
     expect(measuredTexts).toEqual([
       "16px rich-font-cache:M",

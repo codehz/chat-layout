@@ -176,8 +176,12 @@ describe("virtualized visible window", () => {
       if (previous != null) {
         expect(feedback.min).toBeGreaterThanOrEqual(previous.min);
         expect(feedback.max).toBeGreaterThanOrEqual(previous.max);
-        expect(feedback.min - previous.min).toBeLessThanOrEqual(0.25 + Number.EPSILON);
-        expect(feedback.max - previous.max).toBeLessThanOrEqual(0.25 + Number.EPSILON);
+        expect(feedback.min - previous.min).toBeLessThanOrEqual(
+          0.25 + Number.EPSILON,
+        );
+        expect(feedback.max - previous.max).toBeLessThanOrEqual(
+          0.25 + Number.EPSILON,
+        );
       }
 
       previous = { ...feedback };
@@ -203,8 +207,12 @@ describe("virtualized visible window", () => {
       if (previous != null) {
         expect(feedback.min).toBeLessThanOrEqual(previous.min);
         expect(feedback.max).toBeLessThanOrEqual(previous.max);
-        expect(previous.min - feedback.min).toBeLessThanOrEqual(0.25 + Number.EPSILON);
-        expect(previous.max - feedback.max).toBeLessThanOrEqual(0.25 + Number.EPSILON);
+        expect(previous.min - feedback.min).toBeLessThanOrEqual(
+          0.25 + Number.EPSILON,
+        );
+        expect(previous.max - feedback.max).toBeLessThanOrEqual(
+          0.25 + Number.EPSILON,
+        );
       }
 
       previous = { ...feedback };

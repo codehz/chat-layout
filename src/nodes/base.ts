@@ -1,4 +1,8 @@
-import { attachNodeToParent, replaceNodeParent, replaceNodesParent } from "../internal/node-registry";
+import {
+  attachNodeToParent,
+  replaceNodeParent,
+  replaceNodesParent,
+} from "../internal/node-registry";
 import type { Box, Context, HitTest, LayoutConstraints, Node } from "../types";
 import { shallow } from "../utils";
 
@@ -29,7 +33,9 @@ export function measureNodeMinContent<C extends CanvasRenderingContext2D>(
 /**
  * A node that owns an ordered list of child nodes.
  */
-export abstract class Group<C extends CanvasRenderingContext2D> implements Node<C> {
+export abstract class Group<
+  C extends CanvasRenderingContext2D,
+> implements Node<C> {
   #children: Node<C>[];
 
   /**

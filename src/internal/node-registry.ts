@@ -4,18 +4,24 @@ const registry = new WeakMap<Node<any>, Node<any>>();
 const revisions = new WeakMap<Node<any>, number>();
 
 function getOwnershipError(): Error {
-  return new Error("A node can only be attached to one parent. Shared nodes are not supported.");
+  return new Error(
+    "A node can only be attached to one parent. Shared nodes are not supported.",
+  );
 }
 
 function getDetachOwnershipError(): Error {
-  return new Error("Cannot detach or replace a node from a parent that does not own it.");
+  return new Error(
+    "Cannot detach or replace a node from a parent that does not own it.",
+  );
 }
 
 function bumpRevision(node: Node<any>): void {
   revisions.set(node, (revisions.get(node) ?? 0) + 1);
 }
 
-export function getNodeRevision<C extends CanvasRenderingContext2D>(node: Node<C>): number {
+export function getNodeRevision<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+): number {
   return revisions.get(node) ?? 0;
 }
 
@@ -137,10 +143,15 @@ export function registerNodeParent<C extends CanvasRenderingContext2D>(
   attachNodeToParent(node, parent);
 }
 
-export function unregisterNodeParent<C extends CanvasRenderingContext2D>(node: Node<C>, parent?: Node<C>): void {
+export function unregisterNodeParent<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  parent?: Node<C>,
+): void {
   detachNodeFromParent(node, parent);
 }
 
-export function getNodeParent<C extends CanvasRenderingContext2D>(node: Node<C>): Node<C> | undefined {
+export function getNodeParent<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+): Node<C> | undefined {
   return registry.get(node);
 }

@@ -38,9 +38,15 @@ describe("ListState item identity", () => {
     const missing = { id: "missing" };
     const list = new ListState<Item>([first, second]);
 
-    expect(() => list.update(missing, { id: "next" })).toThrow("targetItem is not present");
-    expect(() => list.update(first, first)).toThrow("requires nextItem to be a new object reference");
-    expect(() => list.update(first, second)).toThrow("nextItem is already present");
+    expect(() => list.update(missing, { id: "next" })).toThrow(
+      "targetItem is not present",
+    );
+    expect(() => list.update(first, first)).toThrow(
+      "requires nextItem to be a new object reference",
+    );
+    expect(() => list.update(first, second)).toThrow(
+      "nextItem is already present",
+    );
   });
 
   test("update only supports object items", () => {
@@ -53,13 +59,17 @@ describe("ListState item identity", () => {
     const item = { id: "shared" };
     const other = { id: "other" };
 
-    expect(() => new ListState<Item>([item, item])).toThrow("unique object references");
+    expect(() => new ListState<Item>([item, item])).toThrow(
+      "unique object references",
+    );
 
     const list = new ListState<Item>([item]);
     expect(() => {
       list.items = [other, other];
     }).toThrow("unique object references");
-    expect(() => list.reset([other, other])).toThrow("unique object references");
+    expect(() => list.reset([other, other])).toThrow(
+      "unique object references",
+    );
     expect(() => list.push(item)).toThrow("unique object references");
     expect(() => list.unshift(item)).toThrow("unique object references");
   });

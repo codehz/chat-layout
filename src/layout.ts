@@ -1,9 +1,20 @@
-import type { Box, ChildLayoutResult, FlexLayoutResult, LayoutConstraints, LayoutRect } from "./types";
+import type {
+  Box,
+  ChildLayoutResult,
+  FlexLayoutResult,
+  LayoutConstraints,
+  LayoutRect,
+} from "./types";
 
 /**
  * 创建 LayoutRect 的辅助函数
  */
-export function createRect(x: number, y: number, width: number, height: number): LayoutRect {
+export function createRect(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): LayoutRect {
   return { x, y, width, height };
 }
 
@@ -76,13 +87,22 @@ export function boxToRect(box: Box): LayoutRect {
  * 检查点是否在 rect 内
  */
 export function pointInRect(x: number, y: number, rect: LayoutRect): boolean {
-  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+  return (
+    x >= rect.x &&
+    x < rect.x + rect.width &&
+    y >= rect.y &&
+    y < rect.y + rect.height
+  );
 }
 
 /**
  * 平移 rect 的位置
  */
-export function offsetRect(rect: LayoutRect, dx: number, dy: number): LayoutRect {
+export function offsetRect(
+  rect: LayoutRect,
+  dx: number,
+  dy: number,
+): LayoutRect {
   return createRect(rect.x + dx, rect.y + dy, rect.width, rect.height);
 }
 

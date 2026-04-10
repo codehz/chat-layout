@@ -80,19 +80,26 @@ export class ShrinkWrap<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     const constraints = ctx.constraints;
     const availableWidth = constraints?.maxWidth;
     if (availableWidth == null) {
-      const childConstraints = constraints == null ? undefined : { ...constraints };
+      const childConstraints =
+        constraints == null ? undefined : { ...constraints };
       const childBox = ctx.measureNode(this.inner, childConstraints);
       this.#writeLayout(ctx, childBox, childConstraints);
       return childBox;
     }
 
-    const boundedConstraints = constraints == null ? { maxWidth: availableWidth } : constraints;
+    const boundedConstraints =
+      constraints == null ? { maxWidth: availableWidth } : constraints;
     const referenceConstraints = { ...boundedConstraints };
     const referenceBox = ctx.measureNode(this.inner, referenceConstraints);
-    let lowerBound = measureNodeMinContent(ctx, this.inner, boundedConstraints).width;
-    const preferredMinWidth = this.options.preferredMinWidth == null
-      ? undefined
-      : Math.max(0, this.options.preferredMinWidth);
+    let lowerBound = measureNodeMinContent(
+      ctx,
+      this.inner,
+      boundedConstraints,
+    ).width;
+    const preferredMinWidth =
+      this.options.preferredMinWidth == null
+        ? undefined
+        : Math.max(0, this.options.preferredMinWidth);
     if (preferredMinWidth != null && preferredMinWidth <= availableWidth) {
       lowerBound = Math.max(lowerBound, preferredMinWidth);
     }
@@ -105,13 +112,17 @@ export class ShrinkWrap<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     }
 
     const finalProbe = computeShrinkwrapWidth(
-      (maxWidth) => ctx.measureNode(this.inner, withMaxWidth(boundedConstraints, maxWidth)),
+      (maxWidth) =>
+        ctx.measureNode(this.inner, withMaxWidth(boundedConstraints, maxWidth)),
       lowerBound,
       availableWidth,
       referenceBox.height,
       this.options.tolerance ?? DEFAULT_TOLERANCE,
     );
-    const finalConstraints = withMaxWidth(boundedConstraints, finalProbe.maxWidth);
+    const finalConstraints = withMaxWidth(
+      boundedConstraints,
+      finalProbe.maxWidth,
+    );
     const finalBox = ctx.measureNode(this.inner, finalConstraints);
     this.#writeLayout(ctx, finalBox, finalConstraints);
     return finalBox;
@@ -150,17 +161,18 @@ export class ShrinkWrap<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       return false;
     }
 
-    return hit.child.node.hittest(
-      withConstraints(ctx, hit.child.constraints),
-      {
-        ...test,
-        x: hit.localX,
-        y: hit.localY,
-      },
-    );
+    return hit.child.node.hittest(withConstraints(ctx, hit.child.constraints), {
+      ...test,
+      x: hit.localX,
+      y: hit.localY,
+    });
   }
 
-  #writeLayout(ctx: Context<C>, childBox: Box, childConstraints: LayoutConstraints | undefined): void {
+  #writeLayout(
+    ctx: Context<C>,
+    childBox: Box,
+    childConstraints: LayoutConstraints | undefined,
+  ): void {
     const childRect = createRect(0, 0, childBox.width, childBox.height);
     writeLayoutResult(this, ctx, {
       containerBox: childRect,

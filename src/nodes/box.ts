@@ -15,7 +15,10 @@ function clampToConstraints(value: number, min?: number, max?: number): number {
   return result;
 }
 
-function shrinkConstraint(value: number | undefined, padding: number): number | undefined {
+function shrinkConstraint(
+  value: number | undefined,
+  padding: number,
+): number | undefined {
   if (value == null) {
     return undefined;
   }
@@ -68,18 +71,38 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     const childConstraints = ctx.constraints
       ? {
           ...ctx.constraints,
-          minWidth: shrinkConstraint(ctx.constraints.minWidth, horizontalPadding),
-          maxWidth: shrinkConstraint(ctx.constraints.maxWidth, horizontalPadding),
-          minHeight: shrinkConstraint(ctx.constraints.minHeight, verticalPadding),
-          maxHeight: shrinkConstraint(ctx.constraints.maxHeight, verticalPadding),
+          minWidth: shrinkConstraint(
+            ctx.constraints.minWidth,
+            horizontalPadding,
+          ),
+          maxWidth: shrinkConstraint(
+            ctx.constraints.maxWidth,
+            horizontalPadding,
+          ),
+          minHeight: shrinkConstraint(
+            ctx.constraints.minHeight,
+            verticalPadding,
+          ),
+          maxHeight: shrinkConstraint(
+            ctx.constraints.maxHeight,
+            verticalPadding,
+          ),
         }
       : undefined;
     const { width, height } = ctx.measureNode(this.inner, childConstraints);
     const containerBox = createRect(
       0,
       0,
-      clampToConstraints(width + horizontalPadding, ctx.constraints?.minWidth, ctx.constraints?.maxWidth),
-      clampToConstraints(height + verticalPadding, ctx.constraints?.minHeight, ctx.constraints?.maxHeight),
+      clampToConstraints(
+        width + horizontalPadding,
+        ctx.constraints?.minWidth,
+        ctx.constraints?.maxWidth,
+      ),
+      clampToConstraints(
+        height + verticalPadding,
+        ctx.constraints?.minHeight,
+        ctx.constraints?.maxHeight,
+      ),
     );
     const childRect = createRect(paddingLeft, paddingTop, width, height);
     writeLayoutResult(this, ctx, {
@@ -111,13 +134,29 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
     const childConstraints = ctx.constraints
       ? {
           ...ctx.constraints,
-          minWidth: shrinkConstraint(ctx.constraints.minWidth, horizontalPadding),
-          maxWidth: shrinkConstraint(ctx.constraints.maxWidth, horizontalPadding),
-          minHeight: shrinkConstraint(ctx.constraints.minHeight, verticalPadding),
-          maxHeight: shrinkConstraint(ctx.constraints.maxHeight, verticalPadding),
+          minWidth: shrinkConstraint(
+            ctx.constraints.minWidth,
+            horizontalPadding,
+          ),
+          maxWidth: shrinkConstraint(
+            ctx.constraints.maxWidth,
+            horizontalPadding,
+          ),
+          minHeight: shrinkConstraint(
+            ctx.constraints.minHeight,
+            verticalPadding,
+          ),
+          maxHeight: shrinkConstraint(
+            ctx.constraints.maxHeight,
+            verticalPadding,
+          ),
         }
       : undefined;
-    const { width, height } = measureNodeMinContent(ctx, this.inner, childConstraints);
+    const { width, height } = measureNodeMinContent(
+      ctx,
+      this.inner,
+      childConstraints,
+    );
     return {
       width: width + horizontalPadding,
       height: height + verticalPadding,
@@ -153,14 +192,11 @@ export class PaddingBox<C extends CanvasRenderingContext2D> extends Wrapper<C> {
       return false;
     }
 
-    return hit.child.node.hittest(
-      withConstraints(ctx, hit.child.constraints),
-      {
-        ...test,
-        x: hit.localX,
-        y: hit.localY,
-      },
-    );
+    return hit.child.node.hittest(withConstraints(ctx, hit.child.constraints), {
+      ...test,
+      x: hit.localX,
+      y: hit.localY,
+    });
   }
 }
 

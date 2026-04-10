@@ -16,13 +16,17 @@
 ### 1. 长 plain 英文段落
 
 ```ts
-const plainEnglish = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega repeated plain text sample for layout benchmarking";
+const plainEnglish =
+  "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega repeated plain text sample for layout benchmarking";
 ```
 
 ### 2. 长 CJK 段落
 
 ```ts
-const plainCjk = "这是一个用于文本布局性能观察的长段落，包含中文标点、连续词组以及适合 keep-all 与 normal 对比的内容，重复若干次以制造稳定负载。".repeat(6);
+const plainCjk =
+  "这是一个用于文本布局性能观察的长段落，包含中文标点、连续词组以及适合 keep-all 与 normal 对比的内容，重复若干次以制造稳定负载。".repeat(
+    6,
+  );
 ```
 
 ### 3. 多 span rich 文本
@@ -32,7 +36,12 @@ const richSpans = [
   { text: "alpha beta gamma ", color: "#111" },
   { text: "强调片段", font: "700 16px perf-bold", color: "#c00" },
   { text: " with extra gap", extraWidth: 6, color: "#333" },
-  { text: " [atomic]", break: "never", font: "600 16px perf-medium", color: "#06c" },
+  {
+    text: " [atomic]",
+    break: "never",
+    font: "600 16px perf-medium",
+    color: "#06c",
+  },
   { text: " 尾部补充 mixed content", color: "#555" },
 ];
 ```

@@ -1,4 +1,9 @@
-import type { Context, TextOverflowWrapMode, TextWhiteSpaceMode, TextWordBreakMode } from "../types";
+import type {
+  Context,
+  TextOverflowWrapMode,
+  TextWhiteSpaceMode,
+  TextWordBreakMode,
+} from "../types";
 import {
   createPlainSourceItems,
   getPlainPreparedKey,
@@ -41,12 +46,21 @@ export function readPreparedFirstLine<C extends CanvasRenderingContext2D>(
   whiteSpace: TextWhiteSpaceMode,
   wordBreak: TextWordBreakMode,
 ): { text: string; prepared: PreparedTextWithSegments } | undefined {
-  const prepared = readPreparedText(text, ctx.graphics.font, whiteSpace, wordBreak);
+  const prepared = readPreparedText(
+    text,
+    ctx.graphics.font,
+    whiteSpace,
+    wordBreak,
+  );
   const start = getPreparedLineStart(prepared);
   if (start == null) {
     return undefined;
   }
-  const line = layoutNextPreparedLine(prepared, start, Number.POSITIVE_INFINITY);
+  const line = layoutNextPreparedLine(
+    prepared,
+    start,
+    Number.POSITIVE_INFINITY,
+  );
   if (line == null) {
     return undefined;
   }
@@ -63,10 +77,16 @@ export function measurePreparedMinContentWidth(
   return measureInlinePreparedMinContentWidth(prepared, overflowWrap);
 }
 
-export function getPreparedUnits(prepared: PreparedTextWithSegments): PreparedTextUnit[] {
+export function getPreparedUnits(
+  prepared: PreparedTextWithSegments,
+): PreparedTextUnit[] {
   return getInlinePreparedUnits(prepared);
 }
 
-export function joinUnitText(units: readonly PreparedTextUnit[], start: number, end: number): string {
+export function joinUnitText(
+  units: readonly PreparedTextUnit[],
+  start: number,
+  end: number,
+): string {
   return joinPreparedUnitText(units, start, end);
 }

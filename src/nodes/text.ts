@@ -28,8 +28,21 @@ import {
   resolveJustifyMode,
 } from "../text";
 import { readPreparedText } from "../text/plain-core";
-import { readPreparedInlineLayout, createRichSourceItems, getRichPreparedKey, walkPreparedLineRanges } from "../text/inline-engine";
-import type { Box, Context, InlineSpan, MultilineTextOptions, Node, PhysicalTextAlign, TextOptions } from "../types";
+import {
+  readPreparedInlineLayout,
+  createRichSourceItems,
+  getRichPreparedKey,
+  walkPreparedLineRanges,
+} from "../text/inline-engine";
+import type {
+  Box,
+  Context,
+  InlineSpan,
+  MultilineTextOptions,
+  Node,
+  PhysicalTextAlign,
+  TextOptions,
+} from "../types";
 
 type SingleLineLayout = TextLayout;
 type MultiLineDrawLayout = {
@@ -62,7 +75,9 @@ function resolvePhysicalTextAlign(
   return "left";
 }
 
-function normalizeTextMaxWidth(maxWidth: number | undefined): number | undefined {
+function normalizeTextMaxWidth(
+  maxWidth: number | undefined,
+): number | undefined {
   if (maxWidth == null) {
     return undefined;
   }
@@ -74,11 +89,16 @@ const DEFAULT_TEXT_SPACING = {
   letterSpacing: "0px",
 } as const;
 
-function supportsTextSpacing(g: CanvasRenderingContext2D): g is CanvasRenderingContext2D & {
+function supportsTextSpacing(
+  g: CanvasRenderingContext2D,
+): g is CanvasRenderingContext2D & {
   wordSpacing: string;
   letterSpacing: string;
 } {
-  return typeof (g as any).wordSpacing === "string" && typeof (g as any).letterSpacing === "string";
+  return (
+    typeof (g as any).wordSpacing === "string" &&
+    typeof (g as any).letterSpacing === "string"
+  );
 }
 
 function withTextSpacing<C extends CanvasRenderingContext2D, T>(
@@ -101,7 +121,9 @@ function withTextSpacing<C extends CanvasRenderingContext2D, T>(
   }
 }
 
-function getTextLayoutContext<C extends CanvasRenderingContext2D>(ctx: Context<C>): Context<C> & TextLayoutCacheAccess<C> {
+function getTextLayoutContext<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+): Context<C> & TextLayoutCacheAccess<C> {
   return ctx as Context<C> & TextLayoutCacheAccess<C>;
 }
 
@@ -126,11 +148,17 @@ function getSingleLineLayoutKey(maxWidth: number | undefined): string {
 }
 
 function getMultiLineMeasureLayoutKey(maxWidth: number | undefined): string {
-  return maxWidth == null ? "multi:measure:intrinsic" : `multi:measure:${maxWidth}`;
+  return maxWidth == null
+    ? "multi:measure:intrinsic"
+    : `multi:measure:${maxWidth}`;
 }
 
-function getRichMultiLineMeasureLayoutKey(maxWidth: number | undefined): string {
-  return maxWidth == null ? "rich:measure:intrinsic" : `rich:measure:${maxWidth}`;
+function getRichMultiLineMeasureLayoutKey(
+  maxWidth: number | undefined,
+): string {
+  return maxWidth == null
+    ? "rich:measure:intrinsic"
+    : `rich:measure:${maxWidth}`;
 }
 
 function getMultiLineDrawLayoutKey(maxWidth: number | undefined): string {
@@ -142,14 +170,22 @@ function getRichMultiLineDrawLayoutKey(maxWidth: number | undefined): string {
 }
 
 function getMultiLineOverflowLayoutKey(maxWidth: number | undefined): string {
-  return maxWidth == null ? "multi:overflow:intrinsic" : `multi:overflow:${maxWidth}`;
+  return maxWidth == null
+    ? "multi:overflow:intrinsic"
+    : `multi:overflow:${maxWidth}`;
 }
 
-function getRichMultiLineOverflowLayoutKey(maxWidth: number | undefined): string {
-  return maxWidth == null ? "rich:overflow:intrinsic" : `rich:overflow:${maxWidth}`;
+function getRichMultiLineOverflowLayoutKey(
+  maxWidth: number | undefined,
+): string {
+  return maxWidth == null
+    ? "rich:overflow:intrinsic"
+    : `rich:overflow:${maxWidth}`;
 }
 
-function shouldUseMultilineOverflowLayout(options: Pick<MultilineTextOptions<any>, "maxLines">): boolean {
+function shouldUseMultilineOverflowLayout(
+  options: Pick<MultilineTextOptions<any>, "maxLines">,
+): boolean {
   return options.maxLines != null;
 }
 
@@ -160,7 +196,9 @@ function shouldReadConstrainedOverflowLayout(
   return maxWidth != null && shouldUseMultilineOverflowLayout(options);
 }
 
-function measureBlockLayout<T extends { width: number; lines: ArrayLike<unknown> }>(layout: T): MultiLineMeasureLayout {
+function measureBlockLayout<
+  T extends { width: number; lines: ArrayLike<unknown> },
+>(layout: T): MultiLineMeasureLayout {
   return { width: layout.width, lineCount: layout.lines.length };
 }
 
@@ -183,19 +221,34 @@ function getSingleLineLayout<C extends CanvasRenderingContext2D>(
   options: TextOptions<C>,
 ): SingleLineLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  return readCachedTextLayout(node, ctx, getSingleLineLayoutKey(maxWidth), () =>
-    maxWidth == null
-      ? layoutFirstLineIntrinsic(ctx, text, options.whiteSpace, options.wordBreak)
-      : options.overflow === "ellipsis"
-        ? layoutEllipsizedFirstLine(
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getSingleLineLayoutKey(maxWidth),
+    () =>
+      maxWidth == null
+        ? layoutFirstLineIntrinsic(
             ctx,
             text,
-            maxWidth,
-            options.ellipsisPosition ?? "end",
             options.whiteSpace,
             options.wordBreak,
           )
-        : layoutFirstLine(ctx, text, maxWidth, options.whiteSpace, options.wordBreak)
+        : options.overflow === "ellipsis"
+          ? layoutEllipsizedFirstLine(
+              ctx,
+              text,
+              maxWidth,
+              options.ellipsisPosition ?? "end",
+              options.whiteSpace,
+              options.wordBreak,
+            )
+          : layoutFirstLine(
+              ctx,
+              text,
+              maxWidth,
+              options.whiteSpace,
+              options.wordBreak,
+            ),
   );
 }
 
@@ -206,21 +259,40 @@ function getRichSingleLineLayout<C extends CanvasRenderingContext2D>(
   options: TextOptions<C>,
 ): RichLineLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  return readCachedTextLayout(node, ctx, getSingleLineLayoutKey(maxWidth), () =>
-    maxWidth == null
-      ? layoutRichFirstLineIntrinsic(ctx, spans, options.font, options.color, options.whiteSpace, options.wordBreak)
-      : options.overflow === "ellipsis"
-        ? layoutRichEllipsizedFirstLine(
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getSingleLineLayoutKey(maxWidth),
+    () =>
+      maxWidth == null
+        ? layoutRichFirstLineIntrinsic(
             ctx,
             spans,
-            maxWidth,
             options.font,
             options.color,
-            options.ellipsisPosition ?? "end",
             options.whiteSpace,
             options.wordBreak,
           )
-        : layoutRichFirstLine(ctx, spans, maxWidth, options.font, options.color, options.whiteSpace, options.wordBreak)
+        : options.overflow === "ellipsis"
+          ? layoutRichEllipsizedFirstLine(
+              ctx,
+              spans,
+              maxWidth,
+              options.font,
+              options.color,
+              options.ellipsisPosition ?? "end",
+              options.whiteSpace,
+              options.wordBreak,
+            )
+          : layoutRichFirstLine(
+              ctx,
+              spans,
+              maxWidth,
+              options.font,
+              options.color,
+              options.whiteSpace,
+              options.wordBreak,
+            ),
   );
 }
 
@@ -231,13 +303,17 @@ function getMultiLineOverflowLayout<C extends CanvasRenderingContext2D>(
   options: MultilineTextOptions<C>,
 ): MultiLineDrawLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  return readCachedTextLayout(node, ctx, getMultiLineOverflowLayoutKey(maxWidth), () =>
-    layoutTextWithOverflow(ctx, text, maxWidth ?? 0, {
-      whiteSpace: options.whiteSpace,
-      wordBreak: options.wordBreak,
-      overflow: options.overflow,
-      maxLines: options.maxLines,
-    })
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getMultiLineOverflowLayoutKey(maxWidth),
+    () =>
+      layoutTextWithOverflow(ctx, text, maxWidth ?? 0, {
+        whiteSpace: options.whiteSpace,
+        wordBreak: options.wordBreak,
+        overflow: options.overflow,
+        maxLines: options.maxLines,
+      }),
   );
 }
 
@@ -249,12 +325,24 @@ function getMultiLineMeasureLayout<C extends CanvasRenderingContext2D>(
 ): MultiLineMeasureLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
   if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
-    return measureBlockLayout(getMultiLineOverflowLayout(node, ctx, text, options));
+    return measureBlockLayout(
+      getMultiLineOverflowLayout(node, ctx, text, options),
+    );
   }
-  return readCachedTextLayout(node, ctx, getMultiLineMeasureLayoutKey(maxWidth), () =>
-    maxWidth == null
-      ? measureTextIntrinsic(ctx, text, options.whiteSpace, options.wordBreak)
-      : measureText(ctx, text, maxWidth, options.whiteSpace, options.wordBreak)
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getMultiLineMeasureLayoutKey(maxWidth),
+    () =>
+      maxWidth == null
+        ? measureTextIntrinsic(ctx, text, options.whiteSpace, options.wordBreak)
+        : measureText(
+            ctx,
+            text,
+            maxWidth,
+            options.whiteSpace,
+            options.wordBreak,
+          ),
   );
 }
 
@@ -268,10 +356,20 @@ function getMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
   if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
     return getMultiLineOverflowLayout(node, ctx, text, options);
   }
-  return readCachedTextLayout(node, ctx, getMultiLineDrawLayoutKey(maxWidth), () =>
-    maxWidth == null
-      ? layoutTextIntrinsic(ctx, text, options.whiteSpace, options.wordBreak)
-      : layoutText(ctx, text, maxWidth, options.whiteSpace, options.wordBreak)
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getMultiLineDrawLayoutKey(maxWidth),
+    () =>
+      maxWidth == null
+        ? layoutTextIntrinsic(ctx, text, options.whiteSpace, options.wordBreak)
+        : layoutText(
+            ctx,
+            text,
+            maxWidth,
+            options.whiteSpace,
+            options.wordBreak,
+          ),
   );
 }
 
@@ -281,15 +379,31 @@ function getSingleLineMinContentLayout<C extends CanvasRenderingContext2D>(
   text: string,
   options: TextOptions<C>,
 ): SingleLineLayout {
-  return readCachedTextLayout(node, ctx, getSingleLineMinContentLayoutKey(), () => {
-    const measurement = measureTextMinContent(ctx, text, options.whiteSpace, options.wordBreak, options.overflowWrap);
-    const { shift } = layoutFirstLineIntrinsic(ctx, text, options.whiteSpace, options.wordBreak);
-    return {
-      width: measurement.width,
-      text,
-      shift,
-    };
-  });
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getSingleLineMinContentLayoutKey(),
+    () => {
+      const measurement = measureTextMinContent(
+        ctx,
+        text,
+        options.whiteSpace,
+        options.wordBreak,
+        options.overflowWrap,
+      );
+      const { shift } = layoutFirstLineIntrinsic(
+        ctx,
+        text,
+        options.whiteSpace,
+        options.wordBreak,
+      );
+      return {
+        width: measurement.width,
+        text,
+        shift,
+      };
+    },
+  );
 }
 
 function getRichSingleLineMinContentWidth<C extends CanvasRenderingContext2D>(
@@ -298,8 +412,19 @@ function getRichSingleLineMinContentWidth<C extends CanvasRenderingContext2D>(
   spans: InlineSpan<C>[],
   options: TextOptions<C>,
 ): number {
-  return readCachedTextLayout(node, ctx, getSingleLineMinContentLayoutKey(), () =>
-    measureRichTextMinContent(ctx, spans, options.font, options.overflowWrap, options.whiteSpace, options.wordBreak).width
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getSingleLineMinContentLayoutKey(),
+    () =>
+      measureRichTextMinContent(
+        ctx,
+        spans,
+        options.font,
+        options.overflowWrap,
+        options.whiteSpace,
+        options.wordBreak,
+      ).width,
   );
 }
 
@@ -312,15 +437,25 @@ function drawRichLine<C extends CanvasRenderingContext2D>(
   lineHeight: number,
 ): void {
   let cursorX = x;
-  for (let fragmentIndex = 0; fragmentIndex < line.fragments.length; fragmentIndex += 1) {
+  for (
+    let fragmentIndex = 0;
+    fragmentIndex < line.fragments.length;
+    fragmentIndex += 1
+  ) {
     const fragment = line.fragments[fragmentIndex]!;
     cursorX += fragment.gapBefore;
     ctx.with((g) => {
       g.font = fragment.font;
-      g.fillStyle = ctx.resolveDynValue((fragment.color ?? fallbackColor) as typeof fallbackColor);
+      g.fillStyle = ctx.resolveDynValue(
+        (fragment.color ?? fallbackColor) as typeof fallbackColor,
+      );
       g.textAlign = "left";
       withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
-        g.fillText(fragment.text, cursorX, y + (lineHeight + fragment.shift) / 2);
+        g.fillText(
+          fragment.text,
+          cursorX,
+          y + (lineHeight + fragment.shift) / 2,
+        );
       });
     });
     cursorX += fragment.occupiedWidth;
@@ -335,8 +470,11 @@ function getMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
   wordBreak: MultilineTextOptions<C>["wordBreak"],
   overflowWrap: MultilineTextOptions<C>["overflowWrap"],
 ): MultiLineMeasureLayout {
-  return readCachedTextLayout(node, ctx, getMultiLineMinContentLayoutKey(), () =>
-    measureTextMinContent(ctx, text, whiteSpace, wordBreak, overflowWrap)
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getMultiLineMinContentLayoutKey(),
+    () => measureTextMinContent(ctx, text, whiteSpace, wordBreak, overflowWrap),
   );
 }
 
@@ -348,12 +486,31 @@ function getRichMultiLineMeasureLayout<C extends CanvasRenderingContext2D>(
 ): RichMeasurement {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
   if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
-    return measureBlockLayout(getRichMultiLineOverflowLayout(node, ctx, spans, options));
+    return measureBlockLayout(
+      getRichMultiLineOverflowLayout(node, ctx, spans, options),
+    );
   }
-  return readCachedTextLayout(node, ctx, getRichMultiLineMeasureLayoutKey(maxWidth), () =>
-    maxWidth == null
-      ? measureRichTextIntrinsic(ctx, spans, options.font, options.whiteSpace, options.wordBreak)
-      : measureRichText(ctx, spans, maxWidth, options.font, options.whiteSpace, options.wordBreak)
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getRichMultiLineMeasureLayoutKey(maxWidth),
+    () =>
+      maxWidth == null
+        ? measureRichTextIntrinsic(
+            ctx,
+            spans,
+            options.font,
+            options.whiteSpace,
+            options.wordBreak,
+          )
+        : measureRichText(
+            ctx,
+            spans,
+            maxWidth,
+            options.font,
+            options.whiteSpace,
+            options.wordBreak,
+          ),
   );
 }
 
@@ -364,18 +521,22 @@ function getRichMultiLineOverflowLayout<C extends CanvasRenderingContext2D>(
   options: MultilineTextOptions<C>,
 ): RichBlockLayout {
   const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
-  return readCachedTextLayout(node, ctx, getRichMultiLineOverflowLayoutKey(maxWidth), () =>
-    layoutRichTextWithOverflow(
-      ctx,
-      spans,
-      maxWidth ?? 0,
-      options.font,
-      options.color,
-      options.maxLines,
-      options.overflow,
-      options.whiteSpace,
-      options.wordBreak,
-    )
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getRichMultiLineOverflowLayoutKey(maxWidth),
+    () =>
+      layoutRichTextWithOverflow(
+        ctx,
+        spans,
+        maxWidth ?? 0,
+        options.font,
+        options.color,
+        options.maxLines,
+        options.overflow,
+        options.whiteSpace,
+        options.wordBreak,
+      ),
   );
 }
 
@@ -389,10 +550,29 @@ function getRichMultiLineDrawLayout<C extends CanvasRenderingContext2D>(
   if (shouldReadConstrainedOverflowLayout(maxWidth, options)) {
     return getRichMultiLineOverflowLayout(node, ctx, spans, options);
   }
-  return readCachedTextLayout(node, ctx, getRichMultiLineDrawLayoutKey(maxWidth), () =>
-    maxWidth == null
-      ? layoutRichTextIntrinsic(ctx, spans, options.font, options.color, options.whiteSpace, options.wordBreak)
-      : layoutRichText(ctx, spans, maxWidth, options.font, options.color, options.whiteSpace, options.wordBreak)
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getRichMultiLineDrawLayoutKey(maxWidth),
+    () =>
+      maxWidth == null
+        ? layoutRichTextIntrinsic(
+            ctx,
+            spans,
+            options.font,
+            options.color,
+            options.whiteSpace,
+            options.wordBreak,
+          )
+        : layoutRichText(
+            ctx,
+            spans,
+            maxWidth,
+            options.font,
+            options.color,
+            options.whiteSpace,
+            options.wordBreak,
+          ),
   );
 }
 
@@ -402,8 +582,19 @@ function getRichMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
   spans: InlineSpan<C>[],
   options: MultilineTextOptions<C>,
 ): RichMeasurement {
-  return readCachedTextLayout(node, ctx, getRichMultiLineMinContentLayoutKey(), () =>
-    measureRichTextMinContent(ctx, spans, options.font, options.overflowWrap, options.whiteSpace, options.wordBreak)
+  return readCachedTextLayout(
+    node,
+    ctx,
+    getRichMultiLineMinContentLayoutKey(),
+    () =>
+      measureRichTextMinContent(
+        ctx,
+        spans,
+        options.font,
+        options.overflowWrap,
+        options.whiteSpace,
+        options.wordBreak,
+      ),
   );
 }
 
@@ -411,7 +602,9 @@ function getRichMultiLineMinContentLayout<C extends CanvasRenderingContext2D>(
  * Draws wrapped text using the configured line height and alignment.
  * Accepts either a plain string or an array of `InlineSpan` items for mixed inline styles.
  */
-export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C> {
+export class MultilineText<
+  C extends CanvasRenderingContext2D,
+> implements Node<C> {
   /**
    * @param text Source text to measure and draw. Pass an `InlineSpan[]` for mixed inline styles.
    * @param options Text layout and drawing options.
@@ -424,12 +617,22 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   measure(ctx: Context<C>): Box {
     if (typeof this.text !== "string") {
       const spans = this.text;
-      const { width, lineCount } = getRichMultiLineMeasureLayout(this, ctx, spans, this.options);
+      const { width, lineCount } = getRichMultiLineMeasureLayout(
+        this,
+        ctx,
+        spans,
+        this.options,
+      );
       return { width, height: lineCount * this.options.lineHeight };
     }
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width, lineCount } = getMultiLineMeasureLayout(this, ctx, this.text as string, this.options);
+      const { width, lineCount } = getMultiLineMeasureLayout(
+        this,
+        ctx,
+        this.text as string,
+        this.options,
+      );
       return { width, height: lineCount * this.options.lineHeight };
     });
   }
@@ -437,7 +640,12 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   measureMinContent(ctx: Context<C>): Box {
     if (typeof this.text !== "string") {
       const spans = this.text;
-      const { width, lineCount } = getRichMultiLineMinContentLayout(this, ctx, spans, this.options);
+      const { width, lineCount } = getRichMultiLineMinContentLayout(
+        this,
+        ctx,
+        spans,
+        this.options,
+      );
       return { width, height: lineCount * this.options.lineHeight };
     }
     return ctx.with((g) => {
@@ -457,16 +665,30 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
   draw(ctx: Context<C>, x: number, y: number): boolean {
     if (typeof this.text !== "string") {
       const spans = this.text;
-      const { width, lines } = getRichMultiLineDrawLayout(this, ctx, spans, this.options);
+      const { width, lines } = getRichMultiLineDrawLayout(
+        this,
+        ctx,
+        spans,
+        this.options,
+      );
       const align = resolvePhysicalTextAlign(this.options);
       const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
       const mode = resolveJustifyMode(this.options.justify);
-      const canJustify = mode != null && maxWidth != null && maxWidth > 0 && isJustifySupported(ctx.graphics);
+      const canJustify =
+        mode != null &&
+        maxWidth != null &&
+        maxWidth > 0 &&
+        isJustifySupported(ctx.graphics);
       const threshold = this.options.justifyGapThreshold ?? 2.0;
 
       if (canJustify) {
         const prepared = readPreparedInlineLayout(
-          getRichPreparedKey(spans, this.options.font, this.options.whiteSpace ?? "normal", this.options.wordBreak ?? "normal"),
+          getRichPreparedKey(
+            spans,
+            this.options.font,
+            this.options.whiteSpace ?? "normal",
+            this.options.wordBreak ?? "normal",
+          ),
           createRichSourceItems(spans, this.options.font),
           this.options.whiteSpace ?? "normal",
           this.options.wordBreak ?? "normal",
@@ -477,34 +699,53 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           if (lineIndex >= totalLines) return false;
           const line = lines[lineIndex]!;
           const isLastLine = lineIndex === totalLines - 1;
-          const isOverflowTruncated = isLastLine && shouldUseMultilineOverflowLayout(this.options)
-            && this.options.overflow === "ellipsis";
-          const wantJustify = !isOverflowTruncated
-            && (!isLastLine || this.options.justifyLastLine === true);
+          const isOverflowTruncated =
+            isLastLine &&
+            shouldUseMultilineOverflowLayout(this.options) &&
+            this.options.overflow === "ellipsis";
+          const wantJustify =
+            !isOverflowTruncated &&
+            (!isLastLine || this.options.justifyLastLine === true);
 
           if (wantJustify) {
             const info = analyzeLineForJustify(prepared, lineRange);
-            const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode, threshold);
+            const spacing = computeJustifySpacing(
+              lineRange.width,
+              maxWidth,
+              info,
+              mode,
+              threshold,
+            );
             if (spacing != null) {
               let cursorX = x;
               for (let fi = 0; fi < line.fragments.length; fi++) {
                 const frag = line.fragments[fi]!;
-                const leadingLetterGapCount = fi > 0 ? frag.gapAtomCount + 1 : 0;
+                const leadingLetterGapCount =
+                  fi > 0 ? frag.gapAtomCount + 1 : 0;
                 const internalLetterGapCount = Math.max(frag.atomCount - 1, 0);
-                cursorX += frag.gapBefore
-                  + leadingLetterGapCount * spacing.letterSpacingPx
-                  + frag.gapSpaceCount * spacing.wordSpacingPx;
+                cursorX +=
+                  frag.gapBefore +
+                  leadingLetterGapCount * spacing.letterSpacingPx +
+                  frag.gapSpaceCount * spacing.wordSpacingPx;
                 ctx.with((g) => {
                   g.font = frag.font;
-                  g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
+                  g.fillStyle = ctx.resolveDynValue(
+                    (frag.color ??
+                      this.options.color) as typeof this.options.color,
+                  );
                   g.textAlign = "left";
                   withTextSpacing(g, spacing, () => {
-                    g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+                    g.fillText(
+                      frag.text,
+                      cursorX,
+                      y + (this.options.lineHeight + frag.shift) / 2,
+                    );
                   });
                 });
-                cursorX += frag.occupiedWidth
-                  + internalLetterGapCount * spacing.letterSpacingPx
-                  + frag.spaceCount * spacing.wordSpacingPx;
+                cursorX +=
+                  frag.occupiedWidth +
+                  internalLetterGapCount * spacing.letterSpacingPx +
+                  frag.spaceCount * spacing.wordSpacingPx;
               }
               y += this.options.lineHeight;
               lineIndex++;
@@ -513,14 +754,21 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           }
 
           // Fallback: normal alignment
-          const startX = align === "right" ? x + width : align === "center" ? x + width / 2 : x;
+          const startX =
+            align === "right"
+              ? x + width
+              : align === "center"
+                ? x + width / 2
+                : x;
           let cursorX = startX;
           for (let fi = 0; fi < line.fragments.length; fi++) {
             const frag = line.fragments[fi]!;
             cursorX += frag.gapBefore;
             ctx.with((g) => {
               g.font = frag.font;
-              g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
+              g.fillStyle = ctx.resolveDynValue(
+                (frag.color ?? this.options.color) as typeof this.options.color,
+              );
               if (align === "right") {
                 g.textAlign = "right";
               } else if (align === "center") {
@@ -529,7 +777,11 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
                 g.textAlign = "left";
               }
               withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
-                g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+                g.fillText(
+                  frag.text,
+                  cursorX,
+                  y + (this.options.lineHeight + frag.shift) / 2,
+                );
               });
             });
             cursorX += frag.occupiedWidth;
@@ -538,7 +790,12 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           lineIndex++;
         });
       } else {
-        const startX = align === "right" ? x + width : align === "center" ? x + width / 2 : x;
+        const startX =
+          align === "right"
+            ? x + width
+            : align === "center"
+              ? x + width / 2
+              : x;
         for (const line of lines) {
           let cursorX = startX;
           for (let fi = 0; fi < line.fragments.length; fi++) {
@@ -546,7 +803,9 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
             cursorX += frag.gapBefore;
             ctx.with((g) => {
               g.font = frag.font;
-              g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
+              g.fillStyle = ctx.resolveDynValue(
+                (frag.color ?? this.options.color) as typeof this.options.color,
+              );
               if (align === "right") {
                 g.textAlign = "right";
               } else if (align === "center") {
@@ -555,7 +814,11 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
                 g.textAlign = "left";
               }
               withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
-                g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
+                g.fillText(
+                  frag.text,
+                  cursorX,
+                  y + (this.options.lineHeight + frag.shift) / 2,
+                );
               });
             });
             cursorX += frag.occupiedWidth;
@@ -568,10 +831,19 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     return ctx.with((g) => {
       g.font = this.options.font;
       g.fillStyle = ctx.resolveDynValue(this.options.color);
-      const { width, lines } = getMultiLineDrawLayout(this, ctx, this.text as string, this.options);
+      const { width, lines } = getMultiLineDrawLayout(
+        this,
+        ctx,
+        this.text as string,
+        this.options,
+      );
       const maxWidth = normalizeTextMaxWidth(ctx.constraints?.maxWidth);
       const mode = resolveJustifyMode(this.options.justify);
-      const canJustify = mode != null && maxWidth != null && maxWidth > 0 && isJustifySupported(g);
+      const canJustify =
+        mode != null &&
+        maxWidth != null &&
+        maxWidth > 0 &&
+        isJustifySupported(g);
       const threshold = this.options.justifyGapThreshold ?? 2.0;
 
       if (canJustify) {
@@ -587,18 +859,31 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
           if (lineIndex >= totalLines) return false;
           const layout = lines[lineIndex]!;
           const isLastLine = lineIndex === totalLines - 1;
-          const isOverflowTruncated = isLastLine && shouldUseMultilineOverflowLayout(this.options)
-            && this.options.overflow === "ellipsis";
-          const wantJustify = !isOverflowTruncated
-            && (!isLastLine || this.options.justifyLastLine === true);
+          const isOverflowTruncated =
+            isLastLine &&
+            shouldUseMultilineOverflowLayout(this.options) &&
+            this.options.overflow === "ellipsis";
+          const wantJustify =
+            !isOverflowTruncated &&
+            (!isLastLine || this.options.justifyLastLine === true);
 
           if (wantJustify) {
             const info = analyzeLineForJustify(prepared, lineRange);
-            const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode, threshold);
+            const spacing = computeJustifySpacing(
+              lineRange.width,
+              maxWidth,
+              info,
+              mode,
+              threshold,
+            );
             if (spacing != null) {
               withTextSpacing(g, spacing, () => {
                 g.textAlign = "left";
-                g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+                g.fillText(
+                  layout.text,
+                  x,
+                  y + (this.options.lineHeight + layout.shift) / 2,
+                );
               });
               y += this.options.lineHeight;
               lineIndex++;
@@ -611,15 +896,27 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
             switch (resolvePhysicalTextAlign(this.options)) {
               case "left":
                 g.textAlign = "left";
-                g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+                g.fillText(
+                  layout.text,
+                  x,
+                  y + (this.options.lineHeight + layout.shift) / 2,
+                );
                 break;
               case "right":
                 g.textAlign = "right";
-                g.fillText(layout.text, x + width, y + (this.options.lineHeight + layout.shift) / 2);
+                g.fillText(
+                  layout.text,
+                  x + width,
+                  y + (this.options.lineHeight + layout.shift) / 2,
+                );
                 break;
               case "center":
                 g.textAlign = "center";
-                g.fillText(layout.text, x + width / 2, y + (this.options.lineHeight + layout.shift) / 2);
+                g.fillText(
+                  layout.text,
+                  x + width / 2,
+                  y + (this.options.lineHeight + layout.shift) / 2,
+                );
                 break;
             }
           });
@@ -660,7 +957,10 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
     });
   }
 
-  hittest(_ctx: Context<C>, _test: { x: number; y: number; type: "click" | "auxclick" | "hover" }): boolean {
+  hittest(
+    _ctx: Context<C>,
+    _test: { x: number; y: number; type: "click" | "auxclick" | "hover" },
+  ): boolean {
     return false;
   }
 }
@@ -680,7 +980,12 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
 
   measure(ctx: Context<C>): Box {
     if (typeof this.text !== "string") {
-      const { width } = getRichSingleLineLayout(this, ctx, this.text, this.options);
+      const { width } = getRichSingleLineLayout(
+        this,
+        ctx,
+        this.text,
+        this.options,
+      );
       return { width, height: this.options.lineHeight };
     }
     const text = this.text;
@@ -693,13 +998,23 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
 
   measureMinContent(ctx: Context<C>): Box {
     if (typeof this.text !== "string") {
-      const width = getRichSingleLineMinContentWidth(this, ctx, this.text, this.options);
+      const width = getRichSingleLineMinContentWidth(
+        this,
+        ctx,
+        this.text,
+        this.options,
+      );
       return { width, height: this.options.lineHeight };
     }
     const text = this.text;
     return ctx.with((g) => {
       g.font = this.options.font;
-      const { width } = getSingleLineMinContentLayout(this, ctx, text, this.options);
+      const { width } = getSingleLineMinContentLayout(
+        this,
+        ctx,
+        text,
+        this.options,
+      );
       return { width, height: this.options.lineHeight };
     });
   }
@@ -707,7 +1022,14 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
   draw(ctx: Context<C>, x: number, y: number): boolean {
     if (typeof this.text !== "string") {
       const line = getRichSingleLineLayout(this, ctx, this.text, this.options);
-      drawRichLine(ctx, line, this.options.color, x, y, this.options.lineHeight);
+      drawRichLine(
+        ctx,
+        line,
+        this.options.color,
+        x,
+        y,
+        this.options.lineHeight,
+      );
       return false;
     }
     const text = this.text;
@@ -716,13 +1038,20 @@ export class Text<C extends CanvasRenderingContext2D> implements Node<C> {
       g.fillStyle = ctx.resolveDynValue(this.options.color);
       const layout = getSingleLineLayout(this, ctx, text, this.options);
       withTextSpacing(g, DEFAULT_TEXT_SPACING, () => {
-        g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);
+        g.fillText(
+          layout.text,
+          x,
+          y + (this.options.lineHeight + layout.shift) / 2,
+        );
       });
       return false;
     });
   }
 
-  hittest(_ctx: Context<C>, _test: { x: number; y: number; type: "click" | "auxclick" | "hover" }): boolean {
+  hittest(
+    _ctx: Context<C>,
+    _test: { x: number; y: number; type: "click" | "auxclick" | "hover" },
+  ): boolean {
     return false;
   }
 }

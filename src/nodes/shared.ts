@@ -1,13 +1,27 @@
 import { findChildAtPoint } from "../layout";
-import type { Context, FlexLayoutResult, HitTest, LayoutConstraints, Node } from "../types";
+import type {
+  Context,
+  FlexLayoutResult,
+  HitTest,
+  LayoutConstraints,
+  Node,
+} from "../types";
 import { shallow } from "../utils";
 
 type LayoutCacheAccess<C extends CanvasRenderingContext2D> = {
-  getLayoutResult(node: Node<C>, constraints?: LayoutConstraints): FlexLayoutResult<C> | undefined;
-  setLayoutResult(node: Node<C>, result: FlexLayoutResult<C>, constraints?: LayoutConstraints): void;
+  getLayoutResult(
+    node: Node<C>,
+    constraints?: LayoutConstraints,
+  ): FlexLayoutResult<C> | undefined;
+  setLayoutResult(
+    node: Node<C>,
+    result: FlexLayoutResult<C>,
+    constraints?: LayoutConstraints,
+  ): void;
 };
 
-type LayoutContext<C extends CanvasRenderingContext2D> = Context<C> & LayoutCacheAccess<C>;
+type LayoutContext<C extends CanvasRenderingContext2D> = Context<C> &
+  LayoutCacheAccess<C>;
 
 export function withConstraints<C extends CanvasRenderingContext2D>(
   ctx: Context<C>,
@@ -18,7 +32,9 @@ export function withConstraints<C extends CanvasRenderingContext2D>(
   return next;
 }
 
-function getLayoutContext<C extends CanvasRenderingContext2D>(ctx: Context<C>): LayoutContext<C> {
+function getLayoutContext<C extends CanvasRenderingContext2D>(
+  ctx: Context<C>,
+): LayoutContext<C> {
   return ctx as LayoutContext<C>;
 }
 
@@ -83,12 +99,9 @@ export function hittestLayoutChildren<C extends CanvasRenderingContext2D>(
     return false;
   }
 
-  return hit.child.node.hittest(
-    withConstraints(ctx, hit.child.constraints),
-    {
-      ...test,
-      x: hit.localX,
-      y: hit.localY,
-    },
-  );
+  return hit.child.node.hittest(withConstraints(ctx, hit.child.constraints), {
+    ...test,
+    x: hit.localX,
+    y: hit.localY,
+  });
 }

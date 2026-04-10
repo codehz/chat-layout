@@ -3,7 +3,9 @@ import type { Node } from "../types";
 const DEFAULT_MEMO_RENDER_ITEM_BY_MAX_ENTRIES = 512;
 
 function isWeakMapKey(value: unknown): value is object {
-  return (typeof value === "object" && value !== null) || typeof value === "function";
+  return (
+    (typeof value === "object" && value !== null) || typeof value === "function"
+  );
 }
 
 function normalizeMaxEntries(maxEntries: number | undefined): number {
@@ -26,7 +28,12 @@ function readLruValue<K, V>(cache: Map<K, V>, key: K): V | undefined {
   return cached;
 }
 
-function writeLruValue<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: number): V {
+function writeLruValue<K, V>(
+  cache: Map<K, V>,
+  key: K,
+  value: V,
+  maxEntries: number,
+): V {
   if (cache.has(key)) {
     cache.delete(key);
   } else if (Number.isFinite(maxEntries) && cache.size >= maxEntries) {
@@ -44,14 +51,19 @@ function writeLruValue<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries: num
 /**
  * Memoizes `renderItem` by object identity.
  */
-export function memoRenderItem<C extends CanvasRenderingContext2D, T extends object>(
+export function memoRenderItem<
+  C extends CanvasRenderingContext2D,
+  T extends object,
+>(
   renderItem: (item: T) => Node<C>,
 ): ((item: T) => Node<C>) & { reset: (key: T) => boolean } {
   const cache = new WeakMap<object, Node<C>>();
 
   function fn(item: T): Node<C> {
     if (!isWeakMapKey(item)) {
-      throw new TypeError("memoRenderItem() only supports object items. Use memoRenderItemBy() for primitive keys.");
+      throw new TypeError(
+        "memoRenderItem() only supports object items. Use memoRenderItemBy() for primitive keys.",
+      );
     }
     const key = item as unknown as object;
     const cached = cache.get(key);
@@ -77,7 +89,10 @@ export function memoRenderItemBy<C extends CanvasRenderingContext2D, T, K>(
   options: {
     maxEntries?: number;
   } = {},
-): ((item: T) => Node<C>) & { reset: (item: T) => boolean; resetKey: (key: K) => boolean } {
+): ((item: T) => Node<C>) & {
+  reset: (item: T) => boolean;
+  resetKey: (key: K) => boolean;
+} {
   const cache = new Map<K, Node<C>>();
   const maxEntries = normalizeMaxEntries(options.maxEntries);
 

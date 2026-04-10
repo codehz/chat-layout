@@ -153,7 +153,8 @@ export interface TextJustifyOptions {
 /**
  * Options for multi-line text nodes.
  */
-export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C>, TextJustifyOptions {
+export interface MultilineTextOptions<C extends CanvasRenderingContext2D>
+  extends TextStyleOptions<C>, TextJustifyOptions {
   /** Logical alignment that matches `Place.align`. */
   align?: TextAlign;
   /** Explicit physical alignment when left/right semantics are required. */
@@ -167,7 +168,9 @@ export interface MultilineTextOptions<C extends CanvasRenderingContext2D> extend
 /**
  * Options for single-line text nodes.
  */
-export interface TextOptions<C extends CanvasRenderingContext2D> extends TextStyleOptions<C> {
+export interface TextOptions<
+  C extends CanvasRenderingContext2D,
+> extends TextStyleOptions<C> {
   /** Default: clip overflow to the constrained first line. */
   overflow?: TextOverflowMode;
   /** Default: place the ellipsis at the end of the visible text. */
