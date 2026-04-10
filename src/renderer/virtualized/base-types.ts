@@ -31,27 +31,27 @@ export type JumpAnimation = {
   onComplete: (() => void) | undefined;
 };
 
-/** A single cross-fade layer within a replacement animation. */
-export type AnimatedLayerPlacement = "start" | "end";
+/** Placement for a single layer within an item transition. */
+export type TransitionPlacement = "start" | "end";
 
-/** A single cross-fade layer within a replacement animation. */
-export type ReplacementLayer<C extends CanvasRenderingContext2D> = {
+/** A single cross-fade layer within an item transition. */
+export type TransitionLayer<C extends CanvasRenderingContext2D> = {
   node: Node<C>;
   fromAlpha: number;
   toAlpha: number;
   fromTranslateY: number;
   toTranslateY: number;
-  placement: AnimatedLayerPlacement;
+  placement: TransitionPlacement;
   startTime: number;
   duration: number;
 };
 
-/** Full state for an item replacement (cross-fade + height) animation. */
-export type ReplacementAnimation<C extends CanvasRenderingContext2D> = {
+/** Full state for an item transition (cross-fade + height). */
+export type ItemTransition<C extends CanvasRenderingContext2D> = {
   kind: "update" | "delete" | "insert";
-  outgoing: ReplacementLayer<C> | undefined;
-  /** undefined for delete animations where the slot shrinks to nothing. */
-  incoming: ReplacementLayer<C> | undefined;
+  fromLayer: TransitionLayer<C> | undefined;
+  /** undefined for delete transitions where the slot shrinks to nothing. */
+  toLayer: TransitionLayer<C> | undefined;
   fromHeight: number;
   toHeight: number;
   startTime: number;

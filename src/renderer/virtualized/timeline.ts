@@ -1,6 +1,6 @@
 import { VirtualizedRenderer } from "./base";
 import type { JumpToOptions } from "./base";
-import type { AnimatedLayerPlacement } from "./base-types";
+import type { TransitionPlacement } from "./base-types";
 import {
   normalizeTimelineState,
   resolveTimelineVisibleWindow,
@@ -77,7 +77,7 @@ export class TimelineRenderer<
     }
   }
 
-  protected _getDefaultAnimatedPlacement(): AnimatedLayerPlacement {
+  protected _getDefaultAnimatedPlacement(): TransitionPlacement {
     return "start";
   }
 }

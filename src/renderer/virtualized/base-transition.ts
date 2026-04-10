@@ -10,15 +10,15 @@ import {
 } from "./base-animation";
 import {
   ALPHA_EPSILON,
-  type AnimatedLayerPlacement,
   type ControlledState,
-  type ReplacementAnimation,
-  type ReplacementLayer,
+  type ItemTransition,
+  type TransitionLayer,
+  type TransitionPlacement,
   type VirtualizedResolvedItem,
 } from "./base-types";
 
 /** Rendering services delegated to the host VirtualizedRenderer. */
-export type ReplacementRendererAdapter<
+export type TransitionRendererAdapter<
   C extends CanvasRenderingContext2D,
   T extends {},
 > = {
@@ -27,7 +27,7 @@ export type ReplacementRendererAdapter<
   drawNode: (node: Node<C>, x: number, y: number) => boolean;
   getRootContext: () => Context<C>;
   graphics: C;
-  defaultAnimatedPlacement: AnimatedLayerPlacement;
+  defaultTransitionPlacement: TransitionPlacement;
   onDeleteComplete: (item: T) => void;
 };
 
@@ -35,7 +35,7 @@ type SampledLayer<C extends CanvasRenderingContext2D> = {
   alpha: number;
   node: Node<C>;
   nodeHeight: number;
-  placement: AnimatedLayerPlacement;
+  placement: TransitionPlacement;
   translateY: number;
 };
 
@@ -43,19 +43,19 @@ type CurrentVisualState<C extends CanvasRenderingContext2D> = {
   node: Node<C>;
   alpha: number;
   height: number;
-  placement: AnimatedLayerPlacement;
+  placement: TransitionPlacement;
   translateY: number;
 };
 
-type WindowTranslateAnimation = {
+type ViewportTranslateAnimation = {
   fromTranslateY: number;
   toTranslateY: number;
   startTime: number;
   duration: number;
 };
 
-/** State context needed to check whether an update can be animated. */
-export type ReplacementUpdateContext<
+/** State context needed to decide whether a transition can start. */
+export type TransitionContext<
   C extends CanvasRenderingContext2D,
   T extends {},
 > = {
@@ -68,29 +68,29 @@ export type ReplacementUpdateContext<
     height: number,
   ) => { top: number; bottom: number } | undefined;
   resolveVisibleWindow: () => VisibleWindowResult<unknown>;
-} & ReplacementRendererAdapter<C, T>;
+} & TransitionRendererAdapter<C, T>;
 
 /**
- * Self-contained subsystem that manages item replacement (cross-fade + height)
- * animations for a VirtualizedRenderer.
+ * Self-contained subsystem that manages mutation-driven item transitions and
+ * viewport compensation for a VirtualizedRenderer.
  */
-export class ReplacementController<
+export class TransitionController<
   C extends CanvasRenderingContext2D,
   T extends {},
 > {
-  #replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
-  #activeReplacementItems = new Set<T>();
-  #windowTranslateAnimation: WindowTranslateAnimation | undefined;
+  #itemTransitions = new WeakMap<T, ItemTransition<C>>();
+  #activeTransitionItems = new Set<T>();
+  #viewportTranslateAnimation: ViewportTranslateAnimation | undefined;
 
-  // Visible-item snapshot used to decide whether an update can be animated.
+  // Visibility snapshot used for transition gating and offscreen pruning.
   #drawnItems = new Set<T>();
   #visibleItems = new Set<T>();
-  #hasVisibleItemSnapshot = false;
-  #visibleSnapshotState: ControlledState | undefined;
-  #visibleSnapshotShowsShortList = false;
-  #visibleSnapshotTrailingGap = 0;
+  #hasVisibilitySnapshot = false;
+  #visibilitySnapshotState: ControlledState | undefined;
+  #visibilitySnapshotCoversShortList = false;
+  #visibilitySnapshotTrailingGap = 0;
 
-  captureVisibleItemSnapshot(
+  captureVisibilitySnapshot(
     window: VisibleWindow<unknown>,
     items: readonly T[],
     viewportHeight: number,
@@ -128,9 +128,9 @@ export class ReplacementController<
     }
     this.#drawnItems = nextDrawnItems;
     this.#visibleItems = nextVisibleItems;
-    this.#hasVisibleItemSnapshot = true;
-    this.#visibleSnapshotState = snapshotState;
-    this.#visibleSnapshotShowsShortList =
+    this.#hasVisibilitySnapshot = true;
+    this.#visibilitySnapshotState = snapshotState;
+    this.#visibilitySnapshotCoversShortList =
       window.drawList.length > 0 &&
       items.length > 0 &&
       window.drawList.length === items.length &&
@@ -138,31 +138,32 @@ export class ReplacementController<
       maxVisibleIndex === items.length - 1 &&
       topMostY >= -Number.EPSILON &&
       bottomMostY < viewportHeight - Number.EPSILON;
-    this.#visibleSnapshotTrailingGap = this.#visibleSnapshotShowsShortList
+    this.#visibilitySnapshotTrailingGap = this
+      .#visibilitySnapshotCoversShortList
       ? Math.max(0, viewportHeight - bottomMostY)
       : 0;
   }
 
   /**
-   * Removes animations for items that are no longer visible.
-   * Returns true if any animation was canceled or finalized.
+   * Removes transitions for items that are no longer visible.
+   * Returns true if any transition was canceled or finalized.
    */
   pruneInvisible(
-    adapter: Pick<ReplacementRendererAdapter<C, T>, "onDeleteComplete">,
+    adapter: Pick<TransitionRendererAdapter<C, T>, "onDeleteComplete">,
   ): boolean {
     let changed = false;
-    for (const item of [...this.#activeReplacementItems]) {
-      const animation = this.#replacementAnimations.get(item);
+    for (const item of [...this.#activeTransitionItems]) {
+      const transition = this.#itemTransitions.get(item);
       const isTracked =
-        animation?.kind === "insert"
+        transition?.kind === "insert"
           ? this.#drawnItems.has(item)
           : this.#visibleItems.has(item);
       if (isTracked) {
         continue;
       }
-      this.#replacementAnimations.delete(item);
-      this.#activeReplacementItems.delete(item);
-      if (animation?.kind === "delete") {
+      this.#itemTransitions.delete(item);
+      this.#activeTransitionItems.delete(item);
+      if (transition?.kind === "delete") {
         adapter.onDeleteComplete(item);
       }
       changed = true;
@@ -170,75 +171,75 @@ export class ReplacementController<
     return changed;
   }
 
-  /** Advance all active animations and return true if any are still running. */
+  /** Advance all active transitions and return true if any are still running. */
   prepare(
     now: number,
-    adapter: Pick<ReplacementRendererAdapter<C, T>, "onDeleteComplete">,
+    adapter: Pick<TransitionRendererAdapter<C, T>, "onDeleteComplete">,
   ): boolean {
     let keepAnimating = false;
-    this.#cleanupWindowTranslateAnimation(now);
-    if (this.#windowTranslateAnimation != null) {
+    this.#cleanupViewportTranslateAnimation(now);
+    if (this.#viewportTranslateAnimation != null) {
       keepAnimating = true;
     }
-    for (const item of [...this.#activeReplacementItems]) {
-      if (this.readAnimation(item, now, adapter) != null) {
+    for (const item of [...this.#activeTransitionItems]) {
+      if (this.readTransition(item, now, adapter) != null) {
         keepAnimating = true;
       }
     }
     return keepAnimating;
   }
 
-  getWindowTranslateY(now: number): number {
-    this.#cleanupWindowTranslateAnimation(now);
-    const animation = this.#windowTranslateAnimation;
-    if (animation == null) {
+  getViewportTranslateY(now: number): number {
+    this.#cleanupViewportTranslateAnimation(now);
+    const transition = this.#viewportTranslateAnimation;
+    if (transition == null) {
       return 0;
     }
     return interpolate(
-      animation.fromTranslateY,
-      animation.toTranslateY,
-      animation.startTime,
-      animation.duration,
+      transition.fromTranslateY,
+      transition.toTranslateY,
+      transition.startTime,
+      transition.duration,
       now,
     );
   }
 
   /**
-   * Returns the active animation for an item, or undefined if none / already
-   * completed (and cleans up completed animations as a side effect).
+   * Returns the active transition for an item, or undefined if none / already
+   * completed (and cleans up completed transitions as a side effect).
    */
-  readAnimation(
+  readTransition(
     item: T,
     now: number,
-    adapter?: Pick<ReplacementRendererAdapter<C, T>, "onDeleteComplete">,
-  ): ReplacementAnimation<C> | undefined {
-    const animation = this.#replacementAnimations.get(item);
-    if (animation == null) {
+    adapter?: Pick<TransitionRendererAdapter<C, T>, "onDeleteComplete">,
+  ): ItemTransition<C> | undefined {
+    const transition = this.#itemTransitions.get(item);
+    if (transition == null) {
       return undefined;
     }
-    if (getProgress(animation.startTime, animation.duration, now) >= 1) {
-      this.#replacementAnimations.delete(item);
-      this.#activeReplacementItems.delete(item);
-      if (animation.kind === "delete") {
+    if (getProgress(transition.startTime, transition.duration, now) >= 1) {
+      this.#itemTransitions.delete(item);
+      this.#activeTransitionItems.delete(item);
+      if (transition.kind === "delete") {
         adapter?.onDeleteComplete(item);
       }
       return undefined;
     }
-    return animation;
+    return transition;
   }
 
-  /** Returns the effective rendered height for an item, accounting for animations. */
+  /** Returns the effective rendered height for an item, accounting for transitions. */
   getItemHeight(
     item: T,
     now: number,
     adapter: Pick<
-      ReplacementRendererAdapter<C, T>,
+      TransitionRendererAdapter<C, T>,
       "renderItem" | "measureNode"
     >,
   ): number {
-    const replacement = this.readAnimation(item, now);
-    if (replacement != null) {
-      return this.#sampleReplacementHeight(replacement, now);
+    const transition = this.readTransition(item, now);
+    if (transition != null) {
+      return this.#sampleTransitionHeight(transition, now);
     }
     const node = adapter.renderItem(item);
     return adapter.measureNode(node).height;
@@ -248,10 +249,10 @@ export class ReplacementController<
   resolveItem(
     item: T,
     now: number,
-    adapter: ReplacementRendererAdapter<C, T>,
+    adapter: TransitionRendererAdapter<C, T>,
   ): { value: VirtualizedResolvedItem; height: number } {
-    const replacement = this.readAnimation(item, now, adapter);
-    if (replacement == null) {
+    const transition = this.readTransition(item, now, adapter);
+    if (transition == null) {
       const node = adapter.renderItem(item);
       return {
         value: {
@@ -263,17 +264,16 @@ export class ReplacementController<
       };
     }
 
-    const slotHeight = this.#sampleReplacementHeight(replacement, now);
-    const layers = this.#readReplacementLayers(
-      replacement,
+    const slotHeight = this.#sampleTransitionHeight(transition, now);
+    const layers = this.#readTransitionLayers(
+      transition,
       now,
       adapter.measureNode,
     );
 
     return {
       value: {
-        draw: (y) =>
-          this.#drawReplacementLayers(layers, slotHeight, y, adapter),
+        draw: (y) => this.#drawTransitionLayers(layers, slotHeight, y, adapter),
         hittest: () => false,
       },
       height: slotHeight,
@@ -282,7 +282,7 @@ export class ReplacementController<
 
   handleListStateChange(
     change: ListStateChange<T>,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): void {
     switch (change.type) {
       case "update":
@@ -297,8 +297,8 @@ export class ReplacementController<
         this.handleDelete(change.item, change.animation?.duration, ctx);
         break;
       case "delete-finalize":
-        this.#replacementAnimations.delete(change.item);
-        this.#activeReplacementItems.delete(change.item);
+        this.#itemTransitions.delete(change.item);
+        this.#activeTransitionItems.delete(change.item);
         break;
       case "unshift":
         this.handleUnshift(change.count, change.animation?.duration, ctx);
@@ -323,7 +323,7 @@ export class ReplacementController<
     prevItem: T,
     nextItem: T,
     duration: number | undefined,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): void {
     const normalizedDuration = Math.max(
       0,
@@ -335,23 +335,23 @@ export class ReplacementController<
       nextIndex < 0 ||
       !this.#canAnimateUpdate(nextIndex, prevItem, ctx)
     ) {
-      this.#replacementAnimations.delete(prevItem);
-      this.#activeReplacementItems.delete(prevItem);
+      this.#itemTransitions.delete(prevItem);
+      this.#activeTransitionItems.delete(prevItem);
       return;
     }
 
     const now = getNow();
     const nextNode = ctx.renderItem(nextItem);
     const nextHeight = ctx.measureNode(nextNode).height;
-    const animation = this.readAnimation(prevItem, now, ctx);
+    const transition = this.readTransition(prevItem, now, ctx);
     const currentVisualState = this.#readCurrentVisualState(
       prevItem,
-      animation,
+      transition,
       now,
       ctx,
     );
 
-    const outgoing =
+    const fromLayer =
       currentVisualState.alpha > ALPHA_EPSILON
         ? this.#createLayer(
             currentVisualState.node,
@@ -364,7 +364,7 @@ export class ReplacementController<
             0,
           )
         : undefined;
-    const incoming = this.#createLayer(
+    const toLayer = this.#createLayer(
       nextNode,
       0,
       1,
@@ -375,24 +375,24 @@ export class ReplacementController<
       0,
     );
 
-    this.#replacementAnimations.delete(prevItem);
-    this.#replacementAnimations.set(nextItem, {
+    this.#itemTransitions.delete(prevItem);
+    this.#itemTransitions.set(nextItem, {
       kind: "update",
-      outgoing,
-      incoming,
+      fromLayer,
+      toLayer,
       fromHeight: currentVisualState.height,
       toHeight: nextHeight,
       startTime: now,
       duration: normalizedDuration,
     });
-    this.#activeReplacementItems.delete(prevItem);
-    this.#activeReplacementItems.add(nextItem);
+    this.#activeTransitionItems.delete(prevItem);
+    this.#activeTransitionItems.add(nextItem);
   }
 
   handleDelete(
     item: T,
     duration: number | undefined,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): void {
     const normalizedDuration = Math.max(
       0,
@@ -404,22 +404,22 @@ export class ReplacementController<
       index < 0 ||
       !this.#canAnimateUpdate(index, item, ctx)
     ) {
-      this.#replacementAnimations.delete(item);
-      this.#activeReplacementItems.delete(item);
+      this.#itemTransitions.delete(item);
+      this.#activeTransitionItems.delete(item);
       ctx.onDeleteComplete(item);
       return;
     }
 
     const now = getNow();
-    const animation = this.readAnimation(item, now, ctx);
+    const transition = this.readTransition(item, now, ctx);
     const currentVisualState = this.#readCurrentVisualState(
       item,
-      animation,
+      transition,
       now,
       ctx,
     );
 
-    const outgoing =
+    const fromLayer =
       currentVisualState.alpha > ALPHA_EPSILON
         ? this.#createLayer(
             currentVisualState.node,
@@ -433,16 +433,16 @@ export class ReplacementController<
           )
         : undefined;
 
-    this.#replacementAnimations.set(item, {
+    this.#itemTransitions.set(item, {
       kind: "delete",
-      outgoing,
-      incoming: undefined,
+      fromLayer,
+      toLayer: undefined,
       fromHeight: currentVisualState.height,
       toHeight: 0,
       startTime: now,
       duration: normalizedDuration,
     });
-    this.#activeReplacementItems.add(item);
+    this.#activeTransitionItems.add(item);
   }
 
   handlePush(
@@ -450,7 +450,7 @@ export class ReplacementController<
     duration: number | undefined,
     distance: number | undefined,
     fade: boolean,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): void {
     if (
       count <= 0 ||
@@ -477,10 +477,10 @@ export class ReplacementController<
         typeof distance === "number" && Number.isFinite(distance)
           ? Math.max(0, distance)
           : Math.min(24, itemHeight);
-      this.#replacementAnimations.set(item, {
+      this.#itemTransitions.set(item, {
         kind: "insert",
-        outgoing: undefined,
-        incoming: this.#createLayer(
+        fromLayer: undefined,
+        toLayer: this.#createLayer(
           node,
           fade ? 0 : 1,
           1,
@@ -495,14 +495,14 @@ export class ReplacementController<
         startTime: now,
         duration,
       });
-      this.#activeReplacementItems.add(item);
+      this.#activeTransitionItems.add(item);
     }
   }
 
   handleUnshift(
     count: number,
     duration: number | undefined,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): void {
     if (
       count <= 0 ||
@@ -525,29 +525,32 @@ export class ReplacementController<
     if (!(insertedHeight > 0) || !Number.isFinite(insertedHeight)) {
       return;
     }
-    const travel = Math.min(insertedHeight, this.#visibleSnapshotTrailingGap);
+    const travel = Math.min(
+      insertedHeight,
+      this.#visibilitySnapshotTrailingGap,
+    );
     if (!(travel > 0) || !Number.isFinite(travel)) {
       return;
     }
-    this.#windowTranslateAnimation = {
-      fromTranslateY: this.getWindowTranslateY(now) - travel,
+    this.#viewportTranslateAnimation = {
+      fromTranslateY: this.getViewportTranslateY(now) - travel,
       toTranslateY: 0,
       startTime: now,
       duration,
     };
   }
 
-  /** Clears all animation state (e.g., on list reset). */
+  /** Clears all transition state (e.g., on list reset). */
   reset(): void {
-    this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
-    this.#activeReplacementItems.clear();
-    this.#windowTranslateAnimation = undefined;
+    this.#itemTransitions = new WeakMap<T, ItemTransition<C>>();
+    this.#activeTransitionItems.clear();
+    this.#viewportTranslateAnimation = undefined;
     this.#drawnItems.clear();
     this.#visibleItems.clear();
-    this.#hasVisibleItemSnapshot = false;
-    this.#visibleSnapshotState = undefined;
-    this.#visibleSnapshotShowsShortList = false;
-    this.#visibleSnapshotTrailingGap = 0;
+    this.#hasVisibilitySnapshot = false;
+    this.#visibilitySnapshotState = undefined;
+    this.#visibilitySnapshotCoversShortList = false;
+    this.#visibilitySnapshotTrailingGap = 0;
   }
 
   #createLayer(
@@ -556,10 +559,10 @@ export class ReplacementController<
     toAlpha: number,
     startTime: number,
     duration: number,
-    placement: AnimatedLayerPlacement,
+    placement: TransitionPlacement,
     fromTranslateY: number,
     toTranslateY: number,
-  ): ReplacementLayer<C> {
+  ): TransitionLayer<C> {
     return {
       node,
       fromAlpha,
@@ -572,7 +575,7 @@ export class ReplacementController<
     };
   }
 
-  #sampleLayerAlpha(layer: ReplacementLayer<C>, now: number): number {
+  #sampleLayerAlpha(layer: TransitionLayer<C>, now: number): number {
     return interpolate(
       layer.fromAlpha,
       layer.toAlpha,
@@ -582,7 +585,7 @@ export class ReplacementController<
     );
   }
 
-  #sampleLayerTranslateY(layer: ReplacementLayer<C>, now: number): number {
+  #sampleLayerTranslateY(layer: TransitionLayer<C>, now: number): number {
     return interpolate(
       layer.fromTranslateY,
       layer.toTranslateY,
@@ -592,26 +595,23 @@ export class ReplacementController<
     );
   }
 
-  #sampleReplacementHeight(
-    animation: ReplacementAnimation<C>,
-    now: number,
-  ): number {
+  #sampleTransitionHeight(transition: ItemTransition<C>, now: number): number {
     return interpolate(
-      animation.fromHeight,
-      animation.toHeight,
-      animation.startTime,
-      animation.duration,
+      transition.fromHeight,
+      transition.toHeight,
+      transition.startTime,
+      transition.duration,
       now,
     );
   }
 
-  #readReplacementLayers(
-    animation: ReplacementAnimation<C>,
+  #readTransitionLayers(
+    transition: ItemTransition<C>,
     now: number,
     measureNode: (node: Node<C>) => Box,
   ): SampledLayer<C>[] {
-    return [animation.outgoing, animation.incoming]
-      .filter((layer): layer is ReplacementLayer<C> => layer != null)
+    return [transition.fromLayer, transition.toLayer]
+      .filter((layer): layer is TransitionLayer<C> => layer != null)
       .map((layer) => ({
         alpha: this.#sampleLayerAlpha(layer, now),
         node: layer.node,
@@ -622,11 +622,11 @@ export class ReplacementController<
       .filter((layer) => layer.alpha > ALPHA_EPSILON);
   }
 
-  #drawReplacementLayers(
+  #drawTransitionLayers(
     layers: SampledLayer<C>[],
     slotHeight: number,
     y: number,
-    adapter: ReplacementRendererAdapter<C, T>,
+    adapter: TransitionRendererAdapter<C, T>,
   ): boolean {
     if (slotHeight <= 0) {
       return false;
@@ -663,7 +663,7 @@ export class ReplacementController<
   }
 
   #getPlacementOffset(
-    placement: AnimatedLayerPlacement,
+    placement: TransitionPlacement,
     slotHeight: number,
     nodeHeight: number,
   ): number {
@@ -699,19 +699,19 @@ export class ReplacementController<
   #canAnimateUpdate(
     nextIndex: number,
     prevItem: T,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): boolean {
     if (nextIndex < 0) {
       return false;
     }
     if (
-      this.#hasVisibleItemSnapshot &&
-      this.#visibleSnapshotState != null &&
-      sameState(this.#visibleSnapshotState, ctx.position, ctx.offset)
+      this.#hasVisibilitySnapshot &&
+      this.#visibilitySnapshotState != null &&
+      sameState(this.#visibilitySnapshotState, ctx.position, ctx.offset)
     ) {
       return (
         this.#visibleItems.has(prevItem) ||
-        this.#activeReplacementItems.has(prevItem)
+        this.#activeTransitionItems.has(prevItem)
       );
     }
     return this.#isIndexVisible(
@@ -724,24 +724,24 @@ export class ReplacementController<
   #canAnimateInsert(
     direction: "push" | "unshift",
     count: number,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): boolean {
     if (
-      !this.#hasVisibleItemSnapshot ||
-      this.#visibleSnapshotState == null ||
-      !this.#visibleSnapshotShowsShortList
+      !this.#hasVisibilitySnapshot ||
+      this.#visibilitySnapshotState == null ||
+      !this.#visibilitySnapshotCoversShortList
     ) {
       return false;
     }
 
     const expectedPosition =
-      direction === "unshift" && this.#visibleSnapshotState.position != null
-        ? this.#visibleSnapshotState.position + count
-        : this.#visibleSnapshotState.position;
+      direction === "unshift" && this.#visibilitySnapshotState.position != null
+        ? this.#visibilitySnapshotState.position + count
+        : this.#visibilitySnapshotState.position;
     return sameState(
       {
         position: expectedPosition,
-        offset: this.#visibleSnapshotState.offset,
+        offset: this.#visibilitySnapshotState.offset,
       },
       ctx.position,
       ctx.offset,
@@ -750,26 +750,26 @@ export class ReplacementController<
 
   #readCurrentVisualState(
     item: T,
-    animation: ReplacementAnimation<C> | undefined,
+    transition: ItemTransition<C> | undefined,
     now: number,
-    ctx: ReplacementUpdateContext<C, T>,
+    ctx: TransitionContext<C, T>,
   ): CurrentVisualState<C> {
-    if (animation?.incoming != null) {
+    if (transition?.toLayer != null) {
       return {
-        node: animation.incoming.node,
-        alpha: this.#sampleLayerAlpha(animation.incoming, now),
-        height: this.#sampleReplacementHeight(animation, now),
-        placement: animation.incoming.placement,
-        translateY: this.#sampleLayerTranslateY(animation.incoming, now),
+        node: transition.toLayer.node,
+        alpha: this.#sampleLayerAlpha(transition.toLayer, now),
+        height: this.#sampleTransitionHeight(transition, now),
+        placement: transition.toLayer.placement,
+        translateY: this.#sampleLayerTranslateY(transition.toLayer, now),
       };
     }
-    if (animation?.outgoing != null) {
+    if (transition?.fromLayer != null) {
       return {
-        node: animation.outgoing.node,
-        alpha: this.#sampleLayerAlpha(animation.outgoing, now),
-        height: this.#sampleReplacementHeight(animation, now),
-        placement: animation.outgoing.placement,
-        translateY: this.#sampleLayerTranslateY(animation.outgoing, now),
+        node: transition.fromLayer.node,
+        alpha: this.#sampleLayerAlpha(transition.fromLayer, now),
+        height: this.#sampleTransitionHeight(transition, now),
+        placement: transition.fromLayer.placement,
+        translateY: this.#sampleLayerTranslateY(transition.fromLayer, now),
       };
     }
 
@@ -778,18 +778,18 @@ export class ReplacementController<
       node,
       alpha: 1,
       height: ctx.measureNode(node).height,
-      placement: ctx.defaultAnimatedPlacement,
+      placement: ctx.defaultTransitionPlacement,
       translateY: 0,
     };
   }
 
-  #cleanupWindowTranslateAnimation(now: number): void {
-    const animation = this.#windowTranslateAnimation;
+  #cleanupViewportTranslateAnimation(now: number): void {
+    const transition = this.#viewportTranslateAnimation;
     if (
-      animation != null &&
-      getProgress(animation.startTime, animation.duration, now) >= 1
+      transition != null &&
+      getProgress(transition.startTime, transition.duration, now) >= 1
     ) {
-      this.#windowTranslateAnimation = undefined;
+      this.#viewportTranslateAnimation = undefined;
     }
   }
 }

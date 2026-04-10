@@ -15,16 +15,16 @@ import {
   smoothstep,
 } from "./base-animation";
 import {
-  type AnimatedLayerPlacement,
+  type TransitionPlacement,
   type ControlledState,
   type JumpAnimation,
   type VirtualizedResolvedItem,
 } from "./base-types";
 import {
-  ReplacementController,
-  type ReplacementRendererAdapter,
-  type ReplacementUpdateContext,
-} from "./base-replacement";
+  TransitionController,
+  type TransitionContext,
+  type TransitionRendererAdapter,
+} from "./base-transition";
 import type {
   NormalizedListState,
   VisibleListState,
@@ -65,7 +65,7 @@ export abstract class VirtualizedRenderer<
 
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
-  #replacementController = new ReplacementController<C, T>();
+  #transitionController = new TransitionController<C, T>();
 
   constructor(
     graphics: C,
@@ -119,20 +119,22 @@ export abstract class VirtualizedRenderer<
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
 
     let solution = this._resolveVisibleWindow(now);
-    let replacementShift = this.#replacementController.getWindowTranslateY(now);
-    this._captureVisibleItemSnapshot(solution.window, replacementShift);
-    const requestSettleRedraw = this._pruneReplacementAnimations(
+    let viewportTranslateY =
+      this.#transitionController.getViewportTranslateY(now);
+    this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
+    const requestSettleRedraw = this._pruneTransitionAnimations(
       solution.window,
     );
     if (requestSettleRedraw) {
       solution = this._resolveVisibleWindow(now);
-      replacementShift = this.#replacementController.getWindowTranslateY(now);
-      this._captureVisibleItemSnapshot(solution.window, replacementShift);
+      viewportTranslateY =
+        this.#transitionController.getViewportTranslateY(now);
+      this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
     }
     const requestRedraw = this._renderVisibleWindow(
       solution.window,
       feedback,
-      replacementShift,
+      viewportTranslateY,
     );
     this._commitListState(solution.normalizedState);
 
@@ -149,14 +151,20 @@ export abstract class VirtualizedRenderer<
   }): boolean {
     const now = getNow();
     let solution = this._resolveVisibleWindow(now);
-    let replacementShift = this.#replacementController.getWindowTranslateY(now);
-    this._captureVisibleItemSnapshot(solution.window, replacementShift);
-    if (this._pruneReplacementAnimations(solution.window)) {
+    let viewportTranslateY =
+      this.#transitionController.getViewportTranslateY(now);
+    this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
+    if (this._pruneTransitionAnimations(solution.window)) {
       solution = this._resolveVisibleWindow(now);
-      replacementShift = this.#replacementController.getWindowTranslateY(now);
-      this._captureVisibleItemSnapshot(solution.window, replacementShift);
+      viewportTranslateY =
+        this.#transitionController.getViewportTranslateY(now);
+      this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
     }
-    return this._hittestVisibleWindow(solution.window, test, replacementShift);
+    return this._hittestVisibleWindow(
+      solution.window,
+      test,
+      viewportTranslateY,
+    );
   }
 
   protected _readListState(): VisibleListState {
@@ -327,10 +335,10 @@ export abstract class VirtualizedRenderer<
     };
   }
 
-  protected _pruneReplacementAnimations(
+  protected _pruneTransitionAnimations(
     _window: VisibleWindow<unknown>,
   ): boolean {
-    return this.#replacementController.pruneInvisible({
+    return this.#transitionController.pruneInvisible({
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
     });
   }
@@ -355,7 +363,7 @@ export abstract class VirtualizedRenderer<
     extraShift = 0,
   ): void {
     const normalizedState = this._normalizeListState(this._readListState());
-    this.#replacementController.captureVisibleItemSnapshot(
+    this.#transitionController.captureVisibilitySnapshot(
       window,
       this.items,
       this.graphics.canvas.clientHeight,
@@ -366,23 +374,23 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _prepareRender(now: number): boolean {
-    const keepReplacing = this.#replacementController.prepare(now, {
+    const keepTransitioning = this.#transitionController.prepare(now, {
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
     });
     const animation = this.#jumpAnimation;
     if (animation == null) {
-      return keepReplacing;
+      return keepTransitioning;
     }
     if (this.items.length === 0) {
       this.#cancelJumpAnimation();
-      return keepReplacing;
+      return keepTransitioning;
     }
     if (
       this.#controlledState != null &&
       !sameState(this.#controlledState, this.position, this.offset)
     ) {
       this.#cancelJumpAnimation();
-      return keepReplacing;
+      return keepTransitioning;
     }
 
     const progress = getProgress(animation.startTime, animation.duration, now);
@@ -393,7 +401,7 @@ export abstract class VirtualizedRenderer<
     );
     this._applyAnchor(anchor);
     animation.needsMoreFrames = progress < 1;
-    return keepReplacing || animation.needsMoreFrames;
+    return keepTransitioning || animation.needsMoreFrames;
   }
 
   protected _finishRender(requestRedraw: boolean): boolean {
@@ -423,7 +431,7 @@ export abstract class VirtualizedRenderer<
 
   protected _getItemHeight(index: number): number {
     const item = this.items[index]!;
-    return this.#replacementController.getItemHeight(item, getNow(), {
+    return this.#transitionController.getItemHeight(item, getNow(), {
       renderItem: this.options.renderItem,
       measureNode: this.measureRootNode.bind(this),
     });
@@ -434,10 +442,10 @@ export abstract class VirtualizedRenderer<
     _index: number,
     now: number,
   ): { value: VirtualizedResolvedItem; height: number } {
-    return this.#replacementController.resolveItem(
+    return this.#transitionController.resolveItem(
       item,
       now,
-      this.#getReplacementRendererAdapter(),
+      this.#getTransitionRendererAdapter(),
     );
   }
 
@@ -493,7 +501,7 @@ export abstract class VirtualizedRenderer<
     index: number,
     block: NonNullable<JumpToOptions["block"]>,
   ): number;
-  protected abstract _getDefaultAnimatedPlacement(): AnimatedLayerPlacement;
+  protected abstract _getDefaultAnimatedPlacement(): TransitionPlacement;
 
   // ── Jump animation ─────────────────────────────────────────────────────────
 
@@ -502,27 +510,27 @@ export abstract class VirtualizedRenderer<
     this.#controlledState = undefined;
   }
 
-  // ── Replacement animation delegation ───────────────────────────────────────
+  // ── Transition animation delegation ────────────────────────────────────────
 
   #handleDeleteComplete(item: T): void {
     this.options.list.finalizeDelete(item);
   }
 
-  #getReplacementRendererAdapter(): ReplacementRendererAdapter<C, T> {
+  #getTransitionRendererAdapter(): TransitionRendererAdapter<C, T> {
     return {
       renderItem: this.options.renderItem,
       measureNode: this.measureRootNode.bind(this),
       drawNode: this.drawRootNode.bind(this),
       getRootContext: this.getRootContext.bind(this),
       graphics: this.graphics,
-      defaultAnimatedPlacement: this._getDefaultAnimatedPlacement(),
+      defaultTransitionPlacement: this._getDefaultAnimatedPlacement(),
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
     };
   }
 
-  #getReplacementUpdateContext(): ReplacementUpdateContext<C, T> {
+  #getTransitionContext(): TransitionContext<C, T> {
     return {
-      ...this.#getReplacementRendererAdapter(),
+      ...this.#getTransitionRendererAdapter(),
       items: this.items,
       position: this.position,
       offset: this.offset,
@@ -533,9 +541,9 @@ export abstract class VirtualizedRenderer<
   }
 
   #handleListStateChange(change: ListStateChange<T>): void {
-    this.#replacementController.handleListStateChange(
+    this.#transitionController.handleListStateChange(
       change,
-      this.#getReplacementUpdateContext(),
+      this.#getTransitionContext(),
     );
   }
 }
