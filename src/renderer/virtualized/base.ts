@@ -5,6 +5,23 @@ import {
   subscribeListState,
   type ListStateChange,
 } from "../list-state";
+import {
+  clamp,
+  getNow,
+  getProgress,
+  interpolate,
+  sameState,
+} from "./base-animation";
+import {
+  type ControlledState,
+  type JumpAnimation,
+  type VirtualizedResolvedItem,
+} from "./base-types";
+import {
+  ReplacementController,
+  type ReplacementRendererAdapter,
+  type ReplacementUpdateContext,
+} from "./base-replacement";
 import type {
   NormalizedListState,
   VisibleListState,
@@ -26,83 +43,6 @@ export interface JumpToOptions {
   onComplete?: () => void;
 }
 
-type ControlledState = {
-  position?: number;
-  offset: number;
-};
-
-type JumpAnimation = {
-  startAnchor: number;
-  targetAnchor: number;
-  startTime: number;
-  duration: number;
-  needsMoreFrames: boolean;
-  onComplete: (() => void) | undefined;
-};
-
-type ReplacementLayer<C extends CanvasRenderingContext2D> = {
-  node: Node<C>;
-  fromAlpha: number;
-  toAlpha: number;
-  startTime: number;
-  duration: number;
-};
-
-type ReplacementAnimation<C extends CanvasRenderingContext2D> = {
-  outgoing: ReplacementLayer<C> | undefined;
-  incoming: ReplacementLayer<C>;
-  fromHeight: number;
-  toHeight: number;
-  startTime: number;
-  duration: number;
-};
-
-type VirtualizedResolvedItem = {
-  draw: (y: number) => boolean;
-  hittest: (test: HitTest, y: number) => boolean;
-};
-
-const ALPHA_EPSILON = 1e-3;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function sameState(
-  state: ControlledState,
-  position: number | undefined,
-  offset: number,
-): boolean {
-  return Object.is(state.position, position) && Object.is(state.offset, offset);
-}
-
-function smoothstep(value: number): number {
-  return value * value * (3 - 2 * value);
-}
-
-function getProgress(startTime: number, duration: number, now: number): number {
-  if (!(duration > 0)) {
-    return 1;
-  }
-  return clamp((now - startTime) / duration, 0, 1);
-}
-
-function interpolate(
-  from: number,
-  to: number,
-  startTime: number,
-  duration: number,
-  now: number,
-): number {
-  const progress = getProgress(startTime, duration, now);
-  const eased = progress >= 1 ? 1 : smoothstep(progress);
-  return from + (to - from) * eased;
-}
-
-function getNow(): number {
-  return globalThis.performance?.now() ?? Date.now();
-}
-
 /**
  * Shared base class for virtualized list renderers.
  */
@@ -122,11 +62,7 @@ export abstract class VirtualizedRenderer<
 
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
-  #replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
-  #activeReplacementItems = new Set<T>();
-  #visibleItems = new Set<T>();
-  #hasVisibleItemSnapshot = false;
-  #visibleSnapshotState: ControlledState | undefined;
+  #replacementController = new ReplacementController<C, T>();
 
   constructor(
     graphics: C,
@@ -178,6 +114,7 @@ export abstract class VirtualizedRenderer<
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
       this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
+
     const solution = this._resolveVisibleWindow(now);
     this._captureVisibleItemSnapshot(solution.window);
     const requestSettleRedraw = this._pruneReplacementAnimations(
@@ -185,6 +122,7 @@ export abstract class VirtualizedRenderer<
     );
     const requestRedraw = this._renderVisibleWindow(solution.window, feedback);
     this._commitListState(solution.normalizedState);
+
     return this._finishRender(
       keepAnimating || requestRedraw || requestSettleRedraw,
     );
@@ -365,18 +303,9 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _pruneReplacementAnimations(
-    window: VisibleWindow<unknown>,
+    _window: VisibleWindow<unknown>,
   ): boolean {
-    let canceled = false;
-    for (const item of [...this.#activeReplacementItems]) {
-      if (this.#visibleItems.has(item)) {
-        continue;
-      }
-      this.#replacementAnimations.delete(item);
-      this.#activeReplacementItems.delete(item);
-      canceled = true;
-    }
-    return canceled;
+    return this.#replacementController.pruneInvisible();
   }
 
   protected _hittestVisibleWindow(
@@ -394,23 +323,16 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _captureVisibleItemSnapshot(window: VisibleWindow<unknown>): void {
-    const nextVisibleItems = new Set<T>();
-    for (const { idx, offset, height } of window.drawList) {
-      if (this._readVisibleRange(offset + window.shift, height) == null) {
-        continue;
-      }
-      const item = this.items[idx];
-      if (item != null) {
-        nextVisibleItems.add(item);
-      }
-    }
-    this.#visibleItems = nextVisibleItems;
-    this.#hasVisibleItemSnapshot = true;
-    this.#visibleSnapshotState = this._readListState();
+    this.#replacementController.captureVisibleItemSnapshot(
+      window,
+      this.items,
+      this._readVisibleRange.bind(this),
+      this._readListState.bind(this),
+    );
   }
 
   protected _prepareRender(now: number): boolean {
-    const keepReplacing = this.#prepareReplacementAnimations(now);
+    const keepReplacing = this.#replacementController.prepare(now);
     const animation = this.#jumpAnimation;
     if (animation == null) {
       return keepReplacing;
@@ -466,14 +388,11 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _getItemHeight(index: number): number {
-    const now = getNow();
     const item = this.items[index]!;
-    const replacement = this.#readReplacementAnimation(item, now);
-    if (replacement != null) {
-      return this.#sampleReplacementHeight(replacement, now);
-    }
-    const node = this.options.renderItem(item);
-    return this.measureRootNode(node).height;
+    return this.#replacementController.getItemHeight(item, getNow(), {
+      renderItem: this.options.renderItem,
+      measureNode: this.measureRootNode.bind(this),
+    });
   }
 
   protected _resolveItem(
@@ -481,32 +400,11 @@ export abstract class VirtualizedRenderer<
     _index: number,
     now: number,
   ): { value: VirtualizedResolvedItem; height: number } {
-    const replacement = this.#readReplacementAnimation(item, now);
-    if (replacement == null) {
-      const node = this.options.renderItem(item);
-      return {
-        value: {
-          draw: (y) => this.drawRootNode(node, 0, y),
-          hittest: (test, y) =>
-            node.hittest(this.getRootContext(), {
-              ...test,
-              y: test.y - y,
-            }),
-        },
-        height: this.measureRootNode(node).height,
-      };
-    }
-
-    const slotHeight = this.#sampleReplacementHeight(replacement, now);
-    const layers = this.#readReplacementLayers(replacement, now);
-
-    return {
-      value: {
-        draw: (y) => this.#drawReplacementLayers(layers, slotHeight, y),
-        hittest: () => false,
-      },
-      height: slotHeight,
-    };
+    return this.#replacementController.resolveItem(
+      item,
+      now,
+      this.#getReplacementRendererAdapter(),
+    );
   }
 
   protected _getAnchorAtOffset(index: number, offset: number): number {
@@ -566,250 +464,42 @@ export abstract class VirtualizedRenderer<
     nodeHeight: number,
   ): number;
 
+  // ── Jump animation ─────────────────────────────────────────────────────────
+
   #cancelJumpAnimation(): void {
     this.#jumpAnimation = undefined;
     this.#controlledState = undefined;
   }
 
-  #createReplacementLayer(
-    node: Node<C>,
-    fromAlpha: number,
-    toAlpha: number,
-    startTime: number,
-    duration: number,
-  ): ReplacementLayer<C> {
+  // ── Replacement animation delegation ───────────────────────────────────────
+
+  #getReplacementRendererAdapter(): ReplacementRendererAdapter<C, T> {
     return {
-      node,
-      fromAlpha,
-      toAlpha,
-      startTime,
-      duration,
+      renderItem: this.options.renderItem,
+      measureNode: this.measureRootNode.bind(this),
+      drawNode: this.drawRootNode.bind(this),
+      getRootContext: this.getRootContext.bind(this),
+      graphics: this.graphics,
+      getAnimatedLayerOffset: this._getAnimatedLayerOffset.bind(this),
     };
   }
 
-  #sampleLayerAlpha(layer: ReplacementLayer<C>, now: number): number {
-    return interpolate(
-      layer.fromAlpha,
-      layer.toAlpha,
-      layer.startTime,
-      layer.duration,
-      now,
-    );
-  }
-
-  #sampleReplacementHeight(
-    animation: ReplacementAnimation<C>,
-    now: number,
-  ): number {
-    return interpolate(
-      animation.fromHeight,
-      animation.toHeight,
-      animation.startTime,
-      animation.duration,
-      now,
-    );
-  }
-
-  #readReplacementLayers(
-    animation: ReplacementAnimation<C>,
-    now: number,
-  ): { alpha: number; node: Node<C>; nodeHeight: number }[] {
-    const layers = [animation.outgoing, animation.incoming]
-      .filter((layer): layer is ReplacementLayer<C> => layer != null)
-      .map((layer) => ({
-        alpha: this.#sampleLayerAlpha(layer, now),
-        node: layer.node,
-        nodeHeight: this.measureRootNode(layer.node).height,
-      }))
-      .filter((layer) => layer.alpha > ALPHA_EPSILON);
-    return layers;
-  }
-
-  #readReplacementAnimation(
-    item: T,
-    now: number,
-  ): ReplacementAnimation<C> | undefined {
-    const animation = this.#replacementAnimations.get(item);
-    if (animation == null) {
-      return undefined;
-    }
-    if (getProgress(animation.startTime, animation.duration, now) >= 1) {
-      this.#replacementAnimations.delete(item);
-      this.#activeReplacementItems.delete(item);
-      return undefined;
-    }
-    return animation;
-  }
-
-  #prepareReplacementAnimations(now: number): boolean {
-    let keepAnimating = false;
-    for (const item of [...this.#activeReplacementItems]) {
-      if (this.#readReplacementAnimation(item, now) != null) {
-        keepAnimating = true;
-      }
-    }
-    return keepAnimating;
-  }
-
-  #drawReplacementLayers(
-    layers: { alpha: number; node: Node<C>; nodeHeight: number }[],
-    slotHeight: number,
-    y: number,
-  ): boolean {
-    if (slotHeight <= 0) {
-      return false;
-    }
-
-    let result = false;
-    const width = this.graphics.canvas.clientWidth;
-    for (const layer of layers) {
-      const alpha = clamp(layer.alpha, 0, 1);
-      if (alpha <= ALPHA_EPSILON) {
-        continue;
-      }
-
-      this.graphics.save();
-      try {
-        this.graphics.beginPath?.();
-        this.graphics.rect?.(0, y, width, slotHeight);
-        this.graphics.clip?.();
-        if (typeof this.graphics.globalAlpha === "number") {
-          this.graphics.globalAlpha *= alpha;
-        }
-        const layerY =
-          y + this._getAnimatedLayerOffset(slotHeight, layer.nodeHeight);
-        if (this.drawRootNode(layer.node, 0, layerY)) {
-          result = true;
-        }
-      } finally {
-        this.graphics.restore();
-      }
-    }
-    return result;
+  #getReplacementUpdateContext(): ReplacementUpdateContext<C, T> {
+    return {
+      ...this.#getReplacementRendererAdapter(),
+      items: this.items,
+      position: this.position,
+      offset: this.offset,
+      readListState: this._readListState.bind(this),
+      readVisibleRange: this._readVisibleRange.bind(this),
+      resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),
+    };
   }
 
   #handleListStateChange(change: ListStateChange<T>): void {
-    switch (change.type) {
-      case "update":
-        this.#handleUpdate(
-          change.prevItem,
-          change.nextItem,
-          change.animation?.duration,
-        );
-        break;
-      case "unshift":
-      case "push":
-        break;
-      case "reset":
-      case "set":
-        this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
-        this.#activeReplacementItems.clear();
-        this.#visibleItems.clear();
-        this.#hasVisibleItemSnapshot = false;
-        this.#visibleSnapshotState = undefined;
-        break;
-    }
-  }
-
-  #isIndexVisible(index: number): boolean {
-    if (index < 0) {
-      return false;
-    }
-    const solution = this._resolveVisibleWindow(getNow());
-    for (const entry of solution.window.drawList) {
-      if (entry.idx !== index) {
-        continue;
-      }
-      if (
-        this._readVisibleRange(
-          entry.offset + solution.window.shift,
-          entry.height,
-        ) != null
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  #canAnimateUpdate(nextIndex: number, prevItem: T): boolean {
-    if (nextIndex < 0) {
-      return false;
-    }
-    if (
-      this.#hasVisibleItemSnapshot &&
-      this.#visibleSnapshotState != null &&
-      sameState(this.#visibleSnapshotState, this.position, this.offset)
-    ) {
-      return (
-        this.#visibleItems.has(prevItem) ||
-        this.#activeReplacementItems.has(prevItem)
-      );
-    }
-    return this.#isIndexVisible(nextIndex);
-  }
-
-  #handleUpdate(prevItem: T, nextItem: T, duration: number | undefined): void {
-    const normalizedDuration = Math.max(
-      0,
-      typeof duration === "number" && Number.isFinite(duration) ? duration : 0,
+    this.#replacementController.handleListStateChange(
+      change,
+      this.#getReplacementUpdateContext(),
     );
-    const nextIndex = this.items.indexOf(nextItem);
-    if (
-      normalizedDuration <= 0 ||
-      nextIndex < 0 ||
-      !this.#canAnimateUpdate(nextIndex, prevItem)
-    ) {
-      this.#replacementAnimations.delete(prevItem);
-      this.#activeReplacementItems.delete(prevItem);
-      return;
-    }
-
-    const now = getNow();
-    const nextNode = this.options.renderItem(nextItem);
-    const nextHeight = this.measureRootNode(nextNode).height;
-    const animation = this.#readReplacementAnimation(prevItem, now);
-
-    let currentNode: Node<C>;
-    let currentAlpha = 1;
-    let fromHeight: number;
-    if (animation == null) {
-      currentNode = this.options.renderItem(prevItem);
-      fromHeight = this.measureRootNode(currentNode).height;
-    } else {
-      currentNode = animation.incoming.node;
-      currentAlpha = this.#sampleLayerAlpha(animation.incoming, now);
-      fromHeight = this.#sampleReplacementHeight(animation, now);
-    }
-
-    const outgoing =
-      currentAlpha > ALPHA_EPSILON
-        ? this.#createReplacementLayer(
-            currentNode,
-            currentAlpha,
-            0,
-            now,
-            normalizedDuration,
-          )
-        : undefined;
-    const incoming = this.#createReplacementLayer(
-      nextNode,
-      0,
-      1,
-      now,
-      normalizedDuration,
-    );
-
-    this.#replacementAnimations.delete(prevItem);
-    this.#replacementAnimations.set(nextItem, {
-      outgoing,
-      incoming,
-      fromHeight,
-      toHeight: nextHeight,
-      startTime: now,
-      duration: normalizedDuration,
-    });
-    this.#activeReplacementItems.delete(prevItem);
-    this.#activeReplacementItems.add(nextItem);
   }
 }
