@@ -105,7 +105,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
-  #replacementAnimations = new Map<number, ReplacementAnimation<C>>();
+  #replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
+  #activeReplacementItems = new Set<T>();
   #nextReplacementLayerKey = 0;
 
   constructor(
@@ -340,17 +341,17 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
   protected _getItemHeight(index: number): number {
     const now = getNow();
-    const replacement = this.#readReplacementAnimation(index, now);
+    const item = this.items[index]!;
+    const replacement = this.#readReplacementAnimation(item, now);
     if (replacement != null) {
       return this.#sampleReplacementHeight(replacement, now);
     }
-    const item = this.items[index];
     const node = this.options.renderItem(item);
     return this.measureRootNode(node).height;
   }
 
-  protected _resolveItem(item: T, index: number, now: number): { value: VirtualizedResolvedItem<C>; height: number } {
-    const replacement = this.#readReplacementAnimation(index, now);
+  protected _resolveItem(item: T, _index: number, now: number): { value: VirtualizedResolvedItem<C>; height: number } {
+    const replacement = this.#readReplacementAnimation(item, now);
     if (replacement == null) {
       const node = this.options.renderItem(item);
       return {
@@ -456,15 +457,16 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     return getProgress(layer.startTime, layer.duration, now) >= 1 && Math.abs(layer.toAlpha - this.#sampleLayerAlpha(layer, now)) <= ALPHA_EPSILON;
   }
 
-  #readReplacementAnimation(index: number, now: number): ReplacementAnimation<C> | undefined {
-    const animation = this.#replacementAnimations.get(index);
+  #readReplacementAnimation(item: T, now: number): ReplacementAnimation<C> | undefined {
+    const animation = this.#replacementAnimations.get(item);
     if (animation == null) {
       return undefined;
     }
 
     const currentLayer = animation.layers.find((layer) => layer.key === animation.currentLayerKey);
     if (currentLayer == null) {
-      this.#replacementAnimations.delete(index);
+      this.#replacementAnimations.delete(item);
+      this.#activeReplacementItems.delete(item);
       return undefined;
     }
 
@@ -474,7 +476,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       this.#isLayerComplete(currentLayer, now) &&
       animation.layers.length === 1
     ) {
-      this.#replacementAnimations.delete(index);
+      this.#replacementAnimations.delete(item);
+      this.#activeReplacementItems.delete(item);
       return undefined;
     }
 
@@ -483,8 +486,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
 
   #prepareReplacementAnimations(now: number): boolean {
     let keepAnimating = false;
-    for (const index of [...this.#replacementAnimations.keys()]) {
-      if (this.#readReplacementAnimation(index, now) != null) {
+    for (const item of [...this.#activeReplacementItems]) {
+      if (this.#readReplacementAnimation(item, now) != null) {
         keepAnimating = true;
       }
     }
@@ -530,44 +533,36 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
   #handleListStateChange(change: ListStateChange<T>): void {
     switch (change.type) {
       case "update":
-        this.#handleUpdate(change.index, change.prevItem, change.nextItem, change.animation?.duration);
+        this.#handleUpdate(change.prevItem, change.nextItem, change.animation?.duration);
         break;
-      case "unshift": {
-        if (change.count <= 0 || this.#replacementAnimations.size === 0) {
-          return;
-        }
-        const shifted = new Map<number, ReplacementAnimation<C>>();
-        for (const [index, animation] of this.#replacementAnimations) {
-          shifted.set(index + change.count, animation);
-        }
-        this.#replacementAnimations = shifted;
-        break;
-      }
+      case "unshift":
       case "push":
         break;
       case "reset":
       case "set":
-        this.#replacementAnimations.clear();
+        this.#replacementAnimations = new WeakMap<T, ReplacementAnimation<C>>();
+        this.#activeReplacementItems.clear();
         break;
     }
   }
 
-  #handleUpdate(index: number, prevItem: T, nextItem: T, duration: number | undefined): void {
-    const normalizedDuration = Number.isFinite(duration) ? Math.max(0, duration!) : 0;
+  #handleUpdate(prevItem: T, nextItem: T, duration: number | undefined): void {
+    const normalizedDuration = Math.max(0, typeof duration === "number" && Number.isFinite(duration) ? duration : 0);
     if (normalizedDuration <= 0) {
-      this.#replacementAnimations.delete(index);
+      this.#replacementAnimations.delete(prevItem);
+      this.#activeReplacementItems.delete(prevItem);
       return;
     }
 
     const now = getNow();
     const nextNode = this.options.renderItem(nextItem);
     const nextHeight = this.measureRootNode(nextNode).height;
-    const animation = this.#readReplacementAnimation(index, now);
+    const animation = this.#readReplacementAnimation(prevItem, now);
     if (animation == null) {
       const prevNode = this.options.renderItem(prevItem);
       const outgoing = this.#createReplacementLayer(prevNode, 1, 0, now, normalizedDuration);
       const incoming = this.#createReplacementLayer(nextNode, 0, 1, now, normalizedDuration);
-      this.#replacementAnimations.set(index, {
+      this.#replacementAnimations.set(nextItem, {
         currentLayerKey: incoming.key,
         layers: [outgoing, incoming],
         fromHeight: this.measureRootNode(prevNode).height,
@@ -575,6 +570,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
         startTime: now,
         duration: normalizedDuration,
       });
+      this.#activeReplacementItems.delete(prevItem);
+      this.#activeReplacementItems.add(nextItem);
       return;
     }
 
@@ -589,7 +586,8 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
     }
     const incoming = this.#createReplacementLayer(nextNode, 0, 1, now, normalizedDuration);
     layers.push(incoming);
-    this.#replacementAnimations.set(index, {
+    this.#replacementAnimations.delete(prevItem);
+    this.#replacementAnimations.set(nextItem, {
       currentLayerKey: incoming.key,
       layers,
       fromHeight: this.#sampleReplacementHeight(animation, now),
@@ -597,5 +595,7 @@ export abstract class VirtualizedRenderer<C extends CanvasRenderingContext2D, T 
       startTime: now,
       duration: normalizedDuration,
     });
+    this.#activeReplacementItems.delete(prevItem);
+    this.#activeReplacementItems.add(nextItem);
   }
 }

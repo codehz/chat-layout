@@ -32,8 +32,9 @@ describe("ListState weak subscriptions", () => {
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: string[] = [];
+      const oldItem = { id: "old", height: 20 };
       const list = new ListState<Item>([
-        { id: "old", height: 20 },
+        oldItem,
         { id: "tail", height: 10 },
       ]);
       const renderer = new TimelineRenderer(createGraphics(120), {
@@ -41,7 +42,7 @@ describe("ListState weak subscriptions", () => {
         renderItem: memoRenderItem<C, Item>((item) => createProbeNode(item, draws)),
       });
 
-      list.update(0, { id: "new", height: 30 }, { duration: 100 });
+      list.update(oldItem, { id: "new", height: 30 }, { duration: 100 });
       now.current = 50;
       renderer.render();
       expect(draws).toEqual(["old", "new", "tail"]);
@@ -57,7 +58,7 @@ describe("ListState weak subscriptions", () => {
       expect(draws).toEqual(["set"]);
 
       draws.length = 0;
-      list.update(0, { id: "set-next", height: 35 }, { duration: 100 });
+      list.update(list.items[0]!, { id: "set-next", height: 35 }, { duration: 100 });
       now.current = 75;
       renderer.render();
       expect(draws).toEqual(["set", "set-next"]);

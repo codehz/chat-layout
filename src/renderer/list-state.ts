@@ -8,11 +8,8 @@ export interface UpdateListItemAnimationOptions {
   duration?: number;
 }
 
-export type UpdateListItemUpdater<T extends {}> = (prevItem: T) => T;
-
 type ListUpdateChange<T extends {}> = {
   type: "update";
-  index: number;
   prevItem: T;
   nextItem: T;
   animation: UpdateListItemAnimationOptions | undefined;
@@ -105,6 +102,39 @@ export function subscribeListState<T extends {}, O extends object>(
   });
 }
 
+function isObjectIdentityCandidate(value: unknown): value is object {
+  return (typeof value === "object" && value !== null) || typeof value === "function";
+}
+
+function assertUniqueItemReferences<T extends {}>(items: readonly T[], existingItems?: readonly T[]): void {
+  const seen = new Set<T>();
+  if (existingItems != null) {
+    for (const item of existingItems) {
+      if (isObjectIdentityCandidate(item)) {
+        seen.add(item);
+      }
+    }
+  }
+  for (const item of items) {
+    if (!isObjectIdentityCandidate(item)) {
+      continue;
+    }
+    if (seen.has(item)) {
+      throw new Error("ListState items must use unique object references.");
+    }
+    seen.add(item);
+  }
+}
+
+function normalizeUpdateAnimation(
+  animation: UpdateListItemAnimationOptions | undefined,
+): UpdateListItemAnimationOptions | undefined {
+  if (animation == null) {
+    return undefined;
+  }
+  return Number.isFinite(animation.duration) ? { duration: animation.duration } : {};
+}
+
 export class ListState<T extends {}> {
   #items: T[];
 
@@ -120,7 +150,9 @@ export class ListState<T extends {}> {
 
   /** Replaces the full item collection while preserving scroll state. */
   set items(value: T[]) {
-    this.#items = [...value];
+    const nextItems = [...value];
+    assertUniqueItemReferences(nextItems);
+    this.#items = nextItems;
     emitListStateChange(this, { type: "set" });
   }
 
@@ -128,7 +160,9 @@ export class ListState<T extends {}> {
    * @param items Initial list items.
    */
   constructor(items: T[] = []) {
-    this.#items = [...items];
+    const nextItems = [...items];
+    assertUniqueItemReferences(nextItems);
+    this.#items = nextItems;
   }
 
   /** Prepends one or more items. */
@@ -141,6 +175,7 @@ export class ListState<T extends {}> {
     if (items.length === 0) {
       return;
     }
+    assertUniqueItemReferences(items, this.#items);
     if (this.position != null) {
       this.position += items.length;
     }
@@ -161,6 +196,7 @@ export class ListState<T extends {}> {
     if (items.length === 0) {
       return;
     }
+    assertUniqueItemReferences(items, this.#items);
     this.#items.push(...items);
     emitListStateChange(this, {
       type: "push",
@@ -169,28 +205,29 @@ export class ListState<T extends {}> {
   }
 
   /**
-   * Updates an existing item by index.
+   * Updates an existing item by object identity.
    */
-  update(index: number, item: T, animation?: UpdateListItemAnimationOptions): void {
-    const normalizedIndex = Number.isFinite(index) ? Math.trunc(index) : Number.NaN;
-    if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0 || normalizedIndex >= this.#items.length) {
-      throw new RangeError(`update() index ${index} is out of range for list length ${this.#items.length}.`);
+  update(targetItem: T, nextItem: T, animation?: UpdateListItemAnimationOptions): void {
+    if (!isObjectIdentityCandidate(targetItem) || !isObjectIdentityCandidate(nextItem)) {
+      throw new TypeError("update() only supports object items.");
     }
-
-    const prevItem = this.#items[normalizedIndex]!;
-    this.#items[normalizedIndex] = item;
-    const nextItem = this.#items[normalizedIndex]!;
+    if (targetItem === nextItem) {
+      throw new Error("update() requires nextItem to be a new object reference.");
+    }
+    const index = this.#items.indexOf(targetItem);
+    if (index < 0) {
+      throw new Error("update() targetItem is not present in the list.");
+    }
+    if (this.#items.includes(nextItem)) {
+      throw new Error("update() nextItem is already present in the list.");
+    }
+    const prevItem = this.#items[index]!;
+    this.#items[index] = nextItem;
     emitListStateChange(this, {
       type: "update",
-      index: normalizedIndex,
       prevItem,
       nextItem,
-      animation:
-        animation != null && Number.isFinite(animation.duration)
-          ? { duration: animation.duration }
-          : animation == null
-            ? undefined
-            : {},
+      animation: normalizeUpdateAnimation(animation),
     });
   }
 
@@ -206,7 +243,9 @@ export class ListState<T extends {}> {
    * Replaces all items and clears scroll state.
    */
   reset(items: T[] = []): void {
-    this.#items = [...items];
+    const nextItems = [...items];
+    assertUniqueItemReferences(nextItems);
+    this.#items = nextItems;
     this.offset = 0;
     this.position = undefined;
     emitListStateChange(this, { type: "reset" });

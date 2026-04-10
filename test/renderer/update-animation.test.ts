@@ -59,46 +59,25 @@ function createRenderer(
 }
 
 describe("update animation", () => {
-  test("ListState.update validates indices and hard-cuts by default", () => {
+  test("ListState.update hard-cuts by default", () => {
     const draws: DrawProbe[] = [];
+    const before = { id: "before", height: 20 };
     const { list, renderer } = createRenderer(
       [
-        { id: "before", height: 20 },
+        before,
       ],
       draws,
     );
 
-    list.update(0, { id: "after-default", height: 30 });
+    const afterDefault = { id: "after-default", height: 30 };
+    list.update(before, afterDefault);
     renderer.render();
     expect(draws.map((draw) => draw.id)).toEqual(["after-default"]);
 
     draws.length = 0;
-    list.update(0, { id: "after-zero", height: 40 }, { duration: 0 });
+    list.update(afterDefault, { id: "after-zero", height: 40 }, { duration: 0 });
     renderer.render();
     expect(draws.map((draw) => draw.id)).toEqual(["after-zero"]);
-
-    expect(() => list.update(-1, { id: "bad", height: 10 })).toThrow(RangeError);
-    expect(() => list.update(1, { id: "bad", height: 10 })).toThrow(RangeError);
-  });
-
-  test("ListState.update accepts updater functions", () => {
-    const draws: DrawProbe[] = [];
-    const { list, renderer } = createRenderer(
-      [
-        { id: "before", height: 20 },
-      ],
-      draws,
-    );
-
-    list.update(0, (prevItem) => ({
-      ...prevItem,
-      id: `${prevItem.id}-next`,
-      height: prevItem.height + 10,
-    }));
-
-    renderer.render();
-    expect(list.items[0]).toEqual({ id: "before-next", height: 30 });
-    expect(draws.map((draw) => draw.id)).toEqual(["before-next"]);
   });
 
   test("TimelineRenderer crossfades updates and transitions slot height", () => {
@@ -106,15 +85,16 @@ describe("update animation", () => {
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 20 };
       const { list, renderer } = createRenderer(
         [
-          { id: "old", height: 20 },
+          oldItem,
           { id: "tail", height: 10 },
         ],
         draws,
       );
 
-      list.update(0, { id: "new", height: 60 }, { duration: 100 });
+      list.update(oldItem, { id: "new", height: 60 }, { duration: 100 });
 
       const feedbackAtStart = createFeedback();
       expect(renderer.render(feedbackAtStart)).toBe(true);
@@ -149,16 +129,19 @@ describe("update animation", () => {
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
+      const itemA = { id: "a", height: 20 };
+      const itemB = { id: "b", height: 20 };
+      const itemC = { id: "c", height: 20 };
       const { list, renderer } = createRenderer(
         [
-          { id: "a", height: 20 },
+          itemA,
         ],
         draws,
       );
 
-      list.update(0, { id: "b", height: 20 }, { duration: 100 });
+      list.update(itemA, itemB, { duration: 100 });
       now.current = 50;
-      list.update(0, { id: "c", height: 20 }, { duration: 100 });
+      list.update(itemB, itemC, { duration: 100 });
 
       now.current = 75;
       renderer.render();
@@ -182,16 +165,17 @@ describe("update animation", () => {
     try {
       const draws: DrawProbe[] = [];
       const hits: string[] = [];
+      const animatedOld = { id: "animated-old", height: 30, hit: true };
       const { list, renderer } = createRenderer(
         [
-          { id: "animated-old", height: 30, hit: true },
+          animatedOld,
           { id: "neighbor", height: 30, hit: true },
         ],
         draws,
         hits,
       );
 
-      list.update(0, { id: "animated-new", height: 30, hit: true }, { duration: 100 });
+      list.update(animatedOld, { id: "animated-new", height: 30, hit: true }, { duration: 100 });
       now.current = 50;
 
       expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(false);
@@ -207,14 +191,15 @@ describe("update animation", () => {
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 20, innerAlpha: 0.4 };
       const { list, renderer } = createRenderer(
         [
-          { id: "old", height: 20, innerAlpha: 0.4 },
+          oldItem,
         ],
         draws,
       );
 
-      list.update(0, { id: "new", height: 20, innerAlpha: 0.25 }, { duration: 100 });
+      list.update(oldItem, { id: "new", height: 20, innerAlpha: 0.25 }, { duration: 100 });
       now.current = 50;
       renderer.render();
 
@@ -230,15 +215,16 @@ describe("update animation", () => {
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
+      const tailOld = { id: "tail-old", height: 20 };
       const { list, renderer } = createRenderer(
         [
           { id: "head", height: 20 },
-          { id: "tail-old", height: 20 },
+          tailOld,
         ],
         draws,
       );
 
-      list.update(1, { id: "tail-new", height: 20 }, { duration: 100 });
+      list.update(tailOld, { id: "tail-new", height: 20 }, { duration: 100 });
       list.unshift({ id: "prefix", height: 5 });
       list.push({ id: "suffix", height: 15 });
 

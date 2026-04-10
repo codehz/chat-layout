@@ -234,13 +234,12 @@ class ItemDetector extends Wrapper<C> {
   hittest(_ctx: Context<C>, test: HitTest): boolean {
     currentHover = this.item;
     if (test.type === "click") {
-      const index = list.items.indexOf(this.item);
-      if (index < 0) {
+      if (!list.items.includes(this.item)) {
         return true;
       }
       const nextItem = this.item.kind === "revoked" ? this.item.original : revokeMessage(this.item);
       currentHover = nextItem;
-      list.update(index, nextItem, {
+      list.update(this.item, nextItem, {
         duration: REPLACE_ANIMATION_DURATION,
       });
     }
@@ -636,8 +635,7 @@ button("revoke first", () => {
   if (item == null) {
     return;
   }
-  const index = list.items.indexOf(item);
-  list.update(index, revokeMessage(item), {
+  list.update(item, revokeMessage(item), {
     duration: REPLACE_ANIMATION_DURATION,
   });
 });
