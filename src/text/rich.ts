@@ -41,7 +41,11 @@ export interface RichFragmentLayout {
   font: string;
   color: DynValue<any, string> | undefined;
   gapBefore: number;
+  gapAtomCount: number;
+  gapSpaceCount: number;
   occupiedWidth: number;
+  atomCount: number;
+  spaceCount: number;
   shift: number;
 }
 
@@ -61,6 +65,12 @@ export interface RichMeasurement {
   width: number;
   lineCount: number;
 }
+
+type PendingRichGap = {
+  gapBefore: number;
+  gapAtomCount: number;
+  gapSpaceCount: number;
+};
 
 function measureRichBlockWidth(lines: ArrayLike<{ width: number }>): number {
   let width = 0;
@@ -108,35 +118,10 @@ function materializeRichFragments<C extends CanvasRenderingContext2D>(
   atoms: readonly InlineAtom[],
 ): RichFragmentLayout[] {
   const fragments: RichFragmentLayout[] = [];
-  let pendingGapBefore = 0;
+  let pendingGap: PendingRichGap = { gapBefore: 0, gapAtomCount: 0, gapSpaceCount: 0 };
 
   for (const atom of atoms) {
-    const occupiedWidth = atom.width + atom.extraWidthAfter;
-    if (atom.kind === "space" && !atom.preservesLineEnd && atom.atomicGroupId == null) {
-      pendingGapBefore += occupiedWidth;
-      continue;
-    }
-
-    const span = spans[atom.itemIndex];
-    const font = span?.font ?? atom.font;
-    const color = span?.color ?? defaultColor;
-    const previous = fragments[fragments.length - 1];
-    if (previous != null && previous.itemIndex === atom.itemIndex && previous.font === font && pendingGapBefore === 0) {
-      previous.text += atom.text;
-      previous.occupiedWidth += occupiedWidth;
-      continue;
-    }
-
-    fragments.push({
-      itemIndex: atom.itemIndex,
-      text: atom.text,
-      font,
-      color: color as DynValue<any, string>,
-      gapBefore: pendingGapBefore,
-      occupiedWidth,
-      shift: measureRichFragmentShift(ctx, font),
-    });
-    pendingGapBefore = 0;
+    pendingGap = appendRichFragment(ctx, spans, defaultColor, fragments, atom, pendingGap);
   }
 
   return fragments;
@@ -148,21 +133,28 @@ function appendRichFragment<C extends CanvasRenderingContext2D>(
   defaultColor: DynValue<C, string>,
   fragments: RichFragmentLayout[],
   atom: InlineAtom,
-  pendingGapBefore: number,
-): number {
+  pendingGap: PendingRichGap,
+): PendingRichGap {
   const occupiedWidth = atom.width + atom.extraWidthAfter;
   if (atom.kind === "space" && !atom.preservesLineEnd && atom.atomicGroupId == null) {
-    return pendingGapBefore + occupiedWidth;
+    return {
+      gapBefore: pendingGap.gapBefore + occupiedWidth,
+      gapAtomCount: pendingGap.gapAtomCount + 1,
+      gapSpaceCount: pendingGap.gapSpaceCount + 1,
+    };
   }
 
   const span = spans[atom.itemIndex];
   const font = span?.font ?? atom.font;
   const color = span?.color ?? defaultColor;
   const previous = fragments[fragments.length - 1];
-  if (previous != null && previous.itemIndex === atom.itemIndex && previous.font === font && pendingGapBefore === 0) {
+  const spaceCount = atom.kind === "space" ? 1 : 0;
+  if (previous != null && previous.itemIndex === atom.itemIndex && previous.font === font && pendingGap.gapBefore === 0) {
     previous.text += atom.text;
     previous.occupiedWidth += occupiedWidth;
-    return 0;
+    previous.atomCount += 1;
+    previous.spaceCount += spaceCount;
+    return { gapBefore: 0, gapAtomCount: 0, gapSpaceCount: 0 };
   }
 
   fragments.push({
@@ -170,11 +162,15 @@ function appendRichFragment<C extends CanvasRenderingContext2D>(
     text: atom.text,
     font,
     color: color as DynValue<any, string>,
-    gapBefore: pendingGapBefore,
+    gapBefore: pendingGap.gapBefore,
+    gapAtomCount: pendingGap.gapAtomCount,
+    gapSpaceCount: pendingGap.gapSpaceCount,
     occupiedWidth,
+    atomCount: 1,
+    spaceCount,
     shift: measureRichFragmentShift(ctx, font),
   });
-  return 0;
+  return { gapBefore: 0, gapAtomCount: 0, gapSpaceCount: 0 };
 }
 
 function materializeRichFragmentsInRange<C extends CanvasRenderingContext2D>(
@@ -186,9 +182,9 @@ function materializeRichFragmentsInRange<C extends CanvasRenderingContext2D>(
   end: PreparedInlineLineRange["end"],
 ): RichFragmentLayout[] {
   const fragments: RichFragmentLayout[] = [];
-  let pendingGapBefore = 0;
+  let pendingGap: PendingRichGap = { gapBefore: 0, gapAtomCount: 0, gapSpaceCount: 0 };
   forEachAtomInRange(prepared, start, end, (atom) => {
-    pendingGapBefore = appendRichFragment(ctx, spans, defaultColor, fragments, atom, pendingGapBefore);
+    pendingGap = appendRichFragment(ctx, spans, defaultColor, fragments, atom, pendingGap);
   });
   return fragments;
 }
@@ -253,7 +249,11 @@ function createRichEllipsisFragment<C extends CanvasRenderingContext2D>(
     font,
     color,
     gapBefore: 0,
+    gapAtomCount: 0,
+    gapSpaceCount: 0,
     occupiedWidth: measureEllipsisWidth(ctx),
+    atomCount: 1,
+    spaceCount: 0,
     shift: measureFontShift(ctx),
   }));
 }
@@ -375,13 +375,13 @@ function layoutRichEndEllipsisFromCursor<C extends CanvasRenderingContext2D>(
 
   const fragments: RichFragmentLayout[] = [];
   let atomIndex = 0;
-  let pendingGapBefore = 0;
+  let pendingGap: PendingRichGap = { gapBefore: 0, gapAtomCount: 0, gapSpaceCount: 0 };
   let lastVisibleAtom: InlineAtom | undefined;
   let lastAtom: InlineAtom | undefined;
   forEachAtomFromCursorToEnd(prepared, start, (atom) => {
     lastAtom = atom;
     if (atomIndex < prefixCount) {
-      pendingGapBefore = appendRichFragment(ctx, spans, defaultColor, fragments, atom, pendingGapBefore);
+      pendingGap = appendRichFragment(ctx, spans, defaultColor, fragments, atom, pendingGap);
       lastVisibleAtom = atom;
     }
     atomIndex += 1;

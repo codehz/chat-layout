@@ -26,7 +26,6 @@ import {
   computeJustifySpacing,
   isJustifySupported,
   resolveJustifyMode,
-  shouldJustifyLine,
 } from "../text";
 import { readPreparedText } from "../text/plain-core";
 import { readPreparedInlineLayout, createRichSourceItems, getRichPreparedKey, walkPreparedLineRanges } from "../text/inline-engine";
@@ -68,14 +67,6 @@ function normalizeTextMaxWidth(maxWidth: number | undefined): number | undefined
     return undefined;
   }
   return Math.max(0, maxWidth);
-}
-
-function countSpaceChars(text: string): number {
-  let count = 0;
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 0x20) count++;
-  }
-  return count;
 }
 
 const DEFAULT_TEXT_SPACING = {
@@ -493,25 +484,14 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
 
           if (wantJustify) {
             const info = analyzeLineForJustify(prepared, lineRange);
-            if (shouldJustifyLine(lineRange.width, maxWidth, info, mode, threshold)) {
-              const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode);
-              const extraSpace = maxWidth - lineRange.width;
-              const perGapSpacing = mode === "inter-word"
-                ? (info.wordGapCount > 0 ? extraSpace / info.wordGapCount : 0)
-                : (info.charCount > 0 ? extraSpace / info.charCount : 0);
-
+            const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode, threshold);
+            if (spacing != null) {
               let cursorX = x;
               for (let fi = 0; fi < line.fragments.length; fi++) {
                 const frag = line.fragments[fi]!;
-                if (mode === "inter-word") {
-                  // gapBefore is from space atoms; each non-zero gapBefore typically has 1 space
-                  // but count actual space chars for correctness
-                  const gapSpaces = frag.gapBefore > 0 ? 1 : 0;
-                  cursorX += frag.gapBefore + gapSpaces * perGapSpacing;
-                } else {
-                  // inter-character: gapBefore also gets letterSpacing per char
-                  cursorX += frag.gapBefore + (frag.gapBefore > 0 ? perGapSpacing : 0);
-                }
+                cursorX += frag.gapBefore
+                  + frag.gapAtomCount * spacing.letterSpacingPx
+                  + frag.gapSpaceCount * spacing.wordSpacingPx;
                 ctx.with((g) => {
                   g.font = frag.font;
                   g.fillStyle = ctx.resolveDynValue((frag.color ?? this.options.color) as typeof this.options.color);
@@ -520,13 +500,9 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
                     g.fillText(frag.text, cursorX, y + (this.options.lineHeight + frag.shift) / 2);
                   });
                 });
-                // Advance cursor: original width + extra spacing for spaces/chars in fragment text
-                if (mode === "inter-word") {
-                  cursorX += frag.occupiedWidth + countSpaceChars(frag.text) * perGapSpacing;
-                } else {
-                  // letterSpacing applies after every char including last
-                  cursorX += frag.occupiedWidth + frag.text.length * perGapSpacing;
-                }
+                cursorX += frag.occupiedWidth
+                  + frag.atomCount * spacing.letterSpacingPx
+                  + frag.spaceCount * spacing.wordSpacingPx;
               }
               y += this.options.lineHeight;
               lineIndex++;
@@ -616,8 +592,8 @@ export class MultilineText<C extends CanvasRenderingContext2D> implements Node<C
 
           if (wantJustify) {
             const info = analyzeLineForJustify(prepared, lineRange);
-            if (shouldJustifyLine(lineRange.width, maxWidth, info, mode, threshold)) {
-              const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode);
+            const spacing = computeJustifySpacing(lineRange.width, maxWidth, info, mode, threshold);
+            if (spacing != null) {
               withTextSpacing(g, spacing, () => {
                 g.textAlign = "left";
                 g.fillText(layout.text, x, y + (this.options.lineHeight + layout.shift) / 2);

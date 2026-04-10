@@ -121,6 +121,8 @@ export interface InlineSpan<C extends CanvasRenderingContext2D> {
 
 /**
  * Two-end justification mode for multi-line text.
+ * `"inter-word"` expands only collapsible spaces.
+ * `"inter-character"` is script-aware and may combine `wordSpacing` with `letterSpacing`.
  */
 export type TextJustifyMode = "inter-word" | "inter-character";
 
@@ -131,6 +133,7 @@ export interface TextJustifyOptions {
   /**
    * Enable two-end justification. Default: false.
    * `true` uses "inter-word" mode.
+   * `"inter-character"` may combine `wordSpacing` and `letterSpacing` internally.
    */
   justify?: boolean | TextJustifyMode;
 
