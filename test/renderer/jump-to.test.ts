@@ -938,6 +938,308 @@ describe("jumpTo", () => {
     }
   });
 
+  test("pushAll keeps auto-following after a settled boundary follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(heights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      renderer.render();
+
+      list.pushAll([30], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      list.pushAll([20], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedHeights = [...heights, 30, 20];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("unshiftAll keeps auto-following after a settled boundary follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      renderer.render();
+
+      list.unshiftAll([30], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      list.unshiftAll([20], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedHeights = [20, 30, ...heights];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("manual scroll resets the settled auto-follow latch", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(heights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      renderer.render();
+
+      list.pushAll([30], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      list.applyScroll(-10);
+      const expectedPosition = list.position;
+      const expectedOffset = list.offset;
+
+      list.pushAll([20], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedList = new ListState<number>();
+      expectedList.pushAll([...heights, 30, 20]);
+      expectedList.position = expectedPosition;
+      expectedList.offset = expectedOffset;
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("manual scroll before a new frame resets the settled unshift auto-follow latch", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      renderer.render();
+
+      list.unshiftAll([30], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      list.applyScroll(-10);
+      renderer.render();
+      const expectedPosition = list.position;
+      const expectedOffset = list.offset;
+
+      list.unshiftAll([20], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedList = new ListState<number>();
+      expectedList.pushAll([20, 30, ...heights]);
+      expectedList.position =
+        expectedPosition == null ? undefined : expectedPosition + 1;
+      expectedList.offset = expectedOffset;
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("jumpTo resets the settled auto-follow latch", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(heights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      renderer.render();
+
+      list.pushAll([30], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      renderer.jumpTo(1, {
+        animated: false,
+      });
+      renderer.render();
+
+      list.pushAll([20], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedList = new ListState<number>();
+      expectedList.pushAll([...heights, 30, 20]);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(1, {
+        animated: false,
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("manual scroll cancels an in-flight auto-follow jump", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
