@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { ListAnchorMode, ListRenderer, ListState } from "../../src/renderer";
+import {
+  ListRenderer,
+  ListState,
+  type ListUnderflowAlign,
+} from "../../src/renderer";
+import type { ListAnchorMode } from "../../src/renderer";
 import type {
   Box,
   Context,
@@ -24,6 +29,7 @@ function createRenderer<T extends {}>(
   viewportHeight: number,
   options: {
     anchorMode: ListAnchorMode;
+    underflowAlign?: ListUnderflowAlign;
     list: ListState<T>;
     renderItem: (item: T) => Node<C>;
   },
@@ -82,6 +88,30 @@ describe("virtualized visible window", () => {
     expect(renderer.hittest({ x: 16, y: 10, type: "click" })).toBe(true);
     expect(hits.at(-1)).toEqual({ x: 16, y: 10 });
     expect(renderer.hittest({ x: 16, y: 40, type: "click" })).toBe(false);
+  });
+
+  test("bottom underflow alignment places short-list hittest at the rendered bottom edge", () => {
+    const hits: ProbeHit[] = [];
+    const list = new ListState<number>();
+    list.push(20);
+    const node = createHitNode(20, hits);
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      underflowAlign: "bottom",
+      list,
+      renderItem: () => node,
+    });
+
+    expect(renderer.hittest({ x: 12, y: 10, type: "click" })).toBe(false);
+    expect(renderer.hittest({ x: 12, y: 90, type: "click" })).toBe(true);
+    expect(hits).toEqual([{ x: 12, y: 10 }]);
+
+    renderer.render();
+    expect(list.position).toBe(0);
+    expect(list.offset).toBe(0);
+    expect(renderer.hittest({ x: 12, y: 10, type: "click" })).toBe(false);
+    expect(renderer.hittest({ x: 12, y: 90, type: "click" })).toBe(true);
+    expect(hits.at(-1)).toEqual({ x: 12, y: 10 });
   });
 
   test("top-anchor render and hittest inspect the same visible window", () => {

@@ -107,6 +107,64 @@ describe("virtualized solvers", () => {
         resolveListLayoutOptions({ anchorMode: "top" }),
       ),
     );
+    expect(
+      resolveVisibleWindow(
+        items,
+        state,
+        45,
+        resolveItem,
+        resolveListLayoutOptions({ underflowAlign: "top" }),
+      ),
+    ).toEqual(
+      resolveVisibleWindow(
+        items,
+        state,
+        45,
+        resolveItem,
+        resolveListLayoutOptions(),
+      ),
+    );
+  });
+
+  test("core solver aligns short lists to the bottom when requested", () => {
+    const items = [20, 30];
+    const state = { position: undefined, offset: 0 };
+    const resolveItem = (height: number) => ({
+      value: height,
+      height,
+    });
+
+    const topAnchored = resolveVisibleWindow(
+      items,
+      state,
+      100,
+      resolveItem,
+      resolveListLayoutOptions({
+        anchorMode: "top",
+        underflowAlign: "bottom",
+      }),
+    );
+    expect(topAnchored.normalizedState).toEqual({ position: 0, offset: 0 });
+    expect(topAnchored.window.shift).toBe(50);
+    expect(topAnchored.window.drawList.map(({ offset }) => offset)).toEqual([
+      0, 20,
+    ]);
+
+    const bottomAnchored = resolveVisibleWindow(
+      items,
+      state,
+      100,
+      resolveItem,
+      resolveListLayoutOptions({
+        anchorMode: "bottom",
+        underflowAlign: "bottom",
+      }),
+    );
+    expect(bottomAnchored.normalizedState).toEqual({ position: 1, offset: 0 });
+    expect(bottomAnchored.window.shift).toBe(0);
+    expect(bottomAnchored.window.drawList.map(({ offset }) => offset)).toEqual([
+      70, 50,
+    ]);
   });
 
   test("core solver backfills the viewport in both anchor modes", () => {

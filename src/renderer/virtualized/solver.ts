@@ -1,6 +1,6 @@
 export type ListAnchorMode = "top" | "bottom";
 
-export type ListUnderflowAlign = "top";
+export type ListUnderflowAlign = "top" | "bottom";
 
 export interface ListLayoutOptions {
   anchorMode?: ListAnchorMode;
@@ -167,10 +167,13 @@ export function resolveVisibleWindow<T, V>(
       }
     }
 
-    return {
-      normalizedState: { position, offset },
-      window: { drawList, shift },
-    };
+    return finalizeVisibleWindowResult(
+      items.length,
+      viewportHeight,
+      layout,
+      { position, offset },
+      { drawList, shift },
+    );
   }
 
   let { position, offset } = normalizedState;
@@ -228,8 +231,63 @@ export function resolveVisibleWindow<T, V>(
     }
   }
 
+  return finalizeVisibleWindowResult(
+    items.length,
+    viewportHeight,
+    layout,
+    { position, offset },
+    { drawList, shift },
+  );
+}
+
+function finalizeVisibleWindowResult<T>(
+  itemCount: number,
+  viewportHeight: number,
+  layout: ResolvedListLayoutOptions,
+  normalizedState: NormalizedListState,
+  window: VisibleWindow<T>,
+): VisibleWindowResult<T> {
+  if (window.drawList.length !== itemCount || itemCount <= 0) {
+    return {
+      normalizedState,
+      window,
+    };
+  }
+
+  let minIndex = Number.POSITIVE_INFINITY;
+  let maxIndex = Number.NEGATIVE_INFINITY;
+  let minOffset = Number.POSITIVE_INFINITY;
+  let maxBottom = Number.NEGATIVE_INFINITY;
+  for (const entry of window.drawList) {
+    minIndex = Math.min(minIndex, entry.idx);
+    maxIndex = Math.max(maxIndex, entry.idx);
+    minOffset = Math.min(minOffset, entry.offset);
+    maxBottom = Math.max(maxBottom, entry.offset + entry.height);
+  }
+
+  const contentHeight = maxBottom - minOffset;
+  if (
+    minIndex !== 0 ||
+    maxIndex !== itemCount - 1 ||
+    !(contentHeight < viewportHeight - Number.EPSILON)
+  ) {
+    return {
+      normalizedState,
+      window,
+    };
+  }
+
+  const desiredTop =
+    layout.underflowAlign === "bottom" ? viewportHeight - contentHeight : 0;
+  const canonicalState =
+    layout.anchorMode === "top"
+      ? { position: 0, offset: 0 }
+      : { position: itemCount - 1, offset: 0 };
   return {
-    normalizedState: { position, offset },
-    window: { drawList, shift },
+    normalizedState: canonicalState,
+    window: {
+      drawList: window.drawList,
+      shift: desiredTop - minOffset,
+    },
   };
 }

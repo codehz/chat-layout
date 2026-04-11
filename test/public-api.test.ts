@@ -5,8 +5,10 @@ import type {
   Context,
   DeleteListItemAnimationOptions,
   FlexItemOptions,
+  InsertListItemsAnimationOptions,
   MultilineTextOptions,
   Node,
+  PushListItemsAnimationOptions,
   TextEllipsisPosition,
   TextJustifyMode,
   TextJustifyOptions,
@@ -14,6 +16,7 @@ import type {
   TextOverflowMode,
   TextOverflowWrapMode,
   TextWhiteSpaceMode,
+  UnshiftListItemsAnimationOptions,
   UpdateListItemAnimationOptions,
 } from "../src/index";
 
@@ -82,6 +85,19 @@ const updateAnimationOptionsTypecheck: UpdateListItemAnimationOptions = {
 const deleteAnimationOptionsTypecheck: DeleteListItemAnimationOptions = {
   duration: 180,
 };
+const insertAnimationOptionsTypecheck: InsertListItemsAnimationOptions = {
+  duration: 180,
+  distance: 24,
+};
+const unshiftAnimationOptionsTypecheck: UnshiftListItemsAnimationOptions = {
+  duration: 180,
+  distance: 12,
+};
+const invalidPushAnimationOptionsTypecheck:
+  | PushListItemsAnimationOptions
+  | undefined =
+  // @ts-expect-error fade was removed from insert animations
+  { duration: 180, fade: false };
 
 void flexItemOptionsTypecheck;
 void nodeWithMinContentTypecheck;
@@ -95,6 +111,9 @@ void justifyModeTypecheck;
 void justifyOptionsTypecheck;
 void updateAnimationOptionsTypecheck;
 void deleteAnimationOptionsTypecheck;
+void insertAnimationOptionsTypecheck;
+void unshiftAnimationOptionsTypecheck;
+void invalidPushAnimationOptionsTypecheck;
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {

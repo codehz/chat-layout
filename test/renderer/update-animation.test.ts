@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { ListRenderer, ListState, memoRenderItem } from "../../src/renderer";
+import {
+  ListRenderer,
+  ListState,
+  memoRenderItem,
+  type ListUnderflowAlign,
+} from "../../src/renderer";
 import type { Box, Context, HitTest, Node } from "../../src/types";
 import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
 import {
@@ -55,6 +60,7 @@ function createTopRenderer(
   draws: DrawProbe[],
   hits: string[] = [],
   viewportHeight = 120,
+  underflowAlign: ListUnderflowAlign = "top",
 ): { list: ListState<Item>; renderer: ListRenderer<C, Item> } {
   const list = new ListState<Item>(items);
   const renderItem = memoRenderItem<C, Item>((item) =>
@@ -62,6 +68,7 @@ function createTopRenderer(
   );
   const renderer = new ListRenderer(createGraphics(viewportHeight), {
     anchorMode: "top",
+    underflowAlign,
     list,
     renderItem,
   });
@@ -73,6 +80,7 @@ function createBottomRenderer(
   draws: DrawProbe[],
   hits: string[] = [],
   viewportHeight = 120,
+  underflowAlign: ListUnderflowAlign = "top",
 ): { list: ListState<Item>; renderer: ListRenderer<C, Item> } {
   const list = new ListState<Item>(items);
   const renderItem = memoRenderItem<C, Item>((item) =>
@@ -80,6 +88,7 @@ function createBottomRenderer(
   );
   const renderer = new ListRenderer(createGraphics(viewportHeight), {
     anchorMode: "bottom",
+    underflowAlign,
     list,
     renderItem,
   });
@@ -455,7 +464,7 @@ describe("update animation", () => {
     }
   });
 
-  test("top-anchor animates unshiftAll on short lists as a whole-window slide", () => {
+  test("top-anchor unshiftAll keeps whole-window slide semantics even when distance is provided", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -473,6 +482,7 @@ describe("update animation", () => {
       draws.length = 0;
       list.unshiftAll([{ id: "new", height: 10 }], {
         duration: 100,
+        distance: 24,
       });
 
       expect(renderer.render()).toBe(true);
@@ -590,7 +600,7 @@ describe("update animation", () => {
     }
   });
 
-  test("bottom-anchor animates unshiftAll on short lists as a whole-window slide", () => {
+  test("bottom-underflow unshiftAll animates inserted items from above while keeping existing content pinned", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -601,6 +611,9 @@ describe("update animation", () => {
           { id: "tail", height: 20 },
         ],
         draws,
+        [],
+        120,
+        "bottom",
       );
 
       renderer.render();
@@ -608,32 +621,35 @@ describe("update animation", () => {
       draws.length = 0;
       list.unshiftAll([{ id: "new", height: 10 }], {
         duration: 100,
+        distance: 24,
       });
 
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-10);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
 
       now.current = 50;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-5);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(5);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(25);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(58);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
 
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(70);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
     } finally {
       restoreNow();
     }
   });
 
-  test("bottom-anchor keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
+  test("bottom-underflow unshiftAll still keeps existing content pinned when the insert exceeds the available top gap", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -646,6 +662,7 @@ describe("update animation", () => {
         draws,
         [],
         100,
+        "bottom",
       );
 
       renderer.render();
@@ -656,21 +673,23 @@ describe("update animation", () => {
       });
 
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-50);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
 
       now.current = 50;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-40);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-42);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
 
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
       expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-30);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
       expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
     } finally {
@@ -678,7 +697,7 @@ describe("update animation", () => {
     }
   });
 
-  test("bottom-anchor animates pushAll on short lists with the default duration", () => {
+  test("bottom-underflow pushAll ignores distance and hard-cuts to the final layout", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -689,6 +708,9 @@ describe("update animation", () => {
           { id: "tail", height: 20 },
         ],
         draws,
+        [],
+        120,
+        "bottom",
       );
 
       renderer.render();
@@ -698,19 +720,10 @@ describe("update animation", () => {
         distance: 24,
       });
 
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
-
-      now.current = 110;
-      draws.length = 0;
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(52);
-      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
-
-      now.current = 220;
-      draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(50);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(70);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(90);
       expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
     } finally {
       restoreNow();

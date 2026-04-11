@@ -2,6 +2,7 @@ export { BaseRenderer, DebugRenderer } from "./base";
 export { ListState } from "./list-state";
 export type {
   DeleteListItemAnimationOptions,
+  InsertListItemsAnimationOptions,
   PushListItemsAnimationOptions,
   UnshiftListItemsAnimationOptions,
   UpdateListItemAnimationOptions,

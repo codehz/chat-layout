@@ -17,19 +17,16 @@ export interface DeleteListItemAnimationOptions {
   duration?: number;
 }
 
-export interface PushListItemsAnimationOptions {
+export interface InsertListItemsAnimationOptions {
   /** Animation duration in milliseconds. */
   duration?: number;
   /** Enter offset in pixels measured from the final resting position. */
   distance?: number;
-  /** Whether the inserted items should fade in. Defaults to `true`. */
-  fade?: boolean;
 }
 
-export interface UnshiftListItemsAnimationOptions {
-  /** Animation duration in milliseconds. */
-  duration?: number;
-}
+export type PushListItemsAnimationOptions = InsertListItemsAnimationOptions;
+
+export type UnshiftListItemsAnimationOptions = InsertListItemsAnimationOptions;
 
 type ListUpdateChange<T extends {}> = {
   type: "update";
@@ -221,9 +218,9 @@ function normalizeInsertAnimationDuration(
   return resolvedDuration;
 }
 
-function normalizePushAnimation(
-  animation: PushListItemsAnimationOptions | undefined,
-): PushListItemsAnimationOptions | undefined {
+function normalizeInsertAnimation(
+  animation: InsertListItemsAnimationOptions | undefined,
+): InsertListItemsAnimationOptions | undefined {
   const duration = normalizeInsertAnimationDuration(
     animation?.duration,
     animation != null,
@@ -232,10 +229,7 @@ function normalizePushAnimation(
     return undefined;
   }
 
-  const normalizedAnimation: PushListItemsAnimationOptions = {
-    duration,
-    fade: animation?.fade ?? true,
-  };
+  const normalizedAnimation: InsertListItemsAnimationOptions = { duration };
   if (
     typeof animation?.distance === "number" &&
     Number.isFinite(animation.distance)
@@ -243,19 +237,6 @@ function normalizePushAnimation(
     normalizedAnimation.distance = Math.max(0, animation.distance);
   }
   return normalizedAnimation;
-}
-
-function normalizeUnshiftAnimation(
-  animation: UnshiftListItemsAnimationOptions | undefined,
-): UnshiftListItemsAnimationOptions | undefined {
-  const duration = normalizeInsertAnimationDuration(
-    animation?.duration,
-    animation != null,
-  );
-  if (duration == null) {
-    return undefined;
-  }
-  return { duration };
 }
 
 export class ListState<T extends {}> {
@@ -301,7 +282,7 @@ export class ListState<T extends {}> {
       return;
     }
     assertUniqueItemReferences(items, this.#items);
-    const normalizedAnimation = normalizeUnshiftAnimation(animation);
+    const normalizedAnimation = normalizeInsertAnimation(animation);
     if (this.position != null) {
       this.position += items.length;
     }
@@ -324,7 +305,7 @@ export class ListState<T extends {}> {
       return;
     }
     assertUniqueItemReferences(items, this.#items);
-    const normalizedAnimation = normalizePushAnimation(animation);
+    const normalizedAnimation = normalizeInsertAnimation(animation);
     this.#items.push(...items);
     emitListStateChange(this, {
       type: "push",

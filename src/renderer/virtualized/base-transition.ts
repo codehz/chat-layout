@@ -88,7 +88,8 @@ export class TransitionController<
   #hasVisibilitySnapshot = false;
   #visibilitySnapshotState: ControlledState | undefined;
   #visibilitySnapshotCoversShortList = false;
-  #visibilitySnapshotTrailingGap = 0;
+  #visibilitySnapshotTopGap = 0;
+  #visibilitySnapshotBottomGap = 0;
 
   captureVisibilitySnapshot(
     window: VisibleWindow<unknown>,
@@ -131,6 +132,7 @@ export class TransitionController<
     this.#visibleItems = nextVisibleItems;
     this.#hasVisibilitySnapshot = true;
     this.#visibilitySnapshotState = snapshotState;
+    const contentHeight = bottomMostY - topMostY;
     this.#visibilitySnapshotCoversShortList =
       window.drawList.length > 0 &&
       items.length > 0 &&
@@ -138,11 +140,14 @@ export class TransitionController<
       minVisibleIndex === 0 &&
       maxVisibleIndex === items.length - 1 &&
       topMostY >= -Number.EPSILON &&
-      bottomMostY < viewportHeight - Number.EPSILON;
-    this.#visibilitySnapshotTrailingGap =
-      this.#visibilitySnapshotCoversShortList && layout.underflowAlign === "top"
-        ? Math.max(0, viewportHeight - bottomMostY)
-        : 0;
+      bottomMostY <= viewportHeight + Number.EPSILON &&
+      contentHeight < viewportHeight - Number.EPSILON;
+    this.#visibilitySnapshotTopGap = this.#visibilitySnapshotCoversShortList
+      ? Math.max(0, topMostY)
+      : 0;
+    this.#visibilitySnapshotBottomGap = this.#visibilitySnapshotCoversShortList
+      ? Math.max(0, viewportHeight - bottomMostY)
+      : 0;
   }
 
   /**
@@ -298,14 +303,18 @@ export class TransitionController<
         this.#activeTransitionItems.delete(change.item);
         break;
       case "unshift":
-        this.handleUnshift(change.count, change.animation?.duration, ctx);
+        this.handleUnshift(
+          change.count,
+          change.animation?.duration,
+          change.animation?.distance,
+          ctx,
+        );
         break;
       case "push":
         this.handlePush(
           change.count,
           change.animation?.duration,
           change.animation?.distance,
-          change.animation?.fade ?? true,
           ctx,
         );
         break;
@@ -443,7 +452,6 @@ export class TransitionController<
     count: number,
     duration: number | undefined,
     distance: number | undefined,
-    fade: boolean,
     ctx: TransitionContext<C, T>,
   ): void {
     if (
@@ -451,6 +459,10 @@ export class TransitionController<
       !(typeof duration === "number" && duration > 0) ||
       !this.#canAnimateInsert("push", count, ctx)
     ) {
+      return;
+    }
+
+    if (ctx.layout.underflowAlign !== "top") {
       return;
     }
 
@@ -476,7 +488,7 @@ export class TransitionController<
         fromLayer: undefined,
         toLayer: this.#createLayer(
           node,
-          fade ? 0 : 1,
+          0,
           1,
           now,
           duration,
@@ -495,6 +507,7 @@ export class TransitionController<
   handleUnshift(
     count: number,
     duration: number | undefined,
+    distance: number | undefined,
     ctx: TransitionContext<C, T>,
   ): void {
     if (
@@ -502,6 +515,45 @@ export class TransitionController<
       !(typeof duration === "number" && duration > 0) ||
       !this.#canAnimateInsert("unshift", count, ctx)
     ) {
+      return;
+    }
+
+    if (ctx.layout.underflowAlign === "bottom") {
+      const now = getNow();
+      for (
+        let index = 0;
+        index < Math.min(count, ctx.items.length);
+        index += 1
+      ) {
+        const item = ctx.items[index];
+        if (item == null) {
+          continue;
+        }
+        const node = ctx.renderItem(item);
+        const itemHeight = ctx.measureNode(node).height;
+        const resolvedDistance =
+          typeof distance === "number" && Number.isFinite(distance)
+            ? Math.max(0, distance)
+            : Math.min(24, itemHeight);
+        this.#itemTransitions.set(item, {
+          kind: "insert",
+          fromLayer: undefined,
+          toLayer: this.#createLayer(
+            node,
+            0,
+            1,
+            now,
+            duration,
+            -resolvedDistance,
+            0,
+          ),
+          fromHeight: itemHeight,
+          toHeight: itemHeight,
+          startTime: now,
+          duration,
+        });
+        this.#activeTransitionItems.add(item);
+      }
       return;
     }
 
@@ -518,10 +570,7 @@ export class TransitionController<
     if (!(insertedHeight > 0) || !Number.isFinite(insertedHeight)) {
       return;
     }
-    const travel = Math.min(
-      insertedHeight,
-      this.#visibilitySnapshotTrailingGap,
-    );
+    const travel = Math.min(insertedHeight, this.#visibilitySnapshotBottomGap);
     if (!(travel > 0) || !Number.isFinite(travel)) {
       return;
     }
@@ -543,7 +592,8 @@ export class TransitionController<
     this.#hasVisibilitySnapshot = false;
     this.#visibilitySnapshotState = undefined;
     this.#visibilitySnapshotCoversShortList = false;
-    this.#visibilitySnapshotTrailingGap = 0;
+    this.#visibilitySnapshotTopGap = 0;
+    this.#visibilitySnapshotBottomGap = 0;
   }
 
   #createLayer(

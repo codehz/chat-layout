@@ -190,7 +190,10 @@ describe("ListState item identity", () => {
       duration: 180,
       distance: -5,
     });
-    list.unshiftAll([{ id: "head" }], {});
+    list.unshiftAll([{ id: "head" }], {
+      duration: 180,
+      distance: -5,
+    });
 
     expect(changes).toEqual([
       {
@@ -199,14 +202,14 @@ describe("ListState item identity", () => {
         animation: {
           duration: 180,
           distance: 0,
-          fade: true,
         },
       },
       {
         type: "unshift",
         count: 1,
         animation: {
-          duration: 220,
+          duration: 180,
+          distance: 0,
         },
       },
     ]);
@@ -224,7 +227,6 @@ describe("ListState item identity", () => {
     list.pushAll([{ id: "tail" }], {
       duration: 0,
       distance: 12,
-      fade: false,
     });
     list.unshiftAll([{ id: "head" }], { duration: -1 });
 

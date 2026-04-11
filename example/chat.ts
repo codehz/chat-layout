@@ -501,6 +501,7 @@ const list = new ListState<ChatItem>([
 ]);
 const renderer = new ListRenderer(ctx, {
   anchorMode: "bottom",
+  underflowAlign: "top",
   renderItem,
   list,
 });

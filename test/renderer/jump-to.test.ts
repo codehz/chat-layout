@@ -1,11 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  ListAnchorMode,
-  ListRenderer,
-  ListState,
-  memoRenderItem,
-} from "../../src/renderer";
+import { ListRenderer, ListState, memoRenderItem } from "../../src/renderer";
+import type { ListAnchorMode } from "../../src/renderer";
 import type {
   Box,
   Context,
