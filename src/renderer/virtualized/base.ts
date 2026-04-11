@@ -174,6 +174,10 @@ export abstract class VirtualizedRenderer<
     };
   }
 
+  protected _resolveVisibleWindow(now: number) {
+    return this._resolveVisibleWindowForState(this._readListState(), now);
+  }
+
   protected _commitListState(state: NormalizedListState): void {
     this.position = state.position;
     this.offset = state.offset;
@@ -491,7 +495,8 @@ export abstract class VirtualizedRenderer<
     state: VisibleListState,
   ): NormalizedListState;
   protected abstract _getLayoutOptions(): ResolvedListLayoutOptions;
-  protected abstract _resolveVisibleWindow(
+  protected abstract _resolveVisibleWindowForState(
+    state: VisibleListState,
     now: number,
   ): VisibleWindowResult<VirtualizedResolvedItem>;
   protected abstract _readAnchor(state: NormalizedListState): number;
@@ -524,6 +529,10 @@ export abstract class VirtualizedRenderer<
       drawNode: this.drawRootNode.bind(this),
       getRootContext: this.getRootContext.bind(this),
       graphics: this.graphics,
+      getItemIndex: (item) => this.items.indexOf(item),
+      readListState: this._readListState.bind(this),
+      resolveVisibleWindowForState: (state, now) =>
+        this._resolveVisibleWindowForState(state, now),
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
     };
   }
@@ -538,6 +547,8 @@ export abstract class VirtualizedRenderer<
       readListState: this._readListState.bind(this),
       readVisibleRange: this._readVisibleRange.bind(this),
       resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),
+      resolveVisibleWindowForState: (state, now) =>
+        this._resolveVisibleWindowForState(state, now),
     };
   }
 

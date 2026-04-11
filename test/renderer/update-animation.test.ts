@@ -955,6 +955,155 @@ describe("delete animation", () => {
     }
   });
 
+  test("top-anchor bottom-underflow keeps a deleted leading item pinned in viewport space", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const head = { id: "head", height: 40 };
+      const { list, renderer } = createTopRenderer(
+        [head, { id: "tail", height: 40 }],
+        draws,
+        [],
+        100,
+        "bottom",
+      );
+
+      renderer.render();
+      draws.length = 0;
+      list.delete(head, { duration: 100 });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(60);
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "head")?.alpha).toBeCloseTo(0.5);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(60);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["tail"]);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(60);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top-anchor bottom-underflow keeps a deleted trailing item pinned while neighbors reflow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const tail = { id: "tail", height: 40 };
+      const { list, renderer } = createTopRenderer(
+        [{ id: "head", height: 40 }, tail],
+        draws,
+        [],
+        100,
+        "bottom",
+      );
+
+      renderer.render();
+      draws.length = 0;
+      list.delete(tail, { duration: 100 });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(60);
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(60);
+      expect(draws.find((draw) => draw.id === "tail")?.alpha).toBeCloseTo(0.5);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["head"]);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(60);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("delete ghosts still follow explicit scrolling outside underflow relayout", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const head = { id: "head", height: 50 };
+      const { list, renderer } = createTopRenderer(
+        [head, { id: "middle", height: 50 }, { id: "tail", height: 50 }],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.render();
+      list.delete(head, { duration: 100 });
+      now.current = 50;
+
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(25);
+
+      list.applyScroll(-10);
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-10);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(15);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("bottom-anchor top-underflow delete behavior stays stable", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const head = { id: "head", height: 40 };
+      const { list, renderer } = createBottomRenderer(
+        [head, { id: "tail", height: 40 }],
+        draws,
+        [],
+        100,
+        "top",
+      );
+
+      renderer.render();
+      draws.length = 0;
+      list.delete(head, { duration: 100 });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "head")?.alpha).toBeCloseTo(0.5);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["tail"]);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(0);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("delete animation disables hittest on the ghost slot", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);

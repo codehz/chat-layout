@@ -30,6 +30,12 @@ export type TransitionRendererAdapter<
   drawNode: (node: Node<C>, x: number, y: number) => boolean;
   getRootContext: () => Context<C>;
   graphics: C;
+  getItemIndex: (item: T) => number;
+  readListState: () => ControlledState;
+  resolveVisibleWindowForState: (
+    state: ControlledState,
+    now: number,
+  ) => VisibleWindowResult<unknown>;
   onDeleteComplete: (item: T) => void;
 };
 
@@ -68,6 +74,10 @@ export type TransitionContext<
     height: number,
   ) => { top: number; bottom: number } | undefined;
   resolveVisibleWindow: () => VisibleWindowResult<unknown>;
+  resolveVisibleWindowForState: (
+    state: ControlledState,
+    now: number,
+  ) => VisibleWindowResult<unknown>;
 } & TransitionRendererAdapter<C, T>;
 
 /**
@@ -275,7 +285,16 @@ export class TransitionController<
 
     return {
       value: {
-        draw: (y) => this.#drawTransitionLayers(layers, slotHeight, y, adapter),
+        draw: (y) =>
+          this.#drawTransitionLayers(
+            item,
+            transition,
+            layers,
+            slotHeight,
+            y,
+            now,
+            adapter,
+          ),
         hittest: () => false,
       },
       height: slotHeight,
@@ -415,6 +434,13 @@ export class TransitionController<
     }
 
     const now = getNow();
+    const startState = ctx.readListState();
+    const startViewportY = this.#resolveViewportYForState(
+      item,
+      startState,
+      now,
+      ctx,
+    );
     const transition = this.readTransition(item, now, ctx);
     const currentVisualState = this.#readCurrentVisualState(
       item,
@@ -444,6 +470,13 @@ export class TransitionController<
       toHeight: 0,
       startTime: now,
       duration: normalizedDuration,
+      deleteAnchor:
+        startViewportY == null
+          ? undefined
+          : {
+              startState,
+              startViewportY,
+            },
     });
     this.#activeTransitionItems.add(item);
   }
@@ -683,14 +716,25 @@ export class TransitionController<
   }
 
   #drawTransitionLayers(
+    item: T,
+    transition: ItemTransition<C>,
     layers: SampledLayer<C>[],
     slotHeight: number,
     y: number,
+    now: number,
     adapter: TransitionRendererAdapter<C, T>,
   ): boolean {
     if (slotHeight <= 0) {
       return false;
     }
+
+    const resolvedY = this.#resolveTransitionY(
+      item,
+      transition,
+      y,
+      now,
+      adapter,
+    );
 
     let result = false;
     for (const layer of layers) {
@@ -704,7 +748,7 @@ export class TransitionController<
         if (typeof adapter.graphics.globalAlpha === "number") {
           adapter.graphics.globalAlpha *= alpha;
         }
-        const layerY = y + layer.translateY;
+        const layerY = resolvedY + layer.translateY;
         if (adapter.drawNode(layer.node, 0, layerY)) {
           result = true;
         }
@@ -823,6 +867,54 @@ export class TransitionController<
       height: ctx.measureNode(node).height,
       translateY: 0,
     };
+  }
+
+  #resolveTransitionY(
+    item: T,
+    transition: ItemTransition<C>,
+    y: number,
+    now: number,
+    adapter: TransitionRendererAdapter<C, T>,
+  ): number {
+    if (transition.kind !== "delete" || transition.deleteAnchor == null) {
+      return y;
+    }
+
+    const baselineY = this.#resolveViewportYForState(
+      item,
+      transition.deleteAnchor.startState,
+      now,
+      adapter,
+    );
+    if (baselineY == null) {
+      return y;
+    }
+    return transition.deleteAnchor.startViewportY + (y - baselineY);
+  }
+
+  #resolveViewportYForState(
+    item: T,
+    state: ControlledState,
+    now: number,
+    adapter: Pick<
+      TransitionRendererAdapter<C, T>,
+      "getItemIndex" | "resolveVisibleWindowForState"
+    >,
+  ): number | undefined {
+    const index = adapter.getItemIndex(item);
+    if (index < 0) {
+      return undefined;
+    }
+
+    const solution = adapter.resolveVisibleWindowForState(state, now);
+    const entry = solution.window.drawList.find((candidate) => {
+      return candidate.idx === index;
+    });
+    if (entry == null) {
+      return undefined;
+    }
+    const viewportY = entry.offset + solution.window.shift;
+    return Number.isFinite(viewportY) ? viewportY : undefined;
   }
 
   #cleanupViewportTranslateAnimation(now: number): void {

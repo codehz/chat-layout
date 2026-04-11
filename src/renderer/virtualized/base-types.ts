@@ -6,6 +6,12 @@ export type ControlledState = {
   offset: number;
 };
 
+/** Viewport-space anchor captured when a delete transition begins. */
+export type DeleteTransitionAnchor = {
+  startState: ControlledState;
+  startViewportY: number;
+};
+
 /** A positive-length pixel segment within a jump path. */
 export type JumpPathSegment = {
   anchorStart: number;
@@ -52,6 +58,7 @@ export type ItemTransition<C extends CanvasRenderingContext2D> = {
   toHeight: number;
   startTime: number;
   duration: number;
+  deleteAnchor?: DeleteTransitionAnchor;
 };
 
 /** Per-item draw/hittest callbacks produced by the resolver. */

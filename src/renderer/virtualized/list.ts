@@ -42,10 +42,13 @@ export class ListRenderer<
     return this.#layout;
   }
 
-  protected _resolveVisibleWindow(now: number) {
+  protected _resolveVisibleWindowForState(
+    state: VisibleListState,
+    now: number,
+  ) {
     return resolveVisibleWindow(
       this.items,
-      this._readListState(),
+      state,
       this.graphics.canvas.clientHeight,
       (item, idx) => {
         return this._resolveItem(item, idx, now);
