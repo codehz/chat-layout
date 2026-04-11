@@ -9,14 +9,7 @@ import {
 } from "./transition-planner";
 import { VisibilitySnapshot } from "./transition-snapshot";
 import { TransitionStore } from "./transition-store";
-import {
-  sampleActiveTransition,
-  sampleLayerAnimation,
-  sampleScalarAnimation,
-  canAnimateExistingItem,
-  drawSampledLayers,
-  resolveBoundaryInsertStrategy,
-} from "./transition-planner";
+import { sampleScalarAnimation } from "./transition-planner";
 import type {
   BoundaryInsertDirection,
   ScalarAnimation,
