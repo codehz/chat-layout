@@ -43,6 +43,7 @@ describe("virtualized solvers", () => {
 
     expect(state).toEqual({ position: undefined, offset: 0 });
     expect(solution.normalizedState).toEqual({ position: 0, offset: 0 });
+    expect(solution.resolutionPath).toEqual([0, 1]);
     expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([0, 1]);
   });
 
@@ -62,6 +63,7 @@ describe("virtualized solvers", () => {
 
     expect(state).toEqual({ position: undefined, offset: 0 });
     expect(solution.normalizedState).toEqual({ position: 2, offset: 0 });
+    expect(solution.resolutionPath).toEqual([2, 1]);
     expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([2, 1]);
   });
 
@@ -196,5 +198,22 @@ describe("virtualized solvers", () => {
     expect(backward.normalizedState).toEqual({ position: 2, offset: 20 });
     expect(backward.window.shift).toBe(-20);
     expect(backward.window.drawList.map(({ idx }) => idx)).toEqual([1, 0, 2]);
+  });
+
+  test("resolutionPath includes normalization-consumed items even when they are not drawn", () => {
+    const solution = resolveVisibleWindow(
+      [30, 40, 40],
+      { position: 0, offset: -50 },
+      40,
+      (height) => ({
+        value: height,
+        height,
+      }),
+      resolveListLayoutOptions({ anchorMode: "top" }),
+    );
+
+    expect(solution.normalizedState).toEqual({ position: 1, offset: -20 });
+    expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([1, 2]);
+    expect(solution.resolutionPath).toEqual([0, 1, 2]);
   });
 });

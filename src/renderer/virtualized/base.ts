@@ -122,7 +122,7 @@ export abstract class VirtualizedRenderer<
     let solution = this._resolveVisibleWindow(now);
     let viewportTranslateY =
       this.#transitionController.getViewportTranslateY(now);
-    this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
+    this._captureVisibleItemSnapshot(solution, viewportTranslateY);
     const requestSettleRedraw = this._pruneTransitionAnimations(
       solution.window,
     );
@@ -130,7 +130,7 @@ export abstract class VirtualizedRenderer<
       solution = this._resolveVisibleWindow(now);
       viewportTranslateY =
         this.#transitionController.getViewportTranslateY(now);
-      this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
+      this._captureVisibleItemSnapshot(solution, viewportTranslateY);
     }
     const requestRedraw = this._renderVisibleWindow(
       solution.window,
@@ -154,12 +154,12 @@ export abstract class VirtualizedRenderer<
     let solution = this._resolveVisibleWindow(now);
     let viewportTranslateY =
       this.#transitionController.getViewportTranslateY(now);
-    this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
+    this._captureVisibleItemSnapshot(solution, viewportTranslateY);
     if (this._pruneTransitionAnimations(solution.window)) {
       solution = this._resolveVisibleWindow(now);
       viewportTranslateY =
         this.#transitionController.getViewportTranslateY(now);
-      this._captureVisibleItemSnapshot(solution.window, viewportTranslateY);
+      this._captureVisibleItemSnapshot(solution, viewportTranslateY);
     }
     return this._hittestVisibleWindow(
       solution.window,
@@ -364,12 +364,13 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _captureVisibleItemSnapshot(
-    window: VisibleWindow<unknown>,
+    solution: VisibleWindowResult<unknown>,
     extraShift = 0,
   ): void {
     const normalizedState = this._normalizeListState(this._readListState());
     this.#transitionController.captureVisibilitySnapshot(
-      window,
+      solution.window,
+      solution.resolutionPath,
       this.items,
       this.graphics.canvas.clientHeight,
       normalizedState,

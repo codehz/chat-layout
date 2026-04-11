@@ -62,7 +62,7 @@ function transition(
     layers: [],
     height: scalar(0, 0),
     anchorPolicy: { mode: "flow" },
-    visibility: "visible",
+    retention: "layout",
     ...options,
   };
 }
@@ -126,7 +126,7 @@ describe("transition sampling", () => {
       transition("insert", {
         layers: [layer(0, 1, 24, 0)],
         height: scalar(30, 30),
-        visibility: "drawn",
+        retention: "drawn",
       }),
       50,
     );
@@ -185,7 +185,7 @@ describe("transition store lifecycle", () => {
       transition("insert", {
         layers: [layer(0, 1)],
         height: scalar(20, 20),
-        visibility: "drawn",
+        retention: "drawn",
       }),
     );
 
@@ -208,5 +208,37 @@ describe("transition store lifecycle", () => {
     expect(manualStore.delete(deleteItem)?.kind).toBe("delete");
     expect(manualStore.size).toBe(0);
     expect(finalized).toEqual([deleteItem]);
+  });
+
+  test("layout-retained transitions survive pruning while the resolution path still tracks them", () => {
+    const item = { id: "layout-item" };
+    const store = new TransitionStore<C, Item>();
+    const snapshot = new VisibilitySnapshot<Item>();
+
+    store.set(
+      item,
+      transition("delete", {
+        layers: [layer(1, 0)],
+        height: scalar(20, 0),
+      }),
+    );
+    snapshot.capture(
+      { drawList: [], shift: 0 },
+      [0],
+      [item],
+      40,
+      { position: 0, offset: 0 },
+      0,
+      () => undefined,
+    );
+
+    expect(
+      store.pruneInvisible(snapshot, {
+        onDeleteComplete: () => {
+          throw new Error("should not finalize while still on the layout path");
+        },
+      }),
+    ).toBe(false);
+    expect(store.size).toBe(1);
   });
 });

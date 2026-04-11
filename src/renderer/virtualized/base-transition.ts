@@ -86,7 +86,7 @@ export type ActiveItemTransition<C extends CanvasRenderingContext2D> = {
   layers: LayerAnimation<C>[];
   height: ScalarAnimation;
   anchorPolicy: TransitionAnchorPolicy;
-  visibility: "drawn" | "visible";
+  retention: "drawn" | "layout";
 };
 
 export type SampledLayer<C extends CanvasRenderingContext2D> = {
@@ -100,7 +100,7 @@ export type SampledItemTransition<C extends CanvasRenderingContext2D> = {
   slotHeight: number;
   layers: SampledLayer<C>[];
   anchorPolicy: TransitionAnchorPolicy;
-  visibility: ActiveItemTransition<C>["visibility"];
+  retention: ActiveItemTransition<C>["retention"];
 };
 
 export type BoundaryInsertDirection = "push" | "unshift";
@@ -316,7 +316,7 @@ export function sampleActiveTransition<C extends CanvasRenderingContext2D>(
       .map((layer) => sampleLayerAnimation(layer, now))
       .filter((layer): layer is SampledLayer<C> => layer != null),
     anchorPolicy: transition.anchorPolicy,
-    visibility: transition.visibility,
+    retention: transition.retention,
   };
 }
 
@@ -370,7 +370,7 @@ function planUpdate<C extends CanvasRenderingContext2D>(params: {
       params.duration,
     ),
     anchorPolicy: { mode: "flow" },
-    visibility: "visible",
+    retention: "layout",
   };
 }
 
@@ -416,7 +416,7 @@ function planDelete<C extends CanvasRenderingContext2D>(params: {
             startState: params.startState,
             startViewportY: params.startViewportY,
           },
-    visibility: "visible",
+    retention: "layout",
   };
 }
 
@@ -502,7 +502,7 @@ function planBoundaryInsertItems<
           params.duration,
         ),
         anchorPolicy: { mode: "flow" },
-        visibility: "drawn",
+        retention: "drawn",
       },
     });
   }
@@ -671,6 +671,7 @@ export function drawSampledLayers<
 export class VisibilitySnapshot<T extends {}> {
   #drawnItems = new Set<T>();
   #visibleItems = new Set<T>();
+  #layoutItems = new Set<T>();
   #hasSnapshot = false;
   #snapshotState: ControlledState | undefined;
   #coversShortList = false;
@@ -693,6 +694,7 @@ export class VisibilitySnapshot<T extends {}> {
 
   capture(
     window: VisibleWindow<unknown>,
+    resolutionPath: readonly number[],
     items: readonly T[],
     viewportHeight: number,
     snapshotState: ControlledState,
@@ -704,11 +706,19 @@ export class VisibilitySnapshot<T extends {}> {
   ): void {
     const nextDrawnItems = new Set<T>();
     const nextVisibleItems = new Set<T>();
+    const nextLayoutItems = new Set<T>();
     let minVisibleIndex = Number.POSITIVE_INFINITY;
     let maxVisibleIndex = Number.NEGATIVE_INFINITY;
     let topMostY = Number.POSITIVE_INFINITY;
     let bottomMostY = Number.NEGATIVE_INFINITY;
     const effectiveShift = window.shift + extraShift;
+
+    for (const idx of resolutionPath) {
+      const item = items[idx];
+      if (item != null) {
+        nextLayoutItems.add(item);
+      }
+    }
 
     for (const { idx, offset, height } of window.drawList) {
       minVisibleIndex = Math.min(minVisibleIndex, idx);
@@ -720,6 +730,7 @@ export class VisibilitySnapshot<T extends {}> {
       const item = items[idx];
       if (item != null) {
         nextDrawnItems.add(item);
+        nextLayoutItems.add(item);
       }
       if (
         item == null ||
@@ -732,6 +743,7 @@ export class VisibilitySnapshot<T extends {}> {
 
     this.#drawnItems = nextDrawnItems;
     this.#visibleItems = nextVisibleItems;
+    this.#layoutItems = nextLayoutItems;
     this.#hasSnapshot = true;
     this.#snapshotState = snapshotState;
 
@@ -786,15 +798,16 @@ export class VisibilitySnapshot<T extends {}> {
     return this.#visibleItems.has(item);
   }
 
-  tracks(item: T, visibility: "drawn" | "visible"): boolean {
-    return visibility === "drawn"
+  tracks(item: T, retention: "drawn" | "layout"): boolean {
+    return retention === "drawn"
       ? this.#drawnItems.has(item)
-      : this.#visibleItems.has(item);
+      : this.#layoutItems.has(item);
   }
 
   reset(): void {
     this.#drawnItems.clear();
     this.#visibleItems.clear();
+    this.#layoutItems.clear();
     this.#hasSnapshot = false;
     this.#snapshotState = undefined;
     this.#coversShortList = false;
@@ -872,7 +885,7 @@ export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
   ): boolean {
     let changed = false;
     for (const [item, transition] of [...this.#transitions.entries()]) {
-      if (snapshot.tracks(item, transition.visibility)) {
+      if (snapshot.tracks(item, transition.retention)) {
         continue;
       }
       this.#transitions.delete(item);
@@ -1091,6 +1104,7 @@ export class TransitionController<
 
   captureVisibilitySnapshot(
     window: VisibleWindow<unknown>,
+    resolutionPath: readonly number[],
     items: readonly T[],
     viewportHeight: number,
     snapshotState: ControlledState,
@@ -1102,6 +1116,7 @@ export class TransitionController<
   ): void {
     this.#snapshot.capture(
       window,
+      resolutionPath,
       items,
       viewportHeight,
       snapshotState,

@@ -300,7 +300,7 @@ describe("update animation", () => {
     }
   });
 
-  test("animations are canceled after their slot leaves the viewport", () => {
+  test("animations stay alive until they stop affecting the solved layout", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -335,6 +335,11 @@ describe("update animation", () => {
       expect(renderer.render()).toBe(true);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
 
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+
+      now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
@@ -417,6 +422,98 @@ describe("update animation", () => {
       expect(draws.map((draw) => draw.id)).toContain("new");
       expect(draws.find((draw) => draw.id === "old")?.alpha).toBeCloseTo(0.5);
       expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top-anchor clipped-leading shrink updates stay continuous after leaving the viewport", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 80 };
+      const newItem = { id: "new", height: 30 };
+      const { list, renderer } = createTopRenderer(
+        [oldItem, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        40,
+      );
+
+      list.setAnchor(0, -50);
+      renderer.render();
+
+      draws.length = 0;
+      list.update(oldItem, newItem, { duration: 100 });
+
+      now.current = 50;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(5);
+
+      now.current = 75;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
+        -12.1875,
+      );
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(27.8125);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
+        -12.1875,
+      );
+      expect(list.position).toBe(1);
+      expect(list.offset).toBeCloseTo(-12.1875);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("bottom-anchor clipped-trailing shrink updates stay continuous after leaving the viewport", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 80 };
+      const newItem = { id: "new", height: 30 };
+      const { list, renderer } = createBottomRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, oldItem],
+        draws,
+        [],
+        40,
+      );
+
+      list.setAnchor(2, 50);
+      renderer.render();
+
+      draws.length = 0;
+      list.update(oldItem, newItem, { duration: 100 });
+
+      now.current = 50;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-5);
+
+      now.current = 75;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
+        12.1875,
+      );
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-27.8125);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
+        12.1875,
+      );
+      expect(list.position).toBe(1);
+      expect(list.offset).toBeCloseTo(12.1875);
     } finally {
       restoreNow();
     }
@@ -1177,9 +1274,118 @@ describe("delete animation", () => {
 
       list.applyScroll(-20);
       draws.length = 0;
-      renderer.render();
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((d) => d.id)).toContain("item");
+      expect(list.items.map((i) => i.id)).toContain("item");
+
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
       expect(draws.map((d) => d.id)).not.toContain("item");
       expect(list.items.map((i) => i.id)).not.toContain("item");
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top-anchor clipped-leading deletes finalize on the first frame that no longer depends on them", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createTopRenderer(
+        [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        40,
+      );
+
+      list.setAnchor(0, -50);
+      renderer.render();
+
+      draws.length = 0;
+      list.delete(item, { duration: 100 });
+
+      now.current = 50;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-10);
+      expect(list.items.map((current) => current.id)).toEqual([
+        "item",
+        "middle",
+        "tail",
+      ]);
+
+      now.current = 75;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-10);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+      expect(list.items.map((current) => current.id)).toEqual([
+        "middle",
+        "tail",
+      ]);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(list.items.map((current) => current.id)).toEqual([
+        "middle",
+        "tail",
+      ]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("bottom-anchor clipped-trailing deletes finalize on the first frame that no longer depends on them", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createBottomRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, item],
+        draws,
+        [],
+        40,
+      );
+
+      list.setAnchor(2, 50);
+      renderer.render();
+
+      draws.length = 0;
+      list.delete(item, { duration: 100 });
+
+      now.current = 50;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
+      expect(list.items.map((current) => current.id)).toEqual([
+        "head",
+        "middle",
+        "item",
+      ]);
+
+      now.current = 75;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-30);
+      expect(list.items.map((current) => current.id)).toEqual([
+        "head",
+        "middle",
+      ]);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(list.items.map((current) => current.id)).toEqual([
+        "head",
+        "middle",
+      ]);
     } finally {
       restoreNow();
     }

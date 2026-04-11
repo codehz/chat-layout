@@ -36,6 +36,7 @@ export interface VisibleWindow<T> {
 
 export interface VisibleWindowResult<T> {
   normalizedState: NormalizedListState;
+  resolutionPath: number[];
   window: VisibleWindow<T>;
 }
 
@@ -93,9 +94,15 @@ export function resolveVisibleWindow<T, V>(
   layout: ResolvedListLayoutOptions,
 ): VisibleWindowResult<V> {
   const normalizedState = normalizeVisibleState(items.length, state, layout);
+  const resolutionPath = new Set<number>();
+  const readResolvedItem = (item: T, idx: number): ResolvedItem<V> => {
+    resolutionPath.add(idx);
+    return resolveItem(item, idx);
+  };
   if (items.length === 0) {
     return {
       normalizedState,
+      resolutionPath: [],
       window: { drawList: [], shift: 0 },
     };
   }
@@ -109,7 +116,7 @@ export function resolveVisibleWindow<T, V>(
         offset = 0;
       } else {
         for (let i = position - 1; i >= 0; i -= 1) {
-          const { height } = resolveItem(items[i]!, i);
+          const { height } = readResolvedItem(items[i]!, i);
           position = i;
           offset -= height;
           if (offset <= 0) {
@@ -125,7 +132,7 @@ export function resolveVisibleWindow<T, V>(
     let y = offset;
     const drawList: VisibleWindowEntry<V>[] = [];
     for (let i = position; i < items.length; i += 1) {
-      const { value, height } = resolveItem(items[i]!, i);
+      const { value, height } = readResolvedItem(items[i]!, i);
       if (y + height > 0) {
         drawList.push({ idx: i, value, offset: y, height });
         drawLength += height;
@@ -149,7 +156,7 @@ export function resolveVisibleWindow<T, V>(
         y = offset += shift;
         let lastIdx = -1;
         for (let i = position - 1; i >= 0; i -= 1) {
-          const { value, height } = resolveItem(items[i]!, i);
+          const { value, height } = readResolvedItem(items[i]!, i);
           drawLength += height;
           y -= height;
           drawList.push({ idx: i, value, offset: y - shift, height });
@@ -172,6 +179,7 @@ export function resolveVisibleWindow<T, V>(
       viewportHeight,
       layout,
       { position, offset },
+      Array.from(resolutionPath),
       { drawList, shift },
     );
   }
@@ -184,7 +192,7 @@ export function resolveVisibleWindow<T, V>(
       offset = 0;
     } else {
       for (let i = position + 1; i < items.length; i += 1) {
-        const { height } = resolveItem(items[i]!, i);
+        const { height } = readResolvedItem(items[i]!, i);
         position = i;
         offset += height;
         if (offset > 0) {
@@ -197,7 +205,7 @@ export function resolveVisibleWindow<T, V>(
   let y = viewportHeight + offset;
   const drawList: VisibleWindowEntry<V>[] = [];
   for (let i = position; i >= 0; i -= 1) {
-    const { value, height } = resolveItem(items[i]!, i);
+    const { value, height } = readResolvedItem(items[i]!, i);
     y -= height;
     if (y <= viewportHeight) {
       drawList.push({ idx: i, value, offset: y, height });
@@ -217,7 +225,7 @@ export function resolveVisibleWindow<T, V>(
     if (drawLength < viewportHeight) {
       y = drawLength;
       for (let i = position + 1; i < items.length; i += 1) {
-        const { value, height } = resolveItem(items[i]!, i);
+        const { value, height } = readResolvedItem(items[i]!, i);
         drawList.push({ idx: i, value, offset: y - shift, height });
         y = drawLength += height;
         position = i;
@@ -236,6 +244,7 @@ export function resolveVisibleWindow<T, V>(
     viewportHeight,
     layout,
     { position, offset },
+    Array.from(resolutionPath),
     { drawList, shift },
   );
 }
@@ -245,11 +254,13 @@ function finalizeVisibleWindowResult<T>(
   viewportHeight: number,
   layout: ResolvedListLayoutOptions,
   normalizedState: NormalizedListState,
+  resolutionPath: number[],
   window: VisibleWindow<T>,
 ): VisibleWindowResult<T> {
   if (window.drawList.length !== itemCount || itemCount <= 0) {
     return {
       normalizedState,
+      resolutionPath,
       window,
     };
   }
@@ -273,6 +284,7 @@ function finalizeVisibleWindowResult<T>(
   ) {
     return {
       normalizedState,
+      resolutionPath,
       window,
     };
   }
@@ -285,6 +297,7 @@ function finalizeVisibleWindowResult<T>(
       : { position: itemCount - 1, offset: 0 };
   return {
     normalizedState: canonicalState,
+    resolutionPath,
     window: {
       drawList: window.drawList,
       shift: desiredTop - minOffset,
