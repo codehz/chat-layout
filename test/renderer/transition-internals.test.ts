@@ -6,7 +6,6 @@ import {
   VisibilitySnapshot,
   canAnimateExistingItem,
   resolveBoundaryInsertStrategy,
-  resolveGhostY,
   sampleActiveTransition,
   type ActiveItemTransition,
   type LayerAnimation,
@@ -63,8 +62,7 @@ function transition(
     kind,
     layers: [],
     height: scalar(0, 0),
-    anchorPolicy: { mode: "flow" },
-    retention: "layout",
+    retention: "visible",
     ...options,
   };
 }
@@ -88,12 +86,29 @@ function resolveVisibleWindow(
     offset: number;
     height: number;
   }>,
-): () => { window: { drawList: typeof drawList; shift: number } } {
+): () => {
+  window: {
+    drawList: Array<{
+      idx: number;
+      offset: number;
+      height: number;
+      value: null;
+    }>;
+    shift: number;
+  };
+  normalizedState: { position: number; offset: number };
+  resolutionPath: number[];
+} {
   return () => ({
     window: {
-      drawList,
+      drawList: drawList.map((entry) => ({ ...entry, value: null })),
       shift: 0,
     },
+    normalizedState: {
+      position: 0,
+      offset: 0,
+    },
+    resolutionPath: drawList.map((entry) => entry.idx),
   });
 }
 
@@ -103,7 +118,7 @@ describe("transition eligibility", () => {
     const snapshot = new VisibilitySnapshot<Item>();
     snapshot.capture(
       {
-        drawList: [{ idx: 0, offset: 10, height: 20 }],
+        drawList: [{ idx: 0, offset: 10, height: 20, value: null }],
         shift: 0,
       },
       [0],
@@ -153,7 +168,7 @@ describe("transition eligibility", () => {
         resolveVisibleWindow: resolveVisibleWindow([]),
         readVisibleRange,
       }),
-    ).toBe(true);
+    ).toBe(false);
 
     expect(
       canAnimateExistingItem({
@@ -232,31 +247,6 @@ describe("transition boundary insert strategy", () => {
   });
 });
 
-describe("ghost positioning", () => {
-  test("falls back to flow positioning when the locked baseline can no longer be resolved", () => {
-    const item = { id: "ghost" };
-    const locked = transition("delete", {
-      anchorPolicy: {
-        mode: "lockToViewport",
-        startState: { position: 0, offset: 0 },
-        startViewportY: 24,
-      },
-    });
-
-    expect(
-      resolveGhostY(item, locked, 60, 50, {
-        getItemIndex: () => 0,
-        resolveVisibleWindowForState: () => ({
-          window: {
-            drawList: [],
-            shift: 0,
-          },
-        }),
-      }),
-    ).toBe(60);
-  });
-});
-
 describe("transition sampling", () => {
   test("update, delete, and insert share the same sampling model", () => {
     const sampledUpdate = sampleActiveTransition(
@@ -306,8 +296,8 @@ describe("visibility snapshot", () => {
     snapshot.capture(
       {
         drawList: [
-          { idx: 0, offset: 10, height: 20 },
-          { idx: 1, offset: 30, height: 20 },
+          { idx: 0, offset: 10, height: 20, value: null },
+          { idx: 1, offset: 30, height: 20, value: null },
         ],
         shift: 0,
       },
@@ -401,8 +391,8 @@ describe("transition store lifecycle", () => {
     expect(finalized).toEqual([deleteItem]);
   });
 
-  test("layout-retained transitions survive pruning while the resolution path still tracks them", () => {
-    const item = { id: "layout-item" };
+  test("visible-retained transitions survive pruning while they still have any visible area", () => {
+    const item = { id: "visible-item" };
     const store = new TransitionStore<C, Item>();
     const snapshot = new VisibilitySnapshot<Item>();
 
@@ -414,19 +404,24 @@ describe("transition store lifecycle", () => {
       }),
     );
     snapshot.capture(
-      { drawList: [], shift: 0 },
+      {
+        drawList: [{ idx: 0, offset: 90, height: 20, value: null }],
+        shift: 0,
+      },
       [0],
       [item],
-      40,
+      100,
       { position: 0, offset: 0 },
       0,
-      () => undefined,
+      readVisibleRange,
     );
 
     expect(
       store.pruneInvisible(snapshot, {
         onDeleteComplete: () => {
-          throw new Error("should not finalize while still on the layout path");
+          throw new Error(
+            "should not finalize while the item is still visible",
+          );
         },
       }),
     ).toBe(false);

@@ -71,22 +71,11 @@ export type LayerAnimation<C extends CanvasRenderingContext2D> = {
   translateY: ScalarAnimation;
 };
 
-export type TransitionAnchorPolicy =
-  | {
-      mode: "flow";
-    }
-  | {
-      mode: "lockToViewport";
-      startState: ControlledState;
-      startViewportY: number;
-    };
-
 export type ActiveItemTransition<C extends CanvasRenderingContext2D> = {
   kind: "update" | "delete" | "insert";
   layers: LayerAnimation<C>[];
   height: ScalarAnimation;
-  anchorPolicy: TransitionAnchorPolicy;
-  retention: "drawn" | "layout";
+  retention: "drawn" | "visible";
 };
 
 export type SampledLayer<C extends CanvasRenderingContext2D> = {
@@ -99,7 +88,6 @@ export type SampledItemTransition<C extends CanvasRenderingContext2D> = {
   kind: ActiveItemTransition<C>["kind"];
   slotHeight: number;
   layers: SampledLayer<C>[];
-  anchorPolicy: TransitionAnchorPolicy;
   retention: ActiveItemTransition<C>["retention"];
 };
 
@@ -251,7 +239,7 @@ function resolveAnimationEligibility<T extends {}>(params: {
     return false;
   }
   if (params.snapshot.matchesCurrentState(params.position, params.offset)) {
-    return params.snapshot.isVisible(params.item) || params.hasActiveTransition;
+    return params.snapshot.isVisible(params.item);
   }
   return isIndexVisible(
     params.index,
@@ -338,7 +326,6 @@ function sampleTransition<C extends CanvasRenderingContext2D>(
     layers: transition.layers
       .map((layer) => sampleLayerAnimation(layer, now))
       .filter((layer): layer is SampledLayer<C> => layer != null),
-    anchorPolicy: transition.anchorPolicy,
     retention: transition.retention,
   };
 }
@@ -360,8 +347,6 @@ function planExistingItemTransition<C extends CanvasRenderingContext2D>(
         canAnimate: boolean;
         now: number;
         currentVisualState: CurrentVisualState<C>;
-        startState: ControlledState;
-        startViewportY: number | undefined;
       },
 ): ActiveItemTransition<C> | undefined {
   if (!params.canAnimate || params.duration <= 0) {
@@ -407,8 +392,7 @@ function planExistingItemTransition<C extends CanvasRenderingContext2D>(
         params.now,
         params.duration,
       ),
-      anchorPolicy: { mode: "flow" },
-      retention: "layout",
+      retention: "visible",
     };
   }
 
@@ -421,15 +405,7 @@ function planExistingItemTransition<C extends CanvasRenderingContext2D>(
       params.now,
       params.duration,
     ),
-    anchorPolicy:
-      params.startViewportY == null
-        ? { mode: "flow" }
-        : {
-            mode: "lockToViewport",
-            startState: params.startState,
-            startViewportY: params.startViewportY,
-          },
-    retention: "layout",
+    retention: "visible",
   };
 }
 
@@ -514,7 +490,6 @@ function planBoundaryInsertItems<
           params.now,
           params.duration,
         ),
-        anchorPolicy: { mode: "flow" },
         retention: "drawn",
       },
     });
@@ -587,79 +562,18 @@ function measureBoundaryInsertItems<
   return measured;
 }
 
-function resolveViewportYForState<
-  C extends CanvasRenderingContext2D,
-  T extends {},
->(
-  item: T,
-  state: ControlledState,
-  now: number,
-  adapter: Pick<
-    TransitionRenderAdapter<C, T>,
-    "getItemIndex" | "resolveVisibleWindowForState"
-  >,
-): number | undefined {
-  const index = adapter.getItemIndex(item);
-  if (index < 0) {
-    return undefined;
-  }
-
-  const solution = adapter.resolveVisibleWindowForState(state, now);
-  const entry = solution.window.drawList.find((candidate) => {
-    return candidate.idx === index;
-  });
-  if (entry == null) {
-    return undefined;
-  }
-  const viewportY = entry.offset + solution.window.shift;
-  return Number.isFinite(viewportY) ? viewportY : undefined;
-}
-
-export function resolveGhostY<C extends CanvasRenderingContext2D, T extends {}>(
-  item: T,
-  transition: ActiveItemTransition<C>,
-  y: number,
-  now: number,
-  adapter: Pick<
-    TransitionRenderAdapter<C, T>,
-    "getItemIndex" | "resolveVisibleWindowForState"
-  >,
-): number {
-  if (transition.anchorPolicy.mode !== "lockToViewport") {
-    return y;
-  }
-
-  const baselineY = resolveViewportYForState(
-    item,
-    transition.anchorPolicy.startState,
-    now,
-    adapter,
-  );
-  if (baselineY == null) {
-    return y;
-  }
-  return transition.anchorPolicy.startViewportY + (y - baselineY);
-}
-
 export function drawSampledLayers<
   C extends CanvasRenderingContext2D,
   T extends {},
 >(
-  item: T,
-  transition: ActiveItemTransition<C>,
   sampled: SampledItemTransition<C>,
   y: number,
-  now: number,
-  adapter: Pick<
-    TransitionRenderAdapter<C, T>,
-    "drawNode" | "graphics" | "getItemIndex" | "resolveVisibleWindowForState"
-  >,
+  adapter: Pick<TransitionRenderAdapter<C, T>, "drawNode" | "graphics">,
 ): boolean {
   if (sampled.slotHeight <= 0) {
     return false;
   }
 
-  const resolvedY = resolveGhostY(item, transition, y, now, adapter);
   let result = false;
   for (const layer of sampled.layers) {
     const alpha = clamp(layer.alpha, 0, 1);
@@ -671,7 +585,7 @@ export function drawSampledLayers<
       if (typeof adapter.graphics.globalAlpha === "number") {
         adapter.graphics.globalAlpha *= alpha;
       }
-      if (adapter.drawNode(layer.node, 0, resolvedY + layer.translateY)) {
+      if (adapter.drawNode(layer.node, 0, y + layer.translateY)) {
         result = true;
       }
     } finally {
@@ -684,7 +598,6 @@ export function drawSampledLayers<
 export class VisibilitySnapshot<T extends {}> {
   #drawnItems = new Set<T>();
   #visibleItems = new Set<T>();
-  #layoutItems = new Set<T>();
   #hasSnapshot = false;
   #snapshotState: ControlledState | undefined;
   #coversShortList = false;
@@ -719,7 +632,6 @@ export class VisibilitySnapshot<T extends {}> {
   ): void {
     const nextDrawnItems = new Set<T>();
     const nextVisibleItems = new Set<T>();
-    const nextLayoutItems = new Set<T>();
     let minVisibleIndex = Number.POSITIVE_INFINITY;
     let maxVisibleIndex = Number.NEGATIVE_INFINITY;
     let topMostY = Number.POSITIVE_INFINITY;
@@ -727,10 +639,7 @@ export class VisibilitySnapshot<T extends {}> {
     const effectiveShift = window.shift + extraShift;
 
     for (const idx of resolutionPath) {
-      const item = items[idx];
-      if (item != null) {
-        nextLayoutItems.add(item);
-      }
+      void idx;
     }
 
     for (const { idx, offset, height } of window.drawList) {
@@ -743,7 +652,6 @@ export class VisibilitySnapshot<T extends {}> {
       const item = items[idx];
       if (item != null) {
         nextDrawnItems.add(item);
-        nextLayoutItems.add(item);
       }
       if (
         item == null ||
@@ -756,7 +664,6 @@ export class VisibilitySnapshot<T extends {}> {
 
     this.#drawnItems = nextDrawnItems;
     this.#visibleItems = nextVisibleItems;
-    this.#layoutItems = nextLayoutItems;
     this.#hasSnapshot = true;
     this.#snapshotState = snapshotState;
 
@@ -811,16 +718,15 @@ export class VisibilitySnapshot<T extends {}> {
     return this.#visibleItems.has(item);
   }
 
-  tracks(item: T, retention: "drawn" | "layout"): boolean {
+  tracks(item: T, retention: "drawn" | "visible"): boolean {
     return retention === "drawn"
       ? this.#drawnItems.has(item)
-      : this.#layoutItems.has(item);
+      : this.#visibleItems.has(item);
   }
 
   reset(): void {
     this.#drawnItems.clear();
     this.#visibleItems.clear();
-    this.#layoutItems.clear();
     this.#hasSnapshot = false;
     this.#snapshotState = undefined;
     this.#coversShortList = false;
@@ -958,11 +864,6 @@ function planDeleteTransition<C extends CanvasRenderingContext2D, T extends {}>(
   store: TransitionStore<C, T>,
 ): ActiveItemTransition<C> | undefined {
   const index = ctx.items.indexOf(item);
-  const startState = ctx.readListState();
-  const startViewportY = resolveViewportYForState(item, startState, now, {
-    getItemIndex: (candidate) => ctx.items.indexOf(candidate as T),
-    resolveVisibleWindowForState: ctx.resolveVisibleWindowForState,
-  });
   return planExistingItemTransition({
     kind: "delete",
     duration: normalizeDuration(duration),
@@ -978,8 +879,6 @@ function planDeleteTransition<C extends CanvasRenderingContext2D, T extends {}>(
     }),
     now,
     currentVisualState,
-    startState,
-    startViewportY,
   });
 }
 
@@ -1069,8 +968,7 @@ function resolveTransitionedItem<
   const sampled = sampleTransition(transition, now);
   return {
     value: {
-      draw: (y) =>
-        drawSampledLayers(item, transition, sampled, y, now, adapter),
+      draw: (y) => drawSampledLayers(sampled, y, adapter),
       hittest: () => false,
     },
     height: sampled.slotHeight,

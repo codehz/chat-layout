@@ -300,7 +300,7 @@ describe("update animation", () => {
     }
   });
 
-  test("animations stay alive until they stop affecting the solved layout", () => {
+  test("animations stay alive until they become fully invisible", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -336,7 +336,7 @@ describe("update animation", () => {
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
 
       draws.length = 0;
-      expect(renderer.render()).toBe(true);
+      expect(renderer.render()).toBe(false);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
 
       now.current = 100;
@@ -391,6 +391,46 @@ describe("update animation", () => {
     }
   });
 
+  test("restarting an offscreen update hard-cuts to the latest item", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 20 };
+      const midItem = { id: "mid", height: 20 };
+      const newItem = { id: "new", height: 20 };
+      const { list, renderer } = createTopRenderer(
+        [oldItem, { id: "middle", height: 20 }, { id: "tail", height: 20 }],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.render();
+      list.update(oldItem, midItem, { duration: 100 });
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["old", "mid", "middle"]);
+
+      list.applyScroll(-20);
+      list.update(midItem, newItem, { duration: 100 });
+
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+
+      list.applyScroll(20);
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["new", "middle"]);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("chat shrink updates keep animating when the previous visible slot snapshot says the item is visible", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -427,7 +467,7 @@ describe("update animation", () => {
     }
   });
 
-  test("top-anchor clipped-leading shrink updates stay continuous after leaving the viewport", () => {
+  test("top-anchor clipped-leading shrink updates end on the first fully invisible frame", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -455,25 +495,21 @@ describe("update animation", () => {
       draws.length = 0;
       expect(renderer.render()).toBe(true);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        -12.1875,
-      );
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(27.8125);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
 
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        -12.1875,
-      );
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-20);
       expect(list.position).toBe(1);
-      expect(list.offset).toBeCloseTo(-12.1875);
+      expect(list.offset).toBeCloseTo(-20);
     } finally {
       restoreNow();
     }
   });
 
-  test("bottom-anchor clipped-trailing shrink updates stay continuous after leaving the viewport", () => {
+  test("bottom-anchor clipped-trailing shrink updates end on the first fully invisible frame", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -501,19 +537,15 @@ describe("update animation", () => {
       draws.length = 0;
       expect(renderer.render()).toBe(true);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        12.1875,
-      );
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-27.8125);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-20);
 
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        12.1875,
-      );
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(20);
       expect(list.position).toBe(1);
-      expect(list.offset).toBeCloseTo(12.1875);
+      expect(list.offset).toBeCloseTo(20);
     } finally {
       restoreNow();
     }
@@ -1052,7 +1084,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("top-anchor bottom-underflow keeps a deleted leading item pinned in viewport space", () => {
+  test("top-anchor bottom-underflow reflows a deleted leading item with the flow layout", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1077,7 +1109,7 @@ describe("delete animation", () => {
       now.current = 50;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(40);
       expect(draws.find((draw) => draw.id === "head")?.alpha).toBeCloseTo(0.5);
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(60);
 
@@ -1091,7 +1123,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("top-anchor bottom-underflow keeps a deleted trailing item pinned while neighbors reflow", () => {
+  test("top-anchor bottom-underflow reflows a deleted trailing item with the flow layout", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1117,7 +1149,7 @@ describe("delete animation", () => {
       draws.length = 0;
       expect(renderer.render()).toBe(true);
       expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(40);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(60);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(80);
       expect(draws.find((draw) => draw.id === "tail")?.alpha).toBeCloseTo(0.5);
 
       now.current = 100;
@@ -1251,7 +1283,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("delete animation finalizes when the slot scrolls out of the viewport", () => {
+  test("delete animation finalizes on the first frame where the slot is fully invisible", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1275,11 +1307,11 @@ describe("delete animation", () => {
       list.applyScroll(-20);
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.map((d) => d.id)).toContain("item");
-      expect(list.items.map((i) => i.id)).toContain("item");
+      expect(draws.map((d) => d.id)).not.toContain("item");
+      expect(list.items.map((i) => i.id)).not.toContain("item");
 
       draws.length = 0;
-      expect(renderer.render()).toBe(true);
+      expect(renderer.render()).toBe(false);
       expect(draws.map((d) => d.id)).not.toContain("item");
       expect(list.items.map((i) => i.id)).not.toContain("item");
     } finally {
@@ -1287,7 +1319,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("top-anchor clipped-leading deletes finalize on the first frame that no longer depends on them", () => {
+  test("top-anchor clipped-leading deletes finalize on the first fully invisible frame", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1308,20 +1340,19 @@ describe("delete animation", () => {
 
       now.current = 50;
       expect(renderer.render()).toBe(true);
-      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-10);
+      expect(draws.map((draw) => draw.id)).toEqual(["tail", "middle"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-40);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(0);
       expect(list.items.map((current) => current.id)).toEqual([
-        "item",
         "middle",
         "tail",
       ]);
 
       now.current = 75;
       draws.length = 0;
-      expect(renderer.render()).toBe(true);
-      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-10);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["tail"]);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(0);
       expect(list.items.map((current) => current.id)).toEqual([
         "middle",
         "tail",
@@ -1339,7 +1370,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("bottom-anchor clipped-trailing deletes finalize on the first frame that no longer depends on them", () => {
+  test("bottom-anchor clipped-trailing deletes finalize on the first fully invisible frame", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1360,20 +1391,18 @@ describe("delete animation", () => {
 
       now.current = 50;
       expect(renderer.render()).toBe(true);
-      expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
+      expect(draws.map((draw) => draw.id)).toEqual(["head"]);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
       expect(list.items.map((current) => current.id)).toEqual([
         "head",
         "middle",
-        "item",
       ]);
 
       now.current = 75;
       draws.length = 0;
-      expect(renderer.render()).toBe(true);
-      expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-30);
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["head"]);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
       expect(list.items.map((current) => current.id)).toEqual([
         "head",
         "middle",
