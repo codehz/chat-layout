@@ -697,7 +697,7 @@ describe("update animation", () => {
     }
   });
 
-  test("bottom-underflow pushAll ignores distance and hard-cuts to the final layout", () => {
+  test("bottom-underflow pushAll animates a whole-window upward slide while ignoring distance", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -720,11 +720,71 @@ describe("update animation", () => {
         distance: 24,
       });
 
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(120);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+
+      now.current = 110;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(65);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(85);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(105);
+
+      now.current = 220;
+      draws.length = 0;
       expect(renderer.render()).toBe(false);
       expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(50);
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(70);
       expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(90);
-      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("bottom-underflow keeps existing content pinned on the first pushAll frame when the insert exceeds the available top gap", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createBottomRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 60 },
+        ],
+        draws,
+        [],
+        100,
+        "bottom",
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.pushAll([{ id: "new", height: 50 }], {
+        duration: 100,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(100);
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(90);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(80);
     } finally {
       restoreNow();
     }

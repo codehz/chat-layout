@@ -462,16 +462,38 @@ export class TransitionController<
       return;
     }
 
-    if (ctx.layout.underflowAlign !== "top") {
-      return;
-    }
-
     const start = ctx.items.length - count;
     if (start < 0) {
       return;
     }
 
     const now = getNow();
+    if (ctx.layout.underflowAlign === "bottom") {
+      let insertedHeight = 0;
+      for (let index = start; index < ctx.items.length; index += 1) {
+        const item = ctx.items[index];
+        if (item == null) {
+          continue;
+        }
+        const node = ctx.renderItem(item);
+        insertedHeight += ctx.measureNode(node).height;
+      }
+      if (!(insertedHeight > 0) || !Number.isFinite(insertedHeight)) {
+        return;
+      }
+      const travel = Math.min(insertedHeight, this.#visibilitySnapshotTopGap);
+      if (!(travel > 0) || !Number.isFinite(travel)) {
+        return;
+      }
+      this.#viewportTranslateAnimation = {
+        fromTranslateY: this.getViewportTranslateY(now) + travel,
+        toTranslateY: 0,
+        startTime: now,
+        duration,
+      };
+      return;
+    }
+
     for (let index = start; index < ctx.items.length; index += 1) {
       const item = ctx.items[index];
       if (item == null) {
