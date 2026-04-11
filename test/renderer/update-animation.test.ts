@@ -1021,6 +1021,168 @@ describe("update animation", () => {
       restoreNow();
     }
   });
+
+  test("rendered empty lists animate the first pushAll and unshiftAll from their insertion direction", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const pushDraws: DrawProbe[] = [];
+      const pushCase = createTopRenderer([], pushDraws);
+      expect(pushCase.renderer.render()).toBe(false);
+
+      pushDraws.length = 0;
+      pushCase.list.pushAll([{ id: "push", height: 30 }], {
+        duration: 100,
+        distance: 24,
+      });
+      expect(pushCase.renderer.render()).toBe(true);
+      expect(pushDraws.find((draw) => draw.id === "push")).toBeUndefined();
+
+      now.current = 50;
+      pushDraws.length = 0;
+      expect(pushCase.renderer.render()).toBe(true);
+      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(12);
+      expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
+        0.5,
+      );
+
+      now.current = 100;
+      pushDraws.length = 0;
+      expect(pushCase.renderer.render()).toBe(false);
+      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(0);
+      expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
+        1,
+      );
+
+      now.current = 0;
+      const unshiftDraws: DrawProbe[] = [];
+      const unshiftCase = createTopRenderer([], unshiftDraws);
+      expect(unshiftCase.renderer.render()).toBe(false);
+
+      unshiftDraws.length = 0;
+      unshiftCase.list.unshiftAll([{ id: "unshift", height: 30 }], {
+        duration: 100,
+        distance: 24,
+      });
+      expect(unshiftCase.renderer.render()).toBe(true);
+      expect(
+        unshiftDraws.find((draw) => draw.id === "unshift"),
+      ).toBeUndefined();
+
+      now.current = 50;
+      unshiftDraws.length = 0;
+      expect(unshiftCase.renderer.render()).toBe(true);
+      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
+        -12,
+      );
+      expect(
+        unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
+      ).toBeCloseTo(0.5);
+
+      now.current = 100;
+      unshiftDraws.length = 0;
+      expect(unshiftCase.renderer.render()).toBe(false);
+      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
+        0,
+      );
+      expect(
+        unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
+      ).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("rendered empty bottom-underflow lists animate the first item while preserving final layout", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const pushDraws: DrawProbe[] = [];
+      const pushCase = createBottomRenderer([], pushDraws, [], 120, "bottom");
+      expect(pushCase.renderer.render()).toBe(false);
+
+      pushDraws.length = 0;
+      pushCase.list.pushAll([{ id: "push", height: 30 }], {
+        duration: 100,
+        distance: 24,
+      });
+      expect(pushCase.renderer.render()).toBe(true);
+      expect(pushDraws.find((draw) => draw.id === "push")).toBeUndefined();
+
+      now.current = 50;
+      pushDraws.length = 0;
+      expect(pushCase.renderer.render()).toBe(true);
+      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(102);
+      expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
+        0.5,
+      );
+
+      now.current = 100;
+      pushDraws.length = 0;
+      expect(pushCase.renderer.render()).toBe(false);
+      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(90);
+      expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
+        1,
+      );
+
+      now.current = 0;
+      const unshiftDraws: DrawProbe[] = [];
+      const unshiftCase = createBottomRenderer(
+        [],
+        unshiftDraws,
+        [],
+        120,
+        "bottom",
+      );
+      expect(unshiftCase.renderer.render()).toBe(false);
+
+      unshiftDraws.length = 0;
+      unshiftCase.list.unshiftAll([{ id: "unshift", height: 30 }], {
+        duration: 100,
+        distance: 24,
+      });
+      expect(unshiftCase.renderer.render()).toBe(true);
+      expect(
+        unshiftDraws.find((draw) => draw.id === "unshift"),
+      ).toBeUndefined();
+
+      now.current = 50;
+      unshiftDraws.length = 0;
+      expect(unshiftCase.renderer.render()).toBe(true);
+      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
+        78,
+      );
+      expect(
+        unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
+      ).toBeCloseTo(0.5);
+
+      now.current = 100;
+      unshiftDraws.length = 0;
+      expect(unshiftCase.renderer.render()).toBe(false);
+      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
+        90,
+      );
+      expect(
+        unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
+      ).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("empty lists still hard-cut on the first insert when no empty snapshot was rendered", () => {
+    const draws: DrawProbe[] = [];
+    const { list, renderer } = createTopRenderer([], draws);
+
+    list.pushAll([{ id: "new", height: 30 }], {
+      duration: 100,
+      distance: 24,
+    });
+
+    expect(renderer.render()).toBe(false);
+    expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
+    expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+  });
 });
 
 describe("delete animation", () => {

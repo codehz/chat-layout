@@ -600,6 +600,7 @@ export class VisibilitySnapshot<T extends {}> {
   #visibleItems = new Set<T>();
   #hasSnapshot = false;
   #snapshotState: ControlledState | undefined;
+  #emptyState: ControlledState | undefined;
   #coversShortList = false;
   #topGap = 0;
   #bottomGap = 0;
@@ -666,6 +667,10 @@ export class VisibilitySnapshot<T extends {}> {
     this.#visibleItems = nextVisibleItems;
     this.#hasSnapshot = true;
     this.#snapshotState = snapshotState;
+    this.#emptyState =
+      items.length === 0 && window.drawList.length === 0
+        ? snapshotState
+        : undefined;
 
     const contentHeight = bottomMostY - topMostY;
     this.#coversShortList =
@@ -714,6 +719,30 @@ export class VisibilitySnapshot<T extends {}> {
     );
   }
 
+  matchesEmptyBoundaryInsertState(
+    direction: BoundaryInsertDirection,
+    count: number,
+    position: number | undefined,
+    offset: number,
+  ): boolean {
+    const emptyState = this.#emptyState;
+    if (!this.#hasSnapshot || emptyState == null) {
+      return false;
+    }
+    const expectedPosition =
+      direction === "unshift" && emptyState.position != null
+        ? emptyState.position + count
+        : emptyState.position;
+    return sameState(
+      {
+        position: expectedPosition,
+        offset: emptyState.offset,
+      },
+      position,
+      offset,
+    );
+  }
+
   isVisible(item: T): boolean {
     return this.#visibleItems.has(item);
   }
@@ -729,6 +758,7 @@ export class VisibilitySnapshot<T extends {}> {
     this.#visibleItems.clear();
     this.#hasSnapshot = false;
     this.#snapshotState = undefined;
+    this.#emptyState = undefined;
     this.#coversShortList = false;
     this.#topGap = 0;
     this.#bottomGap = 0;
@@ -899,16 +929,22 @@ function planBoundaryInsertTransition<
   if (count <= 0 || normalizedDuration <= 0) {
     return undefined;
   }
-  const strategy = resolveBoundaryInsertStrategy(
+  const hasShortListSnapshot = snapshot.matchesBoundaryInsertState(
     direction,
-    ctx.underflowAlign,
-    snapshot.matchesBoundaryInsertState(
-      direction,
-      count,
-      ctx.position,
-      ctx.offset,
-    ),
+    count,
+    ctx.position,
+    ctx.offset,
   );
+  const strategy = hasShortListSnapshot
+    ? resolveBoundaryInsertStrategy(direction, ctx.underflowAlign, true)
+    : snapshot.matchesEmptyBoundaryInsertState(
+          direction,
+          count,
+          ctx.position,
+          ctx.offset,
+        )
+      ? "item-enter"
+      : "hard-cut";
   if (strategy === "hard-cut") {
     return undefined;
   }

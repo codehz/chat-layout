@@ -316,6 +316,37 @@ describe("visibility snapshot", () => {
     expect(snapshot.matchesBoundaryInsertState("unshift", 2, 3, 5)).toBe(true);
     expect(snapshot.matchesBoundaryInsertState("unshift", 2, 1, 5)).toBe(false);
   });
+
+  test("tracks rendered empty-list snapshots separately from generic no-snapshot cases", () => {
+    const snapshot = new VisibilitySnapshot<Item>();
+
+    expect(snapshot.matchesEmptyBoundaryInsertState("push", 1, 0, 0)).toBe(
+      false,
+    );
+
+    snapshot.capture(
+      {
+        drawList: [],
+        shift: 0,
+      },
+      [],
+      [],
+      80,
+      { position: 0, offset: 0 },
+      0,
+      readVisibleRange,
+    );
+
+    expect(snapshot.matchesEmptyBoundaryInsertState("push", 1, 0, 0)).toBe(
+      true,
+    );
+    expect(snapshot.matchesEmptyBoundaryInsertState("unshift", 2, 2, 0)).toBe(
+      true,
+    );
+    expect(snapshot.matchesEmptyBoundaryInsertState("push", 1, 1, 0)).toBe(
+      false,
+    );
+  });
 });
 
 describe("transition store lifecycle", () => {
