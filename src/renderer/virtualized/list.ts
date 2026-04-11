@@ -3,6 +3,11 @@ import type { JumpToOptions } from "./base";
 import type { Node } from "../../types";
 import type { ListState } from "../list-state";
 import {
+  applyAnchorToState,
+  getTargetAnchorForItem,
+  readAnchorFromState,
+} from "./anchor-model";
+import {
   normalizeVisibleState,
   resolveListLayoutOptions,
   resolveVisibleWindow,
@@ -11,10 +16,6 @@ import {
   type ResolvedListLayoutOptions,
   type VisibleListState,
 } from "./solver";
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
 
 export interface ListRendererOptions<
   C extends CanvasRenderingContext2D,
@@ -50,9 +51,7 @@ export class ListRenderer<
       this.items,
       state,
       this.graphics.canvas.clientHeight,
-      (item, idx) => {
-        return this._resolveItem(item, idx, now);
-      },
+      (item, idx) => this._resolveItem(item, idx, now),
       this.#layout,
     );
   }
@@ -66,83 +65,38 @@ export class ListRenderer<
   }
 
   protected _readAnchor(state: NormalizedListState): number {
-    if (this.items.length === 0) {
-      return 0;
-    }
-
-    const height = this._getItemHeight(state.position);
-    if (this.#layout.anchorMode === "top") {
-      return height > 0
-        ? state.position - state.offset / height
-        : state.position;
-    }
-    return height > 0
-      ? state.position + 1 - state.offset / height
-      : state.position + 1;
+    return readAnchorFromState(
+      this.items.length,
+      state,
+      this.#layout.anchorMode,
+      this._getItemHeight.bind(this),
+    );
   }
 
   protected _applyAnchor(anchor: number): void {
-    if (this.items.length === 0) {
-      return;
-    }
-
-    const clampedAnchor = clamp(anchor, 0, this.items.length);
-    if (this.#layout.anchorMode === "top") {
-      const position = clamp(
-        Math.floor(clampedAnchor),
-        0,
-        this.items.length - 1,
-      );
-      const height = this._getItemHeight(position);
-      const offset = height > 0 ? -(clampedAnchor - position) * height : 0;
-      this._commitListState({
-        position,
-        offset: Object.is(offset, -0) ? 0 : offset,
-      });
-      return;
-    }
-
-    const position = clamp(
-      Math.ceil(clampedAnchor) - 1,
-      0,
-      this.items.length - 1,
+    const state = applyAnchorToState(
+      this.items.length,
+      anchor,
+      this.#layout.anchorMode,
+      this._getItemHeight.bind(this),
     );
-    const height = this._getItemHeight(position);
-    const offset = height > 0 ? (position + 1 - clampedAnchor) * height : 0;
-    this._commitListState({
-      position,
-      offset: Object.is(offset, -0) ? 0 : offset,
-    });
+    if (state == null) {
+      return;
+    }
+    this._commitListState(state);
   }
 
   protected _getTargetAnchor(
     index: number,
     block: NonNullable<JumpToOptions["block"]>,
   ): number {
-    const height = this._getItemHeight(index);
-    const viewportHeight = this.graphics.canvas.clientHeight;
-
-    if (this.#layout.anchorMode === "top") {
-      switch (block) {
-        case "start":
-          return this._getAnchorAtOffset(index, 0);
-        case "center":
-          return this._getAnchorAtOffset(
-            index,
-            height / 2 - viewportHeight / 2,
-          );
-        case "end":
-          return this._getAnchorAtOffset(index, height - viewportHeight);
-      }
-    }
-
-    switch (block) {
-      case "start":
-        return this._getAnchorAtOffset(index, viewportHeight);
-      case "center":
-        return this._getAnchorAtOffset(index, height / 2 + viewportHeight / 2);
-      case "end":
-        return this._getAnchorAtOffset(index, height);
-    }
+    return getTargetAnchorForItem(
+      this.items.length,
+      index,
+      block,
+      this.#layout.anchorMode,
+      this.graphics.canvas.clientHeight,
+      this._getItemHeight.bind(this),
+    );
   }
 }

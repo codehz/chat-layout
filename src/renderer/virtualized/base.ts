@@ -3,28 +3,18 @@ import { BaseRenderer } from "../base";
 import {
   ListState,
   subscribeListState,
-  type InsertListItemsAnimationOptions,
   type ListStateChange,
 } from "../list-state";
-import {
-  buildJumpPath,
-  clamp,
-  getNow,
-  getAnchorAtDistance,
-  getProgress,
-  sameState,
-  smoothstep,
-} from "./base-animation";
-import {
-  type ControlledState,
-  type JumpAnimation,
-  type VirtualizedResolvedItem,
-} from "./base-types";
+import { clamp, getNow } from "./base-animation";
+import type { ControlledState, VirtualizedResolvedItem } from "./base-types";
+import { prepareFrameSession } from "./frame-session";
+import { JumpController } from "./jump-controller";
 import {
   TransitionController,
   type TransitionLifecycleAdapter,
   type TransitionPlanningAdapter,
   type TransitionRenderAdapter,
+  type VirtualizedRuntime,
 } from "./base-transition";
 import type {
   NormalizedListState,
@@ -65,11 +55,7 @@ export abstract class VirtualizedRenderer<
   static readonly MAX_JUMP_DURATION = 420;
   static readonly JUMP_DURATION_PER_PIXEL = 0.7;
 
-  #autoFollowLatch: "push" | "unshift" | undefined;
-  #controlledState: ControlledState | undefined;
-  #jumpAnimation: JumpAnimation | undefined;
-  #lastCommittedState: ControlledState | undefined;
-  #hasPendingListChange = false;
+  #jumpController: JumpController<T>;
   #transitionController = new TransitionController<C, T>();
 
   constructor(
@@ -80,6 +66,27 @@ export abstract class VirtualizedRenderer<
     },
   ) {
     super(graphics, options);
+    this.#jumpController = new JumpController<T>({
+      minJumpDuration: VirtualizedRenderer.MIN_JUMP_DURATION,
+      maxJumpDuration: VirtualizedRenderer.MAX_JUMP_DURATION,
+      jumpDurationPerPixel: VirtualizedRenderer.JUMP_DURATION_PER_PIXEL,
+      getItemCount: () => this.items.length,
+      readListState: this._readListState.bind(this),
+      normalizeListState: this._normalizeListState.bind(this),
+      readAnchor: this._readAnchor.bind(this),
+      applyAnchor: this._applyAnchor.bind(this),
+      getDefaultJumpBlock: this._getDefaultJumpBlock.bind(this),
+      getTargetAnchor: this._getTargetAnchor.bind(this),
+      clampItemIndex: this._clampItemIndex.bind(this),
+      getItemHeight: this._getItemHeight.bind(this),
+      canAutoFollowBoundaryInsert: (direction, count, position, offset) =>
+        this.#transitionController.canAutoFollowBoundaryInsert(
+          direction,
+          count,
+          position,
+          offset,
+        ),
+    });
     subscribeListState(options.list, this, (owner, change) => {
       owner.#handleListStateChange(change);
     });
@@ -117,35 +124,32 @@ export abstract class VirtualizedRenderer<
 
   /** Renders the current visible window. */
   render(feedback?: RenderFeedback): boolean {
-    this.#syncAutoFollowLatchBeforeFrame();
+    this.#jumpController.beforeFrame();
     const now = getNow();
     const keepAnimating = this._prepareRender(now);
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
       this.graphics.canvas;
     this.graphics.clearRect(0, 0, viewportWidth, viewportHeight);
 
-    let solution = this._resolveVisibleWindow(now);
-    let viewportTranslateY =
-      this.#transitionController.getViewportTranslateY(now);
-    this._captureVisibleItemSnapshot(solution, viewportTranslateY);
-    const requestSettleRedraw = this._pruneTransitionAnimations(
-      solution.window,
-    );
-    if (requestSettleRedraw) {
-      solution = this._resolveVisibleWindow(now);
-      viewportTranslateY =
-        this.#transitionController.getViewportTranslateY(now);
-      this._captureVisibleItemSnapshot(solution, viewportTranslateY);
-    }
+    const frame = prepareFrameSession({
+      now,
+      resolveVisibleWindow: (frameNow) => this._resolveVisibleWindow(frameNow),
+      getViewportTranslateY: (frameNow) =>
+        this.#transitionController.getViewportTranslateY(frameNow),
+      captureVisibleItemSnapshot: (solution, extraShift) =>
+        this._captureVisibleItemSnapshot(solution, extraShift),
+      pruneTransitionAnimations: (window) =>
+        this._pruneTransitionAnimations(window),
+    });
     const requestRedraw = this._renderVisibleWindow(
-      solution.window,
+      frame.solution.window,
       feedback,
-      viewportTranslateY,
+      frame.viewportTranslateY,
     );
-    this._commitListState(solution.normalizedState);
+    this._commitListState(frame.solution.normalizedState);
 
     return this._finishRender(
-      keepAnimating || requestRedraw || requestSettleRedraw,
+      keepAnimating || requestRedraw || frame.requestSettleRedraw,
     );
   }
 
@@ -155,22 +159,21 @@ export abstract class VirtualizedRenderer<
     y: number;
     type: "click" | "auxclick" | "hover";
   }): boolean {
-    this.#syncAutoFollowLatchBeforeFrame();
-    const now = getNow();
-    let solution = this._resolveVisibleWindow(now);
-    let viewportTranslateY =
-      this.#transitionController.getViewportTranslateY(now);
-    this._captureVisibleItemSnapshot(solution, viewportTranslateY);
-    if (this._pruneTransitionAnimations(solution.window)) {
-      solution = this._resolveVisibleWindow(now);
-      viewportTranslateY =
-        this.#transitionController.getViewportTranslateY(now);
-      this._captureVisibleItemSnapshot(solution, viewportTranslateY);
-    }
+    this.#jumpController.beforeFrame();
+    const frame = prepareFrameSession({
+      now: getNow(),
+      resolveVisibleWindow: (frameNow) => this._resolveVisibleWindow(frameNow),
+      getViewportTranslateY: (frameNow) =>
+        this.#transitionController.getViewportTranslateY(frameNow),
+      captureVisibleItemSnapshot: (solution, extraShift) =>
+        this._captureVisibleItemSnapshot(solution, extraShift),
+      pruneTransitionAnimations: (window) =>
+        this._pruneTransitionAnimations(window),
+    });
     return this._hittestVisibleWindow(
-      solution.window,
+      frame.solution.window,
       test,
-      viewportTranslateY,
+      frame.viewportTranslateY,
     );
   }
 
@@ -188,22 +191,14 @@ export abstract class VirtualizedRenderer<
   protected _commitListState(state: NormalizedListState): void {
     this.position = state.position;
     this.offset = state.offset;
-    this.#lastCommittedState = {
-      position: state.position,
-      offset: state.offset,
-    };
+    this.#jumpController.commit(state);
   }
 
   /**
    * Scrolls the viewport to the requested item index.
    */
   jumpTo(index: number, options: JumpToOptions = {}): void {
-    this.#clearAutoFollowLatch();
-    if (this.items.length === 0) {
-      this.#cancelJumpAnimation();
-      return;
-    }
-    this.#startJumpToIndex(index, options, { kind: "manual" });
+    this.#jumpController.jumpTo(index, options);
   }
 
   protected _resetRenderFeedback(feedback?: RenderFeedback): void {
@@ -304,9 +299,9 @@ export abstract class VirtualizedRenderer<
   protected _pruneTransitionAnimations(
     _window: VisibleWindow<unknown>,
   ): boolean {
-    return this.#transitionController.pruneInvisible({
-      onDeleteComplete: this.#handleDeleteComplete.bind(this),
-    });
+    return this.#transitionController.pruneInvisible(
+      this.#getTransitionLifecycleAdapter(),
+    );
   }
 
   protected _hittestVisibleWindow(
@@ -341,52 +336,16 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _prepareRender(now: number): boolean {
-    const keepTransitioning = this.#transitionController.prepare(now, {
-      onDeleteComplete: this.#handleDeleteComplete.bind(this),
-    });
-    const animation = this.#jumpAnimation;
-    if (animation == null) {
-      return keepTransitioning;
-    }
-    if (this.items.length === 0) {
-      this.#cancelJumpAnimation();
-      return keepTransitioning;
-    }
-    if (
-      this.#controlledState != null &&
-      !sameState(this.#controlledState, this.position, this.offset)
-    ) {
-      this.#clearAutoFollowLatch();
-      this.#cancelJumpAnimation();
-      return keepTransitioning;
-    }
-
-    const progress = getProgress(animation.startTime, animation.duration, now);
-    const eased = progress >= 1 ? 1 : smoothstep(progress);
-    const anchor = getAnchorAtDistance(
-      animation.path,
-      animation.path.totalDistance * eased,
+    const keepTransitioning = this.#transitionController.prepare(
+      now,
+      this.#getTransitionLifecycleAdapter(),
     );
-    this._applyAnchor(anchor);
-    animation.needsMoreFrames = progress < 1;
-    return keepTransitioning || animation.needsMoreFrames;
+    const keepJumping = this.#jumpController.prepare(now);
+    return keepTransitioning || keepJumping;
   }
 
   protected _finishRender(requestRedraw: boolean): boolean {
-    const animation = this.#jumpAnimation;
-    if (animation == null) {
-      return requestRedraw;
-    }
-
-    if (animation.needsMoreFrames) {
-      this.#controlledState = this._readListState();
-      return true;
-    }
-
-    const onComplete = animation.onComplete;
-    this.#cancelJumpAnimation();
-    onComplete?.();
-    return requestRedraw || this.#jumpAnimation != null;
+    return this.#jumpController.finishFrame(requestRedraw);
   }
 
   protected _clampItemIndex(index: number): number {
@@ -418,43 +377,6 @@ export abstract class VirtualizedRenderer<
     );
   }
 
-  protected _getAnchorAtOffset(index: number, offset: number): number {
-    if (this.items.length === 0) {
-      return 0;
-    }
-
-    let currentIndex = this._clampItemIndex(index);
-    let remaining = Number.isFinite(offset) ? offset : 0;
-    while (true) {
-      if (remaining < 0) {
-        if (currentIndex === 0) {
-          return 0;
-        }
-        currentIndex -= 1;
-        const height = this._getItemHeight(currentIndex);
-        if (height > 0) {
-          remaining += height;
-        }
-        continue;
-      }
-
-      const height = this._getItemHeight(currentIndex);
-      if (height > 0) {
-        if (remaining <= height) {
-          return currentIndex + remaining / height;
-        }
-        remaining -= height;
-      } else if (remaining === 0) {
-        return currentIndex;
-      }
-
-      if (currentIndex === this.items.length - 1) {
-        return this.items.length;
-      }
-      currentIndex += 1;
-    }
-  }
-
   protected abstract _normalizeListState(
     state: VisibleListState,
   ): NormalizedListState;
@@ -473,15 +395,6 @@ export abstract class VirtualizedRenderer<
     block: NonNullable<JumpToOptions["block"]>,
   ): number;
 
-  // ── Jump animation ─────────────────────────────────────────────────────────
-
-  #cancelJumpAnimation(): void {
-    this.#jumpAnimation = undefined;
-    this.#controlledState = undefined;
-  }
-
-  // ── Transition animation delegation ────────────────────────────────────────
-
   #handleDeleteComplete(item: T): void {
     this.options.list.finalizeDelete(item);
   }
@@ -492,283 +405,42 @@ export abstract class VirtualizedRenderer<
     };
   }
 
-  #getTransitionRenderAdapter(): TransitionRenderAdapter<C, T> {
+  #getVirtualizedRuntime(): VirtualizedRuntime<C, T> {
     return {
+      items: this.items,
+      position: this.position,
+      offset: this.offset,
       renderItem: this.options.renderItem,
       measureNode: this.measureRootNode.bind(this),
+      readVisibleRange: this._readVisibleRange.bind(this),
+      resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),
+    };
+  }
+
+  #getTransitionRenderAdapter(): TransitionRenderAdapter<C, T> {
+    const runtime = this.#getVirtualizedRuntime();
+    return {
+      renderItem: runtime.renderItem,
+      measureNode: runtime.measureNode,
       drawNode: this.drawRootNode.bind(this),
       getRootContext: this.getRootContext.bind(this),
       graphics: this.graphics,
-      getItemIndex: (item) => this.items.indexOf(item),
-      resolveVisibleWindowForState: (state, now) =>
-        this._resolveVisibleWindowForState(state, now),
     };
   }
 
   #getTransitionPlanningAdapter(): TransitionPlanningAdapter<C, T> {
     return {
-      items: this.items,
-      position: this.position,
-      offset: this.offset,
+      ...this.#getVirtualizedRuntime(),
       underflowAlign: this._getLayoutOptions().underflowAlign,
-      renderItem: this.options.renderItem,
-      measureNode: this.measureRootNode.bind(this),
-      readListState: this._readListState.bind(this),
-      readVisibleRange: this._readVisibleRange.bind(this),
-      resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),
-      resolveVisibleWindowForState: (state, now) =>
-        this._resolveVisibleWindowForState(state, now),
     };
   }
 
   #handleListStateChange(change: ListStateChange<T>): void {
-    this.#hasPendingListChange = true;
-    const followChange = this.#resolveAutoFollowChange(change);
-    const canChainAutoFollow =
-      followChange != null
-        ? this.#shouldChainAutoFollow(
-            followChange.direction,
-            followChange.animation,
-          )
-        : false;
-    const canLatchAutoFollow =
-      followChange != null
-        ? this.#shouldLatchAutoFollow(
-            followChange.direction,
-            followChange.count,
-            followChange.animation,
-          )
-        : false;
-    const canSnapshotAutoFollow =
-      followChange != null
-        ? this.#shouldAutoFollowFromSnapshot(
-            followChange.direction,
-            followChange.count,
-            followChange.animation,
-          )
-        : false;
-    if (
-      followChange != null &&
-      (canSnapshotAutoFollow || canChainAutoFollow || canLatchAutoFollow)
-    ) {
-      if (canChainAutoFollow) {
-        this.#rebaseJumpAnchorForBoundaryInsert(
-          followChange.direction,
-          followChange.count,
-          getNow(),
-        );
-      }
-      this.#autoFollowLatch = followChange.direction;
-      this.#transitionController.handleListStateChange(
-        { ...followChange.change, animation: undefined },
-        this.#getTransitionPlanningAdapter(),
-        this.#getTransitionLifecycleAdapter(),
-      );
-      this.#startJumpToIndex(
-        followChange.direction === "push" ? this.items.length - 1 : 0,
-        {
-          block: followChange.direction === "push" ? "end" : "start",
-          duration: followChange.animation?.duration,
-        },
-        { kind: "auto-follow", direction: followChange.direction },
-      );
-      return;
-    }
+    const nextChange = this.#jumpController.handleListStateChange(change);
     this.#transitionController.handleListStateChange(
-      change,
+      nextChange,
       this.#getTransitionPlanningAdapter(),
       this.#getTransitionLifecycleAdapter(),
     );
-  }
-
-  #startJumpToIndex(
-    index: number,
-    options: JumpToOptions,
-    source: JumpAnimation["source"],
-  ): void {
-    const targetIndex = this._clampItemIndex(index);
-    const currentState = this._normalizeListState(this._readListState());
-    const targetBlock = options.block ?? this._getDefaultJumpBlock();
-    const targetAnchor = this._getTargetAnchor(targetIndex, targetBlock);
-
-    const animated = options.animated ?? true;
-    if (!animated) {
-      this.#cancelJumpAnimation();
-      this._applyAnchor(targetAnchor);
-      options.onComplete?.();
-      return;
-    }
-
-    const startAnchor = this._readAnchor(currentState);
-    if (!Number.isFinite(startAnchor)) {
-      this.#cancelJumpAnimation();
-      this._applyAnchor(targetAnchor);
-      options.onComplete?.();
-      return;
-    }
-
-    const path = buildJumpPath(
-      this.items.length,
-      this._getItemHeight.bind(this),
-      startAnchor,
-      targetAnchor,
-    );
-    const duration = clamp(
-      options.duration ??
-        VirtualizedRenderer.MIN_JUMP_DURATION +
-          path.totalDistance * VirtualizedRenderer.JUMP_DURATION_PER_PIXEL,
-      0,
-      VirtualizedRenderer.MAX_JUMP_DURATION,
-    );
-
-    if (duration <= 0 || path.totalDistance <= Number.EPSILON) {
-      this.#cancelJumpAnimation();
-      this._applyAnchor(targetAnchor);
-      options.onComplete?.();
-      return;
-    }
-
-    this.#jumpAnimation = {
-      path,
-      startTime: getNow(),
-      duration,
-      needsMoreFrames: true,
-      onComplete: options.onComplete,
-      source,
-    };
-    this.#controlledState = this._readListState();
-  }
-
-  #resolveAutoFollowChange(change: ListStateChange<T>):
-    | {
-        change: Extract<
-          ListStateChange<T>,
-          { type: "push" } | { type: "unshift" }
-        >;
-        direction: "push" | "unshift";
-        count: number;
-        animation: InsertListItemsAnimationOptions | undefined;
-      }
-    | undefined {
-    switch (change.type) {
-      case "push":
-      case "unshift":
-        return change.animation?.followIfAtBoundary === true
-          ? {
-              change,
-              direction: change.type,
-              count: change.count,
-              animation: change.animation,
-            }
-          : undefined;
-      default:
-        return undefined;
-    }
-  }
-
-  #shouldAutoFollowFromSnapshot(
-    direction: "push" | "unshift",
-    count: number,
-    animation: InsertListItemsAnimationOptions | undefined,
-  ): boolean {
-    if (animation?.followIfAtBoundary !== true) {
-      return false;
-    }
-    return this.#transitionController.canAutoFollowBoundaryInsert(
-      direction,
-      count,
-      this.position,
-      this.offset,
-    );
-  }
-
-  #shouldLatchAutoFollow(
-    direction: "push" | "unshift",
-    count: number,
-    animation: InsertListItemsAnimationOptions | undefined,
-  ): boolean {
-    if (animation?.followIfAtBoundary !== true) {
-      return false;
-    }
-    if (!this.#matchesLastCommittedStateAfterBoundaryInsert(direction, count)) {
-      this.#clearAutoFollowLatch();
-      return false;
-    }
-    return this.#autoFollowLatch === direction;
-  }
-
-  #shouldChainAutoFollow(
-    direction: "push" | "unshift",
-    animation: InsertListItemsAnimationOptions | undefined,
-  ): boolean {
-    if (animation?.followIfAtBoundary !== true) {
-      return false;
-    }
-    return this.#jumpAnimation?.source.kind === "auto-follow"
-      ? this.#jumpAnimation.source.direction === direction
-      : false;
-  }
-
-  #rebaseJumpAnchorForBoundaryInsert(
-    direction: "push" | "unshift",
-    count: number,
-    now: number,
-  ): void {
-    const animation = this.#jumpAnimation;
-    if (animation == null) {
-      return;
-    }
-    const progress = getProgress(animation.startTime, animation.duration, now);
-    const eased = progress >= 1 ? 1 : smoothstep(progress);
-    const anchorAtNow = getAnchorAtDistance(
-      animation.path,
-      animation.path.totalDistance * eased,
-    );
-    this.#cancelJumpAnimation();
-    this._applyAnchor(
-      direction === "unshift" ? anchorAtNow + count : anchorAtNow,
-    );
-  }
-
-  #matchesLastCommittedStateAfterBoundaryInsert(
-    direction: "push" | "unshift",
-    count: number,
-  ): boolean {
-    const state = this.#lastCommittedState;
-    if (state == null) {
-      return false;
-    }
-    return sameState(
-      {
-        position:
-          direction === "unshift" && state.position != null
-            ? state.position + count
-            : state.position,
-        offset: state.offset,
-      },
-      this.position,
-      this.offset,
-    );
-  }
-
-  #clearAutoFollowLatch(): void {
-    this.#autoFollowLatch = undefined;
-  }
-
-  #syncAutoFollowLatchBeforeFrame(): void {
-    const currentState = this._readListState();
-    if (
-      !this.#hasPendingListChange &&
-      this.#jumpAnimation == null &&
-      this.#lastCommittedState != null &&
-      !sameState(
-        this.#lastCommittedState,
-        currentState.position,
-        currentState.offset,
-      )
-    ) {
-      this.#clearAutoFollowLatch();
-    }
-    this.#hasPendingListChange = false;
   }
 }
