@@ -234,7 +234,7 @@ function isIndexVisible(
   );
 }
 
-export function canAnimateExistingItem<T extends {}>(params: {
+function resolveAnimationEligibility<T extends {}>(params: {
   index: number;
   item: T;
   position: number | undefined;
@@ -258,6 +258,22 @@ export function canAnimateExistingItem<T extends {}>(params: {
     params.resolveVisibleWindow,
     params.readVisibleRange,
   );
+}
+
+export function canAnimateExistingItem<T extends {}>(params: {
+  index: number;
+  item: T;
+  position: number | undefined;
+  offset: number;
+  snapshot: VisibilitySnapshot<T>;
+  hasActiveTransition: boolean;
+  resolveVisibleWindow: () => VisibleWindowResult<unknown>;
+  readVisibleRange: (
+    top: number,
+    height: number,
+  ) => { top: number; bottom: number } | undefined;
+}): boolean {
+  return resolveAnimationEligibility(params);
 }
 
 export function resolveBoundaryInsertStrategy(
@@ -309,6 +325,13 @@ export function sampleActiveTransition<C extends CanvasRenderingContext2D>(
   transition: ActiveItemTransition<C>,
   now: number,
 ): SampledItemTransition<C> {
+  return sampleTransition(transition, now);
+}
+
+function sampleTransition<C extends CanvasRenderingContext2D>(
+  transition: ActiveItemTransition<C>,
+  now: number,
+): SampledItemTransition<C> {
   return {
     kind: transition.kind,
     slotHeight: sampleScalarAnimation(transition.height, now),
@@ -320,71 +343,34 @@ export function sampleActiveTransition<C extends CanvasRenderingContext2D>(
   };
 }
 
-function planUpdate<C extends CanvasRenderingContext2D>(params: {
-  duration: number;
-  canAnimate: boolean;
-  now: number;
-  currentVisualState: CurrentVisualState<C>;
-  nextNode: Node<C>;
-  nextHeight: number;
-}): ActiveItemTransition<C> | undefined {
-  if (
-    !params.canAnimate ||
-    params.duration <= 0 ||
-    !Number.isFinite(params.nextHeight)
-  ) {
-    return undefined;
-  }
-  const layers: LayerAnimation<C>[] = [];
-  if (params.currentVisualState.alpha > ALPHA_EPSILON) {
-    layers.push(
-      createLayerAnimation(
-        params.currentVisualState.node,
-        params.currentVisualState.alpha,
-        0,
-        params.now,
-        params.duration,
-        params.currentVisualState.translateY,
-        0,
-      ),
-    );
-  }
-  layers.push(
-    createLayerAnimation(
-      params.nextNode,
-      0,
-      1,
-      params.now,
-      params.duration,
-      params.currentVisualState.translateY,
-      0,
-    ),
-  );
-  return {
-    kind: "update",
-    layers,
-    height: createScalarAnimation(
-      params.currentVisualState.height,
-      params.nextHeight,
-      params.now,
-      params.duration,
-    ),
-    anchorPolicy: { mode: "flow" },
-    retention: "layout",
-  };
-}
-
-function planDelete<C extends CanvasRenderingContext2D>(params: {
-  duration: number;
-  canAnimate: boolean;
-  now: number;
-  currentVisualState: CurrentVisualState<C>;
-  startState: ControlledState;
-  startViewportY: number | undefined;
-}): ActiveItemTransition<C> | undefined {
+function planExistingItemTransition<C extends CanvasRenderingContext2D>(
+  params:
+    | {
+        kind: "update";
+        duration: number;
+        canAnimate: boolean;
+        now: number;
+        currentVisualState: CurrentVisualState<C>;
+        nextNode: Node<C>;
+        nextHeight: number;
+      }
+    | {
+        kind: "delete";
+        duration: number;
+        canAnimate: boolean;
+        now: number;
+        currentVisualState: CurrentVisualState<C>;
+        startState: ControlledState;
+        startViewportY: number | undefined;
+      },
+): ActiveItemTransition<C> | undefined {
   if (!params.canAnimate || params.duration <= 0) {
     return undefined;
   }
+  if (params.kind === "update" && !Number.isFinite(params.nextHeight)) {
+    return undefined;
+  }
+
   const layers: LayerAnimation<C>[] = [];
   if (params.currentVisualState.alpha > ALPHA_EPSILON) {
     layers.push(
@@ -399,6 +385,33 @@ function planDelete<C extends CanvasRenderingContext2D>(params: {
       ),
     );
   }
+
+  if (params.kind === "update") {
+    layers.push(
+      createLayerAnimation(
+        params.nextNode,
+        0,
+        1,
+        params.now,
+        params.duration,
+        params.currentVisualState.translateY,
+        0,
+      ),
+    );
+    return {
+      kind: "update",
+      layers,
+      height: createScalarAnimation(
+        params.currentVisualState.height,
+        params.nextHeight,
+        params.now,
+        params.duration,
+      ),
+      anchorPolicy: { mode: "flow" },
+      retention: "layout",
+    };
+  }
+
   return {
     kind: "delete",
     layers,
@@ -902,194 +915,195 @@ export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
   }
 }
 
-class TransitionPlanner<C extends CanvasRenderingContext2D, T extends {}> {
-  readonly #snapshot: VisibilitySnapshot<T>;
-  readonly #store: TransitionStore<C, T>;
-
-  constructor(snapshot: VisibilitySnapshot<T>, store: TransitionStore<C, T>) {
-    this.#snapshot = snapshot;
-    this.#store = store;
-  }
-
-  planUpdate(
-    prevItem: T,
-    nextItem: T,
-    duration: number | undefined,
-    now: number,
-    currentVisualState: CurrentVisualState<C>,
-    ctx: TransitionPlanningAdapter<C, T>,
-  ): ActiveItemTransition<C> | undefined {
-    const nextIndex = ctx.items.indexOf(nextItem);
-    const nextNode = ctx.renderItem(nextItem);
-    const nextHeight = ctx.measureNode(nextNode).height;
-    return planUpdate({
-      duration: normalizeDuration(duration),
-      canAnimate: canAnimateExistingItem({
-        index: nextIndex,
-        item: prevItem,
-        position: ctx.position,
-        offset: ctx.offset,
-        snapshot: this.#snapshot,
-        hasActiveTransition: this.#store.has(prevItem),
-        resolveVisibleWindow: ctx.resolveVisibleWindow,
-        readVisibleRange: ctx.readVisibleRange,
-      }),
-      now,
-      currentVisualState,
-      nextNode,
-      nextHeight,
-    });
-  }
-
-  planDelete(
-    item: T,
-    duration: number | undefined,
-    now: number,
-    currentVisualState: CurrentVisualState<C>,
-    ctx: TransitionPlanningAdapter<C, T>,
-  ): ActiveItemTransition<C> | undefined {
-    const index = ctx.items.indexOf(item);
-    const startState = ctx.readListState();
-    const startViewportY = resolveViewportYForState(item, startState, now, {
-      getItemIndex: (candidate) => ctx.items.indexOf(candidate as T),
-      resolveVisibleWindowForState: ctx.resolveVisibleWindowForState,
-    });
-    return planDelete({
-      duration: normalizeDuration(duration),
-      canAnimate: canAnimateExistingItem({
-        index,
-        item,
-        position: ctx.position,
-        offset: ctx.offset,
-        snapshot: this.#snapshot,
-        hasActiveTransition: this.#store.has(item),
-        resolveVisibleWindow: ctx.resolveVisibleWindow,
-        readVisibleRange: ctx.readVisibleRange,
-      }),
-      now,
-      currentVisualState,
-      startState,
-      startViewportY,
-    });
-  }
-
-  planBoundaryInsert(
-    direction: BoundaryInsertDirection,
-    count: number,
-    duration: number | undefined,
-    distance: number | undefined,
-    now: number,
-    currentTranslateY: number,
-    ctx: TransitionPlanningAdapter<C, T>,
-  ): BoundaryInsertPlan<C, T> | undefined {
-    const normalizedDuration = normalizeDuration(duration);
-    if (count <= 0 || normalizedDuration <= 0) {
-      return undefined;
-    }
-    const strategy = resolveBoundaryInsertStrategy(
-      direction,
-      ctx.underflowAlign,
-      this.#snapshot.matchesBoundaryInsertState(
-        direction,
-        count,
-        ctx.position,
-        ctx.offset,
-      ),
-    );
-    if (strategy === "hard-cut") {
-      return undefined;
-    }
-    const measuredItems = measureBoundaryInsertItems(direction, count, ctx);
-    if (measuredItems == null) {
-      return undefined;
-    }
-    return planBoundaryInsert({
-      direction,
-      duration: normalizedDuration,
-      distance,
-      now,
-      strategy,
-      snapshot: this.#snapshot,
-      currentTranslateY,
-      measuredItems,
-    });
-  }
+function planUpdateTransition<C extends CanvasRenderingContext2D, T extends {}>(
+  prevItem: T,
+  nextItem: T,
+  duration: number | undefined,
+  now: number,
+  currentVisualState: CurrentVisualState<C>,
+  ctx: TransitionPlanningAdapter<C, T>,
+  snapshot: VisibilitySnapshot<T>,
+  store: TransitionStore<C, T>,
+): ActiveItemTransition<C> | undefined {
+  const nextIndex = ctx.items.indexOf(nextItem);
+  const nextNode = ctx.renderItem(nextItem);
+  const nextHeight = ctx.measureNode(nextNode).height;
+  return planExistingItemTransition({
+    kind: "update",
+    duration: normalizeDuration(duration),
+    canAnimate: resolveAnimationEligibility({
+      index: nextIndex,
+      item: prevItem,
+      position: ctx.position,
+      offset: ctx.offset,
+      snapshot,
+      hasActiveTransition: store.has(prevItem),
+      resolveVisibleWindow: ctx.resolveVisibleWindow,
+      readVisibleRange: ctx.readVisibleRange,
+    }),
+    now,
+    currentVisualState,
+    nextNode,
+    nextHeight,
+  });
 }
 
-class TransitionSampler<C extends CanvasRenderingContext2D, T extends {}> {
-  readonly #store: TransitionStore<C, T>;
+function planDeleteTransition<C extends CanvasRenderingContext2D, T extends {}>(
+  item: T,
+  duration: number | undefined,
+  now: number,
+  currentVisualState: CurrentVisualState<C>,
+  ctx: TransitionPlanningAdapter<C, T>,
+  snapshot: VisibilitySnapshot<T>,
+  store: TransitionStore<C, T>,
+): ActiveItemTransition<C> | undefined {
+  const index = ctx.items.indexOf(item);
+  const startState = ctx.readListState();
+  const startViewportY = resolveViewportYForState(item, startState, now, {
+    getItemIndex: (candidate) => ctx.items.indexOf(candidate as T),
+    resolveVisibleWindowForState: ctx.resolveVisibleWindowForState,
+  });
+  return planExistingItemTransition({
+    kind: "delete",
+    duration: normalizeDuration(duration),
+    canAnimate: resolveAnimationEligibility({
+      index,
+      item,
+      position: ctx.position,
+      offset: ctx.offset,
+      snapshot,
+      hasActiveTransition: store.has(item),
+      resolveVisibleWindow: ctx.resolveVisibleWindow,
+      readVisibleRange: ctx.readVisibleRange,
+    }),
+    now,
+    currentVisualState,
+    startState,
+    startViewportY,
+  });
+}
 
-  constructor(store: TransitionStore<C, T>) {
-    this.#store = store;
+function planBoundaryInsertTransition<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  direction: BoundaryInsertDirection,
+  count: number,
+  duration: number | undefined,
+  distance: number | undefined,
+  now: number,
+  currentTranslateY: number,
+  ctx: TransitionPlanningAdapter<C, T>,
+  snapshot: VisibilitySnapshot<T>,
+): BoundaryInsertPlan<C, T> | undefined {
+  const normalizedDuration = normalizeDuration(duration);
+  if (count <= 0 || normalizedDuration <= 0) {
+    return undefined;
   }
+  const strategy = resolveBoundaryInsertStrategy(
+    direction,
+    ctx.underflowAlign,
+    snapshot.matchesBoundaryInsertState(
+      direction,
+      count,
+      ctx.position,
+      ctx.offset,
+    ),
+  );
+  if (strategy === "hard-cut") {
+    return undefined;
+  }
+  const measuredItems = measureBoundaryInsertItems(direction, count, ctx);
+  if (measuredItems == null) {
+    return undefined;
+  }
+  return planBoundaryInsert({
+    direction,
+    duration: normalizedDuration,
+    distance,
+    now,
+    strategy,
+    snapshot,
+    currentTranslateY,
+    measuredItems,
+  });
+}
 
-  getItemHeight(
-    item: T,
-    now: number,
-    adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
-  ): number {
-    const transition = this.#store.readActive(item, now);
-    if (transition != null) {
-      return sampleActiveTransition(transition, now).slotHeight;
-    }
+function getItemHeight<C extends CanvasRenderingContext2D, T extends {}>(
+  item: T,
+  now: number,
+  store: TransitionStore<C, T>,
+  adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
+): number {
+  const transition = store.readActive(item, now);
+  if (transition != null) {
+    return sampleTransition(transition, now).slotHeight;
+  }
+  const node = adapter.renderItem(item);
+  return adapter.measureNode(node).height;
+}
+
+function resolveTransitionedItem<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  item: T,
+  now: number,
+  store: TransitionStore<C, T>,
+  adapter: TransitionRenderAdapter<C, T>,
+  lifecycle: TransitionLifecycleAdapter<T>,
+): { value: VirtualizedResolvedItem; height: number } {
+  const transition = store.readActive(item, now, lifecycle);
+  if (transition == null) {
     const node = adapter.renderItem(item);
-    return adapter.measureNode(node).height;
-  }
-
-  resolveItem(
-    item: T,
-    now: number,
-    adapter: TransitionRenderAdapter<C, T>,
-    lifecycle: TransitionLifecycleAdapter<T>,
-  ): { value: VirtualizedResolvedItem; height: number } {
-    const transition = this.#store.readActive(item, now, lifecycle);
-    if (transition == null) {
-      const node = adapter.renderItem(item);
-      return {
-        value: {
-          draw: (y) => adapter.drawNode(node, 0, y),
-          hittest: (test, y) =>
-            node.hittest(adapter.getRootContext(), { ...test, y: test.y - y }),
-        },
-        height: adapter.measureNode(node).height,
-      };
-    }
-
-    const sampled = sampleActiveTransition(transition, now);
     return {
       value: {
-        draw: (y) =>
-          drawSampledLayers(item, transition, sampled, y, now, adapter),
-        hittest: () => false,
+        draw: (y) => adapter.drawNode(node, 0, y),
+        hittest: (test, y) =>
+          node.hittest(adapter.getRootContext(), { ...test, y: test.y - y }),
       },
-      height: sampled.slotHeight,
-    };
-  }
-
-  readCurrentVisualState(
-    item: T,
-    now: number,
-    adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
-  ): CurrentVisualState<C> {
-    const transition = this.#store.readActive(item, now);
-    if (transition != null && transition.layers.length > 0) {
-      const primaryLayer = transition.layers[transition.layers.length - 1]!;
-      return {
-        node: primaryLayer.node,
-        alpha: sampleScalarAnimation(primaryLayer.alpha, now),
-        height: sampleScalarAnimation(transition.height, now),
-        translateY: sampleScalarAnimation(primaryLayer.translateY, now),
-      };
-    }
-
-    const node = adapter.renderItem(item);
-    return {
-      node,
-      alpha: 1,
       height: adapter.measureNode(node).height,
-      translateY: 0,
     };
   }
+
+  const sampled = sampleTransition(transition, now);
+  return {
+    value: {
+      draw: (y) =>
+        drawSampledLayers(item, transition, sampled, y, now, adapter),
+      hittest: () => false,
+    },
+    height: sampled.slotHeight,
+  };
+}
+
+function readCurrentVisualState<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  item: T,
+  now: number,
+  store: TransitionStore<C, T>,
+  adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
+): CurrentVisualState<C> {
+  const transition = store.readActive(item, now);
+  if (transition != null && transition.layers.length > 0) {
+    const primaryLayer = transition.layers[transition.layers.length - 1]!;
+    return {
+      node: primaryLayer.node,
+      alpha: sampleScalarAnimation(primaryLayer.alpha, now),
+      height: sampleScalarAnimation(transition.height, now),
+      translateY: sampleScalarAnimation(primaryLayer.translateY, now),
+    };
+  }
+
+  const node = adapter.renderItem(item);
+  return {
+    node,
+    alpha: 1,
+    height: adapter.measureNode(node).height,
+    translateY: 0,
+  };
 }
 
 export class TransitionController<
@@ -1098,8 +1112,6 @@ export class TransitionController<
 > {
   #store = new TransitionStore<C, T>();
   #snapshot = new VisibilitySnapshot<T>();
-  #planner = new TransitionPlanner<C, T>(this.#snapshot, this.#store);
-  #sampler = new TransitionSampler<C, T>(this.#store);
   #viewportTranslateAnimation: ScalarAnimation | undefined;
 
   captureVisibilitySnapshot(
@@ -1147,7 +1159,7 @@ export class TransitionController<
     now: number,
     adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
   ): number {
-    return this.#sampler.getItemHeight(item, now, adapter);
+    return getItemHeight(item, now, this.#store, adapter);
   }
 
   resolveItem(
@@ -1156,7 +1168,7 @@ export class TransitionController<
     adapter: TransitionRenderAdapter<C, T>,
     lifecycle: TransitionLifecycleAdapter<T>,
   ): { value: VirtualizedResolvedItem; height: number } {
-    return this.#sampler.resolveItem(item, now, adapter, lifecycle);
+    return resolveTransitionedItem(item, now, this.#store, adapter, lifecycle);
   }
 
   handleListStateChange(
@@ -1222,18 +1234,21 @@ export class TransitionController<
     ctx: TransitionPlanningAdapter<C, T>,
   ): void {
     const now = getNow();
-    const currentVisualState = this.#sampler.readCurrentVisualState(
+    const currentVisualState = readCurrentVisualState(
       prevItem,
       now,
+      this.#store,
       ctx,
     );
-    const transition = this.#planner.planUpdate(
+    const transition = planUpdateTransition(
       prevItem,
       nextItem,
       duration,
       now,
       currentVisualState,
       ctx,
+      this.#snapshot,
+      this.#store,
     );
     if (transition == null) {
       this.#store.delete(prevItem);
@@ -1249,17 +1264,20 @@ export class TransitionController<
     lifecycle: TransitionLifecycleAdapter<T>,
   ): void {
     const now = getNow();
-    const currentVisualState = this.#sampler.readCurrentVisualState(
+    const currentVisualState = readCurrentVisualState(
       item,
       now,
+      this.#store,
       ctx,
     );
-    const transition = this.#planner.planDelete(
+    const transition = planDeleteTransition(
       item,
       duration,
       now,
       currentVisualState,
       ctx,
+      this.#snapshot,
+      this.#store,
     );
     if (transition == null) {
       this.#store.delete(item);
@@ -1277,7 +1295,7 @@ export class TransitionController<
     ctx: TransitionPlanningAdapter<C, T>,
   ): void {
     const now = getNow();
-    const plan = this.#planner.planBoundaryInsert(
+    const plan = planBoundaryInsertTransition(
       direction,
       count,
       duration,
@@ -1285,6 +1303,7 @@ export class TransitionController<
       now,
       this.getViewportTranslateY(now),
       ctx,
+      this.#snapshot,
     );
     if (plan == null) {
       return;

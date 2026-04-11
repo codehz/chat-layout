@@ -4,7 +4,9 @@ import type { Box, Context, HitTest, Node } from "../../src/types";
 import {
   TransitionStore,
   VisibilitySnapshot,
+  canAnimateExistingItem,
   resolveBoundaryInsertStrategy,
+  resolveGhostY,
   sampleActiveTransition,
   type ActiveItemTransition,
   type LayerAnimation,
@@ -67,6 +69,139 @@ function transition(
   };
 }
 
+function readVisibleRange(
+  top: number,
+  height: number,
+): { top: number; bottom: number } | undefined {
+  if (top + height <= 0 || top >= 100) {
+    return undefined;
+  }
+  return {
+    top: Math.max(0, -top),
+    bottom: Math.min(height, 100 - top),
+  };
+}
+
+function resolveVisibleWindow(
+  drawList: Array<{
+    idx: number;
+    offset: number;
+    height: number;
+  }>,
+): () => { window: { drawList: typeof drawList; shift: number } } {
+  return () => ({
+    window: {
+      drawList,
+      shift: 0,
+    },
+  });
+}
+
+describe("transition eligibility", () => {
+  test("uses the matching snapshot when available and otherwise falls back to the live solved window", () => {
+    const item = { id: "item" };
+    const snapshot = new VisibilitySnapshot<Item>();
+    snapshot.capture(
+      {
+        drawList: [{ idx: 0, offset: 10, height: 20 }],
+        shift: 0,
+      },
+      [0],
+      [item],
+      100,
+      { position: 0, offset: 0 },
+      0,
+      readVisibleRange,
+    );
+
+    expect(
+      canAnimateExistingItem({
+        index: 0,
+        item,
+        position: 0,
+        offset: 0,
+        snapshot,
+        hasActiveTransition: false,
+        resolveVisibleWindow: resolveVisibleWindow([]),
+        readVisibleRange,
+      }),
+    ).toBe(true);
+
+    expect(
+      canAnimateExistingItem({
+        index: 0,
+        item: { id: "hidden" },
+        position: 0,
+        offset: 0,
+        snapshot,
+        hasActiveTransition: false,
+        resolveVisibleWindow: resolveVisibleWindow([
+          { idx: 0, offset: 10, height: 20 },
+        ]),
+        readVisibleRange,
+      }),
+    ).toBe(false);
+
+    expect(
+      canAnimateExistingItem({
+        index: 0,
+        item: { id: "ghost" },
+        position: 0,
+        offset: 0,
+        snapshot,
+        hasActiveTransition: true,
+        resolveVisibleWindow: resolveVisibleWindow([]),
+        readVisibleRange,
+      }),
+    ).toBe(true);
+
+    expect(
+      canAnimateExistingItem({
+        index: 1,
+        item: { id: "live-visible" },
+        position: 1,
+        offset: 0,
+        snapshot,
+        hasActiveTransition: false,
+        resolveVisibleWindow: resolveVisibleWindow([
+          { idx: 1, offset: 15, height: 25 },
+        ]),
+        readVisibleRange,
+      }),
+    ).toBe(true);
+
+    expect(
+      canAnimateExistingItem({
+        index: 1,
+        item: { id: "live-hidden" },
+        position: 1,
+        offset: 0,
+        snapshot,
+        hasActiveTransition: false,
+        resolveVisibleWindow: resolveVisibleWindow([
+          { idx: 1, offset: 140, height: 25 },
+        ]),
+        readVisibleRange,
+      }),
+    ).toBe(false);
+
+    expect(
+      canAnimateExistingItem({
+        index: -1,
+        item,
+        position: 0,
+        offset: 0,
+        snapshot,
+        hasActiveTransition: true,
+        resolveVisibleWindow: resolveVisibleWindow([
+          { idx: 0, offset: 10, height: 20 },
+        ]),
+        readVisibleRange,
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("transition boundary insert strategy", () => {
   test("strategy matrix depends only on direction, underflow alignment, and short-list snapshot", () => {
     expect(resolveBoundaryInsertStrategy("push", "top", false)).toBe(
@@ -94,6 +229,31 @@ describe("transition boundary insert strategy", () => {
     expect(resolveBoundaryInsertStrategy("unshift", "bottom", true)).toBe(
       "item-enter",
     );
+  });
+});
+
+describe("ghost positioning", () => {
+  test("falls back to flow positioning when the locked baseline can no longer be resolved", () => {
+    const item = { id: "ghost" };
+    const locked = transition("delete", {
+      anchorPolicy: {
+        mode: "lockToViewport",
+        startState: { position: 0, offset: 0 },
+        startViewportY: 24,
+      },
+    });
+
+    expect(
+      resolveGhostY(item, locked, 60, 50, {
+        getItemIndex: () => 0,
+        resolveVisibleWindowForState: () => ({
+          window: {
+            drawList: [],
+            shift: 0,
+          },
+        }),
+      }),
+    ).toBe(60);
   });
 });
 
@@ -134,6 +294,37 @@ describe("transition sampling", () => {
     expect(sampledInsert.layers).toHaveLength(1);
     expect(sampledInsert.layers[0]?.alpha).toBeCloseTo(0.5);
     expect(sampledInsert.layers[0]?.translateY).toBeCloseTo(12);
+  });
+});
+
+describe("visibility snapshot", () => {
+  test("tracks short-list gaps and expected boundary-insert state", () => {
+    const a = { id: "a" };
+    const b = { id: "b" };
+    const snapshot = new VisibilitySnapshot<Item>();
+
+    snapshot.capture(
+      {
+        drawList: [
+          { idx: 0, offset: 10, height: 20 },
+          { idx: 1, offset: 30, height: 20 },
+        ],
+        shift: 0,
+      },
+      [0, 1],
+      [a, b],
+      80,
+      { position: 1, offset: 5 },
+      0,
+      readVisibleRange,
+    );
+
+    expect(snapshot.coversShortList).toBe(true);
+    expect(snapshot.topGap).toBe(10);
+    expect(snapshot.bottomGap).toBe(30);
+    expect(snapshot.matchesBoundaryInsertState("push", 2, 1, 5)).toBe(true);
+    expect(snapshot.matchesBoundaryInsertState("unshift", 2, 3, 5)).toBe(true);
+    expect(snapshot.matchesBoundaryInsertState("unshift", 2, 1, 5)).toBe(false);
   });
 });
 
