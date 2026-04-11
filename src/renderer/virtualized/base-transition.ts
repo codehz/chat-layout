@@ -15,13 +15,10 @@ import {
 import {
   ALPHA_EPSILON,
   type ControlledState,
-  type ItemTransition,
-  type TransitionLayer,
   type VirtualizedResolvedItem,
 } from "./base-types";
 
-/** Rendering services delegated to the host VirtualizedRenderer. */
-export type TransitionRendererAdapter<
+export type TransitionRenderAdapter<
   C extends CanvasRenderingContext2D,
   T extends {},
 > = {
@@ -31,43 +28,24 @@ export type TransitionRendererAdapter<
   getRootContext: () => Context<C>;
   graphics: C;
   getItemIndex: (item: T) => number;
-  readListState: () => ControlledState;
   resolveVisibleWindowForState: (
     state: ControlledState,
     now: number,
   ) => VisibleWindowResult<unknown>;
+};
+
+export type TransitionLifecycleAdapter<T extends {}> = {
   onDeleteComplete: (item: T) => void;
 };
 
-type SampledLayer<C extends CanvasRenderingContext2D> = {
-  alpha: number;
-  node: Node<C>;
-  translateY: number;
-};
-
-type CurrentVisualState<C extends CanvasRenderingContext2D> = {
-  node: Node<C>;
-  alpha: number;
-  height: number;
-  translateY: number;
-};
-
-type ViewportTranslateAnimation = {
-  fromTranslateY: number;
-  toTranslateY: number;
-  startTime: number;
-  duration: number;
-};
-
-/** State context needed to decide whether a transition can start. */
-export type TransitionContext<
+export type TransitionPlanningAdapter<
   C extends CanvasRenderingContext2D,
   T extends {},
-> = {
+> = Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode"> & {
   items: readonly T[];
   position: number | undefined;
   offset: number;
-  layout: ResolvedListLayoutOptions;
+  underflowAlign: ResolvedListLayoutOptions["underflowAlign"];
   readListState: () => ControlledState;
   readVisibleRange: (
     top: number,
@@ -78,35 +56,646 @@ export type TransitionContext<
     state: ControlledState,
     now: number,
   ) => VisibleWindowResult<unknown>;
-} & TransitionRendererAdapter<C, T>;
+};
 
-/**
- * Self-contained subsystem that manages mutation-driven item transitions and
- * viewport compensation for a VirtualizedRenderer.
- */
-export class TransitionController<
+export type ScalarAnimation = {
+  from: number;
+  to: number;
+  startTime: number;
+  duration: number;
+};
+
+export type LayerAnimation<C extends CanvasRenderingContext2D> = {
+  node: Node<C>;
+  alpha: ScalarAnimation;
+  translateY: ScalarAnimation;
+};
+
+export type TransitionAnchorPolicy =
+  | {
+      mode: "flow";
+    }
+  | {
+      mode: "lockToViewport";
+      startState: ControlledState;
+      startViewportY: number;
+    };
+
+export type ActiveItemTransition<C extends CanvasRenderingContext2D> = {
+  kind: "update" | "delete" | "insert";
+  layers: LayerAnimation<C>[];
+  height: ScalarAnimation;
+  anchorPolicy: TransitionAnchorPolicy;
+  visibility: "drawn" | "visible";
+};
+
+export type SampledLayer<C extends CanvasRenderingContext2D> = {
+  alpha: number;
+  node: Node<C>;
+  translateY: number;
+};
+
+export type SampledItemTransition<C extends CanvasRenderingContext2D> = {
+  kind: ActiveItemTransition<C>["kind"];
+  slotHeight: number;
+  layers: SampledLayer<C>[];
+  anchorPolicy: TransitionAnchorPolicy;
+  visibility: ActiveItemTransition<C>["visibility"];
+};
+
+export type BoundaryInsertDirection = "push" | "unshift";
+
+export type BoundaryInsertStrategy =
+  | "item-enter"
+  | "viewport-slide"
+  | "hard-cut";
+
+type CurrentVisualState<C extends CanvasRenderingContext2D> = {
+  node: Node<C>;
+  alpha: number;
+  height: number;
+  translateY: number;
+};
+
+type BoundaryInsertItemPlan<
   C extends CanvasRenderingContext2D,
   T extends {},
-> {
-  #itemTransitions = new WeakMap<T, ItemTransition<C>>();
-  #activeTransitionItems = new Set<T>();
-  #viewportTranslateAnimation: ViewportTranslateAnimation | undefined;
+> = {
+  kind: "item-enter";
+  entries: Array<{
+    item: T;
+    transition: ActiveItemTransition<C>;
+  }>;
+};
 
-  // Visibility snapshot used for transition gating and offscreen pruning.
+type BoundaryInsertViewportPlan = {
+  kind: "viewport-slide";
+  animation: ScalarAnimation;
+};
+
+type BoundaryInsertPlan<C extends CanvasRenderingContext2D, T extends {}> =
+  | BoundaryInsertItemPlan<C, T>
+  | BoundaryInsertViewportPlan;
+
+type MeasuredItem<C extends CanvasRenderingContext2D, T extends {}> = {
+  item: T;
+  node: Node<C>;
+  height: number;
+};
+
+function isFinitePositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
+}
+
+function normalizeDuration(duration: number | undefined): number {
+  return Math.max(
+    0,
+    typeof duration === "number" && Number.isFinite(duration) ? duration : 0,
+  );
+}
+
+function createScalarAnimation(
+  from: number,
+  to: number,
+  startTime: number,
+  duration: number,
+): ScalarAnimation {
+  return {
+    from,
+    to,
+    startTime,
+    duration,
+  };
+}
+
+function createLayerAnimation<C extends CanvasRenderingContext2D>(
+  node: Node<C>,
+  fromAlpha: number,
+  toAlpha: number,
+  startTime: number,
+  duration: number,
+  fromTranslateY: number,
+  toTranslateY: number,
+): LayerAnimation<C> {
+  return {
+    node,
+    alpha: createScalarAnimation(fromAlpha, toAlpha, startTime, duration),
+    translateY: createScalarAnimation(
+      fromTranslateY,
+      toTranslateY,
+      startTime,
+      duration,
+    ),
+  };
+}
+
+function findVisibleEntry(
+  index: number,
+  resolveVisibleWindow: () => VisibleWindowResult<unknown>,
+  readVisibleRange: (
+    top: number,
+    height: number,
+  ) => { top: number; bottom: number } | undefined,
+):
+  | {
+      idx: number;
+      offset: number;
+      height: number;
+    }
+  | undefined {
+  if (index < 0) {
+    return undefined;
+  }
+  const solution = resolveVisibleWindow();
+  for (const entry of solution.window.drawList) {
+    if (entry.idx !== index) {
+      continue;
+    }
+    if (
+      readVisibleRange(entry.offset + solution.window.shift, entry.height) !=
+      null
+    ) {
+      return entry;
+    }
+  }
+  return undefined;
+}
+
+function isIndexVisible(
+  index: number,
+  resolveVisibleWindow: () => VisibleWindowResult<unknown>,
+  readVisibleRange: (
+    top: number,
+    height: number,
+  ) => { top: number; bottom: number } | undefined,
+): boolean {
+  return (
+    findVisibleEntry(index, resolveVisibleWindow, readVisibleRange) != null
+  );
+}
+
+export function canAnimateExistingItem<T extends {}>(params: {
+  index: number;
+  item: T;
+  position: number | undefined;
+  offset: number;
+  snapshot: VisibilitySnapshot<T>;
+  hasActiveTransition: boolean;
+  resolveVisibleWindow: () => VisibleWindowResult<unknown>;
+  readVisibleRange: (
+    top: number,
+    height: number,
+  ) => { top: number; bottom: number } | undefined;
+}): boolean {
+  if (params.index < 0) {
+    return false;
+  }
+  if (params.snapshot.matchesCurrentState(params.position, params.offset)) {
+    return params.snapshot.isVisible(params.item) || params.hasActiveTransition;
+  }
+  return isIndexVisible(
+    params.index,
+    params.resolveVisibleWindow,
+    params.readVisibleRange,
+  );
+}
+
+export function resolveBoundaryInsertStrategy(
+  direction: BoundaryInsertDirection,
+  underflowAlign: ResolvedListLayoutOptions["underflowAlign"],
+  coversShortListSnapshot: boolean,
+): BoundaryInsertStrategy {
+  if (!coversShortListSnapshot) {
+    return "hard-cut";
+  }
+  if (
+    (direction === "push" && underflowAlign === "bottom") ||
+    (direction === "unshift" && underflowAlign === "top")
+  ) {
+    return "viewport-slide";
+  }
+  return "item-enter";
+}
+
+export function sampleScalarAnimation(
+  animation: ScalarAnimation,
+  now: number,
+): number {
+  return interpolate(
+    animation.from,
+    animation.to,
+    animation.startTime,
+    animation.duration,
+    now,
+  );
+}
+
+export function sampleLayerAnimation<C extends CanvasRenderingContext2D>(
+  layer: LayerAnimation<C>,
+  now: number,
+): SampledLayer<C> | undefined {
+  const alpha = sampleScalarAnimation(layer.alpha, now);
+  if (alpha <= ALPHA_EPSILON) {
+    return undefined;
+  }
+  return {
+    alpha,
+    node: layer.node,
+    translateY: sampleScalarAnimation(layer.translateY, now),
+  };
+}
+
+export function sampleActiveTransition<C extends CanvasRenderingContext2D>(
+  transition: ActiveItemTransition<C>,
+  now: number,
+): SampledItemTransition<C> {
+  return {
+    kind: transition.kind,
+    slotHeight: sampleScalarAnimation(transition.height, now),
+    layers: transition.layers
+      .map((layer) => sampleLayerAnimation(layer, now))
+      .filter((layer): layer is SampledLayer<C> => layer != null),
+    anchorPolicy: transition.anchorPolicy,
+    visibility: transition.visibility,
+  };
+}
+
+function planUpdate<C extends CanvasRenderingContext2D>(params: {
+  duration: number;
+  canAnimate: boolean;
+  now: number;
+  currentVisualState: CurrentVisualState<C>;
+  nextNode: Node<C>;
+  nextHeight: number;
+}): ActiveItemTransition<C> | undefined {
+  if (
+    !params.canAnimate ||
+    params.duration <= 0 ||
+    !Number.isFinite(params.nextHeight)
+  ) {
+    return undefined;
+  }
+  const layers: LayerAnimation<C>[] = [];
+  if (params.currentVisualState.alpha > ALPHA_EPSILON) {
+    layers.push(
+      createLayerAnimation(
+        params.currentVisualState.node,
+        params.currentVisualState.alpha,
+        0,
+        params.now,
+        params.duration,
+        params.currentVisualState.translateY,
+        0,
+      ),
+    );
+  }
+  layers.push(
+    createLayerAnimation(
+      params.nextNode,
+      0,
+      1,
+      params.now,
+      params.duration,
+      params.currentVisualState.translateY,
+      0,
+    ),
+  );
+  return {
+    kind: "update",
+    layers,
+    height: createScalarAnimation(
+      params.currentVisualState.height,
+      params.nextHeight,
+      params.now,
+      params.duration,
+    ),
+    anchorPolicy: { mode: "flow" },
+    visibility: "visible",
+  };
+}
+
+function planDelete<C extends CanvasRenderingContext2D>(params: {
+  duration: number;
+  canAnimate: boolean;
+  now: number;
+  currentVisualState: CurrentVisualState<C>;
+  startState: ControlledState;
+  startViewportY: number | undefined;
+}): ActiveItemTransition<C> | undefined {
+  if (!params.canAnimate || params.duration <= 0) {
+    return undefined;
+  }
+  const layers: LayerAnimation<C>[] = [];
+  if (params.currentVisualState.alpha > ALPHA_EPSILON) {
+    layers.push(
+      createLayerAnimation(
+        params.currentVisualState.node,
+        params.currentVisualState.alpha,
+        0,
+        params.now,
+        params.duration,
+        params.currentVisualState.translateY,
+        0,
+      ),
+    );
+  }
+  return {
+    kind: "delete",
+    layers,
+    height: createScalarAnimation(
+      params.currentVisualState.height,
+      0,
+      params.now,
+      params.duration,
+    ),
+    anchorPolicy:
+      params.startViewportY == null
+        ? { mode: "flow" }
+        : {
+            mode: "lockToViewport",
+            startState: params.startState,
+            startViewportY: params.startViewportY,
+          },
+    visibility: "visible",
+  };
+}
+
+function planViewportShift(params: {
+  currentTranslateY: number;
+  travel: number;
+  direction: "positive" | "negative";
+  now: number;
+  duration: number;
+}): ScalarAnimation | undefined {
+  if (!isFinitePositive(params.travel) || params.duration <= 0) {
+    return undefined;
+  }
+  const from =
+    params.direction === "positive"
+      ? params.currentTranslateY + params.travel
+      : params.currentTranslateY - params.travel;
+  return createScalarAnimation(from, 0, params.now, params.duration);
+}
+
+function planBoundaryInsert<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(params: {
+  direction: BoundaryInsertDirection;
+  duration: number;
+  distance: number | undefined;
+  now: number;
+  strategy: BoundaryInsertStrategy;
+  snapshot: VisibilitySnapshot<T>;
+  currentTranslateY: number;
+  measuredItems: MeasuredItem<C, T>[];
+}): BoundaryInsertPlan<C, T> | undefined {
+  switch (params.strategy) {
+    case "hard-cut":
+      return undefined;
+    case "item-enter":
+      return planBoundaryInsertItems(params);
+    case "viewport-slide":
+      return planBoundaryInsertViewportShift(params);
+  }
+}
+
+function planBoundaryInsertItems<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(params: {
+  direction: BoundaryInsertDirection;
+  duration: number;
+  distance: number | undefined;
+  now: number;
+  measuredItems: MeasuredItem<C, T>[];
+}): BoundaryInsertItemPlan<C, T> | undefined {
+  const entries: BoundaryInsertItemPlan<C, T>["entries"] = [];
+  const signedDistance = params.direction === "push" ? 1 : -1;
+  for (const { item, node, height } of params.measuredItems) {
+    if (!Number.isFinite(height) || height < 0) {
+      return undefined;
+    }
+    const resolvedDistance =
+      typeof params.distance === "number" && Number.isFinite(params.distance)
+        ? Math.max(0, params.distance)
+        : Math.min(24, height);
+    entries.push({
+      item,
+      transition: {
+        kind: "insert",
+        layers: [
+          createLayerAnimation(
+            node,
+            0,
+            1,
+            params.now,
+            params.duration,
+            signedDistance * resolvedDistance,
+            0,
+          ),
+        ],
+        height: createScalarAnimation(
+          height,
+          height,
+          params.now,
+          params.duration,
+        ),
+        anchorPolicy: { mode: "flow" },
+        visibility: "drawn",
+      },
+    });
+  }
+  return entries.length === 0 ? undefined : { kind: "item-enter", entries };
+}
+
+function planBoundaryInsertViewportShift<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(params: {
+  direction: BoundaryInsertDirection;
+  duration: number;
+  now: number;
+  snapshot: VisibilitySnapshot<T>;
+  currentTranslateY: number;
+  measuredItems: MeasuredItem<C, T>[];
+}): BoundaryInsertViewportPlan | undefined {
+  let insertedHeight = 0;
+  for (const { height } of params.measuredItems) {
+    if (!Number.isFinite(height) || height <= 0) {
+      return undefined;
+    }
+    insertedHeight += height;
+  }
+  if (!isFinitePositive(insertedHeight)) {
+    return undefined;
+  }
+
+  const gap =
+    params.direction === "push"
+      ? params.snapshot.topGap
+      : params.snapshot.bottomGap;
+  const travel = Math.min(insertedHeight, gap);
+  const animation = planViewportShift({
+    currentTranslateY: params.currentTranslateY,
+    travel,
+    direction: params.direction === "push" ? "positive" : "negative",
+    now: params.now,
+    duration: params.duration,
+  });
+  return animation == null ? undefined : { kind: "viewport-slide", animation };
+}
+
+function measureBoundaryInsertItems<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  direction: BoundaryInsertDirection,
+  count: number,
+  ctx: TransitionPlanningAdapter<C, T>,
+): MeasuredItem<C, T>[] | undefined {
+  const start = direction === "push" ? ctx.items.length - count : 0;
+  const end =
+    direction === "push" ? ctx.items.length : Math.min(count, ctx.items.length);
+  if (start < 0 || end < start) {
+    return undefined;
+  }
+
+  const measured: MeasuredItem<C, T>[] = [];
+  for (let index = start; index < end; index += 1) {
+    const item = ctx.items[index];
+    if (item == null) {
+      continue;
+    }
+    const node = ctx.renderItem(item);
+    const height = ctx.measureNode(node).height;
+    measured.push({ item, node, height });
+  }
+  return measured;
+}
+
+function resolveViewportYForState<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  item: T,
+  state: ControlledState,
+  now: number,
+  adapter: Pick<
+    TransitionRenderAdapter<C, T>,
+    "getItemIndex" | "resolveVisibleWindowForState"
+  >,
+): number | undefined {
+  const index = adapter.getItemIndex(item);
+  if (index < 0) {
+    return undefined;
+  }
+
+  const solution = adapter.resolveVisibleWindowForState(state, now);
+  const entry = solution.window.drawList.find((candidate) => {
+    return candidate.idx === index;
+  });
+  if (entry == null) {
+    return undefined;
+  }
+  const viewportY = entry.offset + solution.window.shift;
+  return Number.isFinite(viewportY) ? viewportY : undefined;
+}
+
+export function resolveGhostY<C extends CanvasRenderingContext2D, T extends {}>(
+  item: T,
+  transition: ActiveItemTransition<C>,
+  y: number,
+  now: number,
+  adapter: Pick<
+    TransitionRenderAdapter<C, T>,
+    "getItemIndex" | "resolveVisibleWindowForState"
+  >,
+): number {
+  if (transition.anchorPolicy.mode !== "lockToViewport") {
+    return y;
+  }
+
+  const baselineY = resolveViewportYForState(
+    item,
+    transition.anchorPolicy.startState,
+    now,
+    adapter,
+  );
+  if (baselineY == null) {
+    return y;
+  }
+  return transition.anchorPolicy.startViewportY + (y - baselineY);
+}
+
+export function drawSampledLayers<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  item: T,
+  transition: ActiveItemTransition<C>,
+  sampled: SampledItemTransition<C>,
+  y: number,
+  now: number,
+  adapter: Pick<
+    TransitionRenderAdapter<C, T>,
+    "drawNode" | "graphics" | "getItemIndex" | "resolveVisibleWindowForState"
+  >,
+): boolean {
+  if (sampled.slotHeight <= 0) {
+    return false;
+  }
+
+  const resolvedY = resolveGhostY(item, transition, y, now, adapter);
+  let result = false;
+  for (const layer of sampled.layers) {
+    const alpha = clamp(layer.alpha, 0, 1);
+    if (alpha <= ALPHA_EPSILON) {
+      continue;
+    }
+    adapter.graphics.save();
+    try {
+      if (typeof adapter.graphics.globalAlpha === "number") {
+        adapter.graphics.globalAlpha *= alpha;
+      }
+      if (adapter.drawNode(layer.node, 0, resolvedY + layer.translateY)) {
+        result = true;
+      }
+    } finally {
+      adapter.graphics.restore();
+    }
+  }
+  return result;
+}
+
+export class VisibilitySnapshot<T extends {}> {
   #drawnItems = new Set<T>();
   #visibleItems = new Set<T>();
-  #hasVisibilitySnapshot = false;
-  #visibilitySnapshotState: ControlledState | undefined;
-  #visibilitySnapshotCoversShortList = false;
-  #visibilitySnapshotTopGap = 0;
-  #visibilitySnapshotBottomGap = 0;
+  #hasSnapshot = false;
+  #snapshotState: ControlledState | undefined;
+  #coversShortList = false;
+  #topGap = 0;
+  #bottomGap = 0;
 
-  captureVisibilitySnapshot(
+  get coversShortList(): boolean {
+    return (
+      this.#hasSnapshot && this.#snapshotState != null && this.#coversShortList
+    );
+  }
+
+  get topGap(): number {
+    return this.#topGap;
+  }
+
+  get bottomGap(): number {
+    return this.#bottomGap;
+  }
+
+  capture(
     window: VisibleWindow<unknown>,
     items: readonly T[],
     viewportHeight: number,
     snapshotState: ControlledState,
-    layout: ResolvedListLayoutOptions,
     extraShift: number,
     readVisibleRange: (
       top: number,
@@ -120,30 +709,34 @@ export class TransitionController<
     let topMostY = Number.POSITIVE_INFINITY;
     let bottomMostY = Number.NEGATIVE_INFINITY;
     const effectiveShift = window.shift + extraShift;
+
     for (const { idx, offset, height } of window.drawList) {
       minVisibleIndex = Math.min(minVisibleIndex, idx);
       maxVisibleIndex = Math.max(maxVisibleIndex, idx);
       const y = offset + effectiveShift;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
+
       const item = items[idx];
       if (item != null) {
         nextDrawnItems.add(item);
       }
-      if (readVisibleRange(offset + effectiveShift, height) == null) {
-        continue;
-      }
-      if (item == null) {
+      if (
+        item == null ||
+        readVisibleRange(offset + effectiveShift, height) == null
+      ) {
         continue;
       }
       nextVisibleItems.add(item);
     }
+
     this.#drawnItems = nextDrawnItems;
     this.#visibleItems = nextVisibleItems;
-    this.#hasVisibilitySnapshot = true;
-    this.#visibilitySnapshotState = snapshotState;
+    this.#hasSnapshot = true;
+    this.#snapshotState = snapshotState;
+
     const contentHeight = bottomMostY - topMostY;
-    this.#visibilitySnapshotCoversShortList =
+    this.#coversShortList =
       window.drawList.length > 0 &&
       items.length > 0 &&
       window.drawList.length === items.length &&
@@ -152,122 +745,291 @@ export class TransitionController<
       topMostY >= -Number.EPSILON &&
       bottomMostY <= viewportHeight + Number.EPSILON &&
       contentHeight < viewportHeight - Number.EPSILON;
-    this.#visibilitySnapshotTopGap = this.#visibilitySnapshotCoversShortList
-      ? Math.max(0, topMostY)
-      : 0;
-    this.#visibilitySnapshotBottomGap = this.#visibilitySnapshotCoversShortList
+    this.#topGap = this.#coversShortList ? Math.max(0, topMostY) : 0;
+    this.#bottomGap = this.#coversShortList
       ? Math.max(0, viewportHeight - bottomMostY)
       : 0;
   }
 
-  /**
-   * Removes transitions for items that are no longer visible.
-   * Returns true if any transition was canceled or finalized.
-   */
-  pruneInvisible(
-    adapter: Pick<TransitionRendererAdapter<C, T>, "onDeleteComplete">,
-  ): boolean {
-    let changed = false;
-    for (const item of [...this.#activeTransitionItems]) {
-      const transition = this.#itemTransitions.get(item);
-      const isTracked =
-        transition?.kind === "insert"
-          ? this.#drawnItems.has(item)
-          : this.#visibleItems.has(item);
-      if (isTracked) {
-        continue;
-      }
-      this.#itemTransitions.delete(item);
-      this.#activeTransitionItems.delete(item);
-      if (transition?.kind === "delete") {
-        adapter.onDeleteComplete(item);
-      }
-      changed = true;
-    }
-    return changed;
-  }
-
-  /** Advance all active transitions and return true if any are still running. */
-  prepare(
-    now: number,
-    adapter: Pick<TransitionRendererAdapter<C, T>, "onDeleteComplete">,
-  ): boolean {
-    let keepAnimating = false;
-    this.#cleanupViewportTranslateAnimation(now);
-    if (this.#viewportTranslateAnimation != null) {
-      keepAnimating = true;
-    }
-    for (const item of [...this.#activeTransitionItems]) {
-      if (this.readTransition(item, now, adapter) != null) {
-        keepAnimating = true;
-      }
-    }
-    return keepAnimating;
-  }
-
-  getViewportTranslateY(now: number): number {
-    this.#cleanupViewportTranslateAnimation(now);
-    const transition = this.#viewportTranslateAnimation;
-    if (transition == null) {
-      return 0;
-    }
-    return interpolate(
-      transition.fromTranslateY,
-      transition.toTranslateY,
-      transition.startTime,
-      transition.duration,
-      now,
+  matchesCurrentState(position: number | undefined, offset: number): boolean {
+    return (
+      this.#hasSnapshot &&
+      this.#snapshotState != null &&
+      sameState(this.#snapshotState, position, offset)
     );
   }
 
-  /**
-   * Returns the active transition for an item, or undefined if none / already
-   * completed (and cleans up completed transitions as a side effect).
-   */
-  readTransition(
+  matchesBoundaryInsertState(
+    direction: BoundaryInsertDirection,
+    count: number,
+    position: number | undefined,
+    offset: number,
+  ): boolean {
+    if (!this.coversShortList || this.#snapshotState == null) {
+      return false;
+    }
+    const expectedPosition =
+      direction === "unshift" && this.#snapshotState.position != null
+        ? this.#snapshotState.position + count
+        : this.#snapshotState.position;
+    return sameState(
+      {
+        position: expectedPosition,
+        offset: this.#snapshotState.offset,
+      },
+      position,
+      offset,
+    );
+  }
+
+  isVisible(item: T): boolean {
+    return this.#visibleItems.has(item);
+  }
+
+  tracks(item: T, visibility: "drawn" | "visible"): boolean {
+    return visibility === "drawn"
+      ? this.#drawnItems.has(item)
+      : this.#visibleItems.has(item);
+  }
+
+  reset(): void {
+    this.#drawnItems.clear();
+    this.#visibleItems.clear();
+    this.#hasSnapshot = false;
+    this.#snapshotState = undefined;
+    this.#coversShortList = false;
+    this.#topGap = 0;
+    this.#bottomGap = 0;
+  }
+}
+
+export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
+  #transitions = new Map<T, ActiveItemTransition<C>>();
+
+  get size(): number {
+    return this.#transitions.size;
+  }
+
+  has(item: T): boolean {
+    return this.#transitions.has(item);
+  }
+
+  set(item: T, transition: ActiveItemTransition<C>): void {
+    this.#transitions.set(item, transition);
+  }
+
+  replace(prevItem: T, nextItem: T, transition: ActiveItemTransition<C>): void {
+    this.#transitions.delete(prevItem);
+    this.#transitions.set(nextItem, transition);
+  }
+
+  delete(item: T): ActiveItemTransition<C> | undefined {
+    const transition = this.#transitions.get(item);
+    if (transition != null) {
+      this.#transitions.delete(item);
+    }
+    return transition;
+  }
+
+  readActive(
     item: T,
     now: number,
-    adapter?: Pick<TransitionRendererAdapter<C, T>, "onDeleteComplete">,
-  ): ItemTransition<C> | undefined {
-    const transition = this.#itemTransitions.get(item);
+    lifecycle?: TransitionLifecycleAdapter<T>,
+  ): ActiveItemTransition<C> | undefined {
+    const transition = this.#transitions.get(item);
     if (transition == null) {
       return undefined;
     }
-    if (getProgress(transition.startTime, transition.duration, now) >= 1) {
-      this.#itemTransitions.delete(item);
-      this.#activeTransitionItems.delete(item);
+    if (
+      getProgress(
+        transition.height.startTime,
+        transition.height.duration,
+        now,
+      ) >= 1
+    ) {
+      this.#transitions.delete(item);
       if (transition.kind === "delete") {
-        adapter?.onDeleteComplete(item);
+        lifecycle?.onDeleteComplete(item);
       }
       return undefined;
     }
     return transition;
   }
 
-  /** Returns the effective rendered height for an item, accounting for transitions. */
+  prepare(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
+    let keepAnimating = false;
+    for (const item of [...this.#transitions.keys()]) {
+      if (this.readActive(item, now, lifecycle) != null) {
+        keepAnimating = true;
+      }
+    }
+    return keepAnimating;
+  }
+
+  pruneInvisible(
+    snapshot: VisibilitySnapshot<T>,
+    lifecycle: TransitionLifecycleAdapter<T>,
+  ): boolean {
+    let changed = false;
+    for (const [item, transition] of [...this.#transitions.entries()]) {
+      if (snapshot.tracks(item, transition.visibility)) {
+        continue;
+      }
+      this.#transitions.delete(item);
+      if (transition.kind === "delete") {
+        lifecycle.onDeleteComplete(item);
+      }
+      changed = true;
+    }
+    return changed;
+  }
+
+  reset(): void {
+    this.#transitions.clear();
+  }
+}
+
+class TransitionPlanner<C extends CanvasRenderingContext2D, T extends {}> {
+  readonly #snapshot: VisibilitySnapshot<T>;
+  readonly #store: TransitionStore<C, T>;
+
+  constructor(snapshot: VisibilitySnapshot<T>, store: TransitionStore<C, T>) {
+    this.#snapshot = snapshot;
+    this.#store = store;
+  }
+
+  planUpdate(
+    prevItem: T,
+    nextItem: T,
+    duration: number | undefined,
+    now: number,
+    currentVisualState: CurrentVisualState<C>,
+    ctx: TransitionPlanningAdapter<C, T>,
+  ): ActiveItemTransition<C> | undefined {
+    const nextIndex = ctx.items.indexOf(nextItem);
+    const nextNode = ctx.renderItem(nextItem);
+    const nextHeight = ctx.measureNode(nextNode).height;
+    return planUpdate({
+      duration: normalizeDuration(duration),
+      canAnimate: canAnimateExistingItem({
+        index: nextIndex,
+        item: prevItem,
+        position: ctx.position,
+        offset: ctx.offset,
+        snapshot: this.#snapshot,
+        hasActiveTransition: this.#store.has(prevItem),
+        resolveVisibleWindow: ctx.resolveVisibleWindow,
+        readVisibleRange: ctx.readVisibleRange,
+      }),
+      now,
+      currentVisualState,
+      nextNode,
+      nextHeight,
+    });
+  }
+
+  planDelete(
+    item: T,
+    duration: number | undefined,
+    now: number,
+    currentVisualState: CurrentVisualState<C>,
+    ctx: TransitionPlanningAdapter<C, T>,
+  ): ActiveItemTransition<C> | undefined {
+    const index = ctx.items.indexOf(item);
+    const startState = ctx.readListState();
+    const startViewportY = resolveViewportYForState(item, startState, now, {
+      getItemIndex: (candidate) => ctx.items.indexOf(candidate as T),
+      resolveVisibleWindowForState: ctx.resolveVisibleWindowForState,
+    });
+    return planDelete({
+      duration: normalizeDuration(duration),
+      canAnimate: canAnimateExistingItem({
+        index,
+        item,
+        position: ctx.position,
+        offset: ctx.offset,
+        snapshot: this.#snapshot,
+        hasActiveTransition: this.#store.has(item),
+        resolveVisibleWindow: ctx.resolveVisibleWindow,
+        readVisibleRange: ctx.readVisibleRange,
+      }),
+      now,
+      currentVisualState,
+      startState,
+      startViewportY,
+    });
+  }
+
+  planBoundaryInsert(
+    direction: BoundaryInsertDirection,
+    count: number,
+    duration: number | undefined,
+    distance: number | undefined,
+    now: number,
+    currentTranslateY: number,
+    ctx: TransitionPlanningAdapter<C, T>,
+  ): BoundaryInsertPlan<C, T> | undefined {
+    const normalizedDuration = normalizeDuration(duration);
+    if (count <= 0 || normalizedDuration <= 0) {
+      return undefined;
+    }
+    const strategy = resolveBoundaryInsertStrategy(
+      direction,
+      ctx.underflowAlign,
+      this.#snapshot.matchesBoundaryInsertState(
+        direction,
+        count,
+        ctx.position,
+        ctx.offset,
+      ),
+    );
+    if (strategy === "hard-cut") {
+      return undefined;
+    }
+    const measuredItems = measureBoundaryInsertItems(direction, count, ctx);
+    if (measuredItems == null) {
+      return undefined;
+    }
+    return planBoundaryInsert({
+      direction,
+      duration: normalizedDuration,
+      distance,
+      now,
+      strategy,
+      snapshot: this.#snapshot,
+      currentTranslateY,
+      measuredItems,
+    });
+  }
+}
+
+class TransitionSampler<C extends CanvasRenderingContext2D, T extends {}> {
+  readonly #store: TransitionStore<C, T>;
+
+  constructor(store: TransitionStore<C, T>) {
+    this.#store = store;
+  }
+
   getItemHeight(
     item: T,
     now: number,
-    adapter: Pick<
-      TransitionRendererAdapter<C, T>,
-      "renderItem" | "measureNode"
-    >,
+    adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
   ): number {
-    const transition = this.readTransition(item, now);
+    const transition = this.#store.readActive(item, now);
     if (transition != null) {
-      return this.#sampleTransitionHeight(transition, now);
+      return sampleActiveTransition(transition, now).slotHeight;
     }
     const node = adapter.renderItem(item);
     return adapter.measureNode(node).height;
   }
 
-  /** Resolves an item to its draw/hittest callbacks for the current frame. */
   resolveItem(
     item: T,
     now: number,
-    adapter: TransitionRendererAdapter<C, T>,
+    adapter: TransitionRenderAdapter<C, T>,
+    lifecycle: TransitionLifecycleAdapter<T>,
   ): { value: VirtualizedResolvedItem; height: number } {
-    const transition = this.readTransition(item, now, adapter);
+    const transition = this.#store.readActive(item, now, lifecycle);
     if (transition == null) {
       const node = adapter.renderItem(item);
       return {
@@ -280,649 +1042,253 @@ export class TransitionController<
       };
     }
 
-    const slotHeight = this.#sampleTransitionHeight(transition, now);
-    const layers = this.#readTransitionLayers(transition, now);
-
+    const sampled = sampleActiveTransition(transition, now);
     return {
       value: {
         draw: (y) =>
-          this.#drawTransitionLayers(
-            item,
-            transition,
-            layers,
-            slotHeight,
-            y,
-            now,
-            adapter,
-          ),
+          drawSampledLayers(item, transition, sampled, y, now, adapter),
         hittest: () => false,
       },
-      height: slotHeight,
+      height: sampled.slotHeight,
     };
+  }
+
+  readCurrentVisualState(
+    item: T,
+    now: number,
+    adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
+  ): CurrentVisualState<C> {
+    const transition = this.#store.readActive(item, now);
+    if (transition != null && transition.layers.length > 0) {
+      const primaryLayer = transition.layers[transition.layers.length - 1]!;
+      return {
+        node: primaryLayer.node,
+        alpha: sampleScalarAnimation(primaryLayer.alpha, now),
+        height: sampleScalarAnimation(transition.height, now),
+        translateY: sampleScalarAnimation(primaryLayer.translateY, now),
+      };
+    }
+
+    const node = adapter.renderItem(item);
+    return {
+      node,
+      alpha: 1,
+      height: adapter.measureNode(node).height,
+      translateY: 0,
+    };
+  }
+}
+
+export class TransitionController<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+> {
+  #store = new TransitionStore<C, T>();
+  #snapshot = new VisibilitySnapshot<T>();
+  #planner = new TransitionPlanner<C, T>(this.#snapshot, this.#store);
+  #sampler = new TransitionSampler<C, T>(this.#store);
+  #viewportTranslateAnimation: ScalarAnimation | undefined;
+
+  captureVisibilitySnapshot(
+    window: VisibleWindow<unknown>,
+    items: readonly T[],
+    viewportHeight: number,
+    snapshotState: ControlledState,
+    extraShift: number,
+    readVisibleRange: (
+      top: number,
+      height: number,
+    ) => { top: number; bottom: number } | undefined,
+  ): void {
+    this.#snapshot.capture(
+      window,
+      items,
+      viewportHeight,
+      snapshotState,
+      extraShift,
+      readVisibleRange,
+    );
+  }
+
+  pruneInvisible(lifecycle: TransitionLifecycleAdapter<T>): boolean {
+    return this.#store.pruneInvisible(this.#snapshot, lifecycle);
+  }
+
+  prepare(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
+    this.#cleanupViewportTranslateAnimation(now);
+    const keepViewportAnimating = this.#viewportTranslateAnimation != null;
+    return this.#store.prepare(now, lifecycle) || keepViewportAnimating;
+  }
+
+  getViewportTranslateY(now: number): number {
+    this.#cleanupViewportTranslateAnimation(now);
+    return this.#viewportTranslateAnimation == null
+      ? 0
+      : sampleScalarAnimation(this.#viewportTranslateAnimation, now);
+  }
+
+  getItemHeight(
+    item: T,
+    now: number,
+    adapter: Pick<TransitionRenderAdapter<C, T>, "renderItem" | "measureNode">,
+  ): number {
+    return this.#sampler.getItemHeight(item, now, adapter);
+  }
+
+  resolveItem(
+    item: T,
+    now: number,
+    adapter: TransitionRenderAdapter<C, T>,
+    lifecycle: TransitionLifecycleAdapter<T>,
+  ): { value: VirtualizedResolvedItem; height: number } {
+    return this.#sampler.resolveItem(item, now, adapter, lifecycle);
   }
 
   handleListStateChange(
     change: ListStateChange<T>,
-    ctx: TransitionContext<C, T>,
+    ctx: TransitionPlanningAdapter<C, T>,
+    lifecycle: TransitionLifecycleAdapter<T>,
   ): void {
     switch (change.type) {
       case "update":
-        this.handleUpdate(
+        this.#handleUpdate(
           change.prevItem,
           change.nextItem,
           change.animation?.duration,
           ctx,
         );
-        break;
+        return;
       case "delete":
-        this.handleDelete(change.item, change.animation?.duration, ctx);
-        break;
+        this.#handleDelete(
+          change.item,
+          change.animation?.duration,
+          ctx,
+          lifecycle,
+        );
+        return;
       case "delete-finalize":
-        this.#itemTransitions.delete(change.item);
-        this.#activeTransitionItems.delete(change.item);
-        break;
+        this.#store.delete(change.item);
+        return;
       case "unshift":
-        this.handleUnshift(
+        this.#handleBoundaryInsert(
+          "unshift",
           change.count,
           change.animation?.duration,
           change.animation?.distance,
           ctx,
         );
-        break;
+        return;
       case "push":
-        this.handlePush(
+        this.#handleBoundaryInsert(
+          "push",
           change.count,
           change.animation?.duration,
           change.animation?.distance,
           ctx,
         );
-        break;
+        return;
       case "reset":
       case "set":
         this.reset();
-        break;
+        return;
     }
   }
 
-  handleUpdate(
+  reset(): void {
+    this.#store.reset();
+    this.#snapshot.reset();
+    this.#viewportTranslateAnimation = undefined;
+  }
+
+  #handleUpdate(
     prevItem: T,
     nextItem: T,
     duration: number | undefined,
-    ctx: TransitionContext<C, T>,
+    ctx: TransitionPlanningAdapter<C, T>,
   ): void {
-    const normalizedDuration = Math.max(
-      0,
-      typeof duration === "number" && Number.isFinite(duration) ? duration : 0,
-    );
-    const nextIndex = ctx.items.indexOf(nextItem);
-    if (
-      normalizedDuration <= 0 ||
-      nextIndex < 0 ||
-      !this.#canAnimateUpdate(nextIndex, prevItem, ctx)
-    ) {
-      this.#itemTransitions.delete(prevItem);
-      this.#activeTransitionItems.delete(prevItem);
-      return;
-    }
-
     const now = getNow();
-    const nextNode = ctx.renderItem(nextItem);
-    const nextHeight = ctx.measureNode(nextNode).height;
-    const transition = this.readTransition(prevItem, now, ctx);
-    const currentVisualState = this.#readCurrentVisualState(
+    const currentVisualState = this.#sampler.readCurrentVisualState(
       prevItem,
-      transition,
       now,
       ctx,
     );
-
-    const fromLayer =
-      currentVisualState.alpha > ALPHA_EPSILON
-        ? this.#createLayer(
-            currentVisualState.node,
-            currentVisualState.alpha,
-            0,
-            now,
-            normalizedDuration,
-            currentVisualState.translateY,
-            0,
-          )
-        : undefined;
-    const toLayer = this.#createLayer(
-      nextNode,
-      0,
-      1,
+    const transition = this.#planner.planUpdate(
+      prevItem,
+      nextItem,
+      duration,
       now,
-      normalizedDuration,
-      currentVisualState.translateY,
-      0,
+      currentVisualState,
+      ctx,
     );
-
-    this.#itemTransitions.delete(prevItem);
-    this.#itemTransitions.set(nextItem, {
-      kind: "update",
-      fromLayer,
-      toLayer,
-      fromHeight: currentVisualState.height,
-      toHeight: nextHeight,
-      startTime: now,
-      duration: normalizedDuration,
-    });
-    this.#activeTransitionItems.delete(prevItem);
-    this.#activeTransitionItems.add(nextItem);
-  }
-
-  handleDelete(
-    item: T,
-    duration: number | undefined,
-    ctx: TransitionContext<C, T>,
-  ): void {
-    const normalizedDuration = Math.max(
-      0,
-      typeof duration === "number" && Number.isFinite(duration) ? duration : 0,
-    );
-    const index = ctx.items.indexOf(item);
-    if (
-      normalizedDuration <= 0 ||
-      index < 0 ||
-      !this.#canAnimateUpdate(index, item, ctx)
-    ) {
-      this.#itemTransitions.delete(item);
-      this.#activeTransitionItems.delete(item);
-      ctx.onDeleteComplete(item);
+    if (transition == null) {
+      this.#store.delete(prevItem);
       return;
     }
-
-    const now = getNow();
-    const startState = ctx.readListState();
-    const startViewportY = this.#resolveViewportYForState(
-      item,
-      startState,
-      now,
-      ctx,
-    );
-    const transition = this.readTransition(item, now, ctx);
-    const currentVisualState = this.#readCurrentVisualState(
-      item,
-      transition,
-      now,
-      ctx,
-    );
-
-    const fromLayer =
-      currentVisualState.alpha > ALPHA_EPSILON
-        ? this.#createLayer(
-            currentVisualState.node,
-            currentVisualState.alpha,
-            0,
-            now,
-            normalizedDuration,
-            currentVisualState.translateY,
-            0,
-          )
-        : undefined;
-
-    this.#itemTransitions.set(item, {
-      kind: "delete",
-      fromLayer,
-      toLayer: undefined,
-      fromHeight: currentVisualState.height,
-      toHeight: 0,
-      startTime: now,
-      duration: normalizedDuration,
-      deleteAnchor:
-        startViewportY == null
-          ? undefined
-          : {
-              startState,
-              startViewportY,
-            },
-    });
-    this.#activeTransitionItems.add(item);
+    this.#store.replace(prevItem, nextItem, transition);
   }
 
-  handlePush(
+  #handleDelete(
+    item: T,
+    duration: number | undefined,
+    ctx: TransitionPlanningAdapter<C, T>,
+    lifecycle: TransitionLifecycleAdapter<T>,
+  ): void {
+    const now = getNow();
+    const currentVisualState = this.#sampler.readCurrentVisualState(
+      item,
+      now,
+      ctx,
+    );
+    const transition = this.#planner.planDelete(
+      item,
+      duration,
+      now,
+      currentVisualState,
+      ctx,
+    );
+    if (transition == null) {
+      this.#store.delete(item);
+      lifecycle.onDeleteComplete(item);
+      return;
+    }
+    this.#store.set(item, transition);
+  }
+
+  #handleBoundaryInsert(
+    direction: BoundaryInsertDirection,
     count: number,
     duration: number | undefined,
     distance: number | undefined,
-    ctx: TransitionContext<C, T>,
+    ctx: TransitionPlanningAdapter<C, T>,
   ): void {
-    if (
-      count <= 0 ||
-      !(typeof duration === "number" && duration > 0) ||
-      !this.#canAnimateInsert("push", count, ctx)
-    ) {
-      return;
-    }
-
-    const start = ctx.items.length - count;
-    if (start < 0) {
-      return;
-    }
-
     const now = getNow();
-    if (ctx.layout.underflowAlign === "bottom") {
-      let insertedHeight = 0;
-      for (let index = start; index < ctx.items.length; index += 1) {
-        const item = ctx.items[index];
-        if (item == null) {
-          continue;
-        }
-        const node = ctx.renderItem(item);
-        insertedHeight += ctx.measureNode(node).height;
-      }
-      if (!(insertedHeight > 0) || !Number.isFinite(insertedHeight)) {
-        return;
-      }
-      const travel = Math.min(insertedHeight, this.#visibilitySnapshotTopGap);
-      if (!(travel > 0) || !Number.isFinite(travel)) {
-        return;
-      }
-      this.#viewportTranslateAnimation = {
-        fromTranslateY: this.getViewportTranslateY(now) + travel,
-        toTranslateY: 0,
-        startTime: now,
-        duration,
-      };
-      return;
-    }
-
-    for (let index = start; index < ctx.items.length; index += 1) {
-      const item = ctx.items[index];
-      if (item == null) {
-        continue;
-      }
-      const node = ctx.renderItem(item);
-      const itemHeight = ctx.measureNode(node).height;
-      const resolvedDistance =
-        typeof distance === "number" && Number.isFinite(distance)
-          ? Math.max(0, distance)
-          : Math.min(24, itemHeight);
-      this.#itemTransitions.set(item, {
-        kind: "insert",
-        fromLayer: undefined,
-        toLayer: this.#createLayer(
-          node,
-          0,
-          1,
-          now,
-          duration,
-          resolvedDistance,
-          0,
-        ),
-        fromHeight: itemHeight,
-        toHeight: itemHeight,
-        startTime: now,
-        duration,
-      });
-      this.#activeTransitionItems.add(item);
-    }
-  }
-
-  handleUnshift(
-    count: number,
-    duration: number | undefined,
-    distance: number | undefined,
-    ctx: TransitionContext<C, T>,
-  ): void {
-    if (
-      count <= 0 ||
-      !(typeof duration === "number" && duration > 0) ||
-      !this.#canAnimateInsert("unshift", count, ctx)
-    ) {
-      return;
-    }
-
-    if (ctx.layout.underflowAlign === "bottom") {
-      const now = getNow();
-      for (
-        let index = 0;
-        index < Math.min(count, ctx.items.length);
-        index += 1
-      ) {
-        const item = ctx.items[index];
-        if (item == null) {
-          continue;
-        }
-        const node = ctx.renderItem(item);
-        const itemHeight = ctx.measureNode(node).height;
-        const resolvedDistance =
-          typeof distance === "number" && Number.isFinite(distance)
-            ? Math.max(0, distance)
-            : Math.min(24, itemHeight);
-        this.#itemTransitions.set(item, {
-          kind: "insert",
-          fromLayer: undefined,
-          toLayer: this.#createLayer(
-            node,
-            0,
-            1,
-            now,
-            duration,
-            -resolvedDistance,
-            0,
-          ),
-          fromHeight: itemHeight,
-          toHeight: itemHeight,
-          startTime: now,
-          duration,
-        });
-        this.#activeTransitionItems.add(item);
-      }
-      return;
-    }
-
-    const now = getNow();
-    let insertedHeight = 0;
-    for (let index = 0; index < Math.min(count, ctx.items.length); index += 1) {
-      const item = ctx.items[index];
-      if (item == null) {
-        continue;
-      }
-      const node = ctx.renderItem(item);
-      insertedHeight += ctx.measureNode(node).height;
-    }
-    if (!(insertedHeight > 0) || !Number.isFinite(insertedHeight)) {
-      return;
-    }
-    const travel = Math.min(insertedHeight, this.#visibilitySnapshotBottomGap);
-    if (!(travel > 0) || !Number.isFinite(travel)) {
-      return;
-    }
-    this.#viewportTranslateAnimation = {
-      fromTranslateY: this.getViewportTranslateY(now) - travel,
-      toTranslateY: 0,
-      startTime: now,
+    const plan = this.#planner.planBoundaryInsert(
+      direction,
+      count,
       duration,
-    };
-  }
-
-  /** Clears all transition state (e.g., on list reset). */
-  reset(): void {
-    this.#itemTransitions = new WeakMap<T, ItemTransition<C>>();
-    this.#activeTransitionItems.clear();
-    this.#viewportTranslateAnimation = undefined;
-    this.#drawnItems.clear();
-    this.#visibleItems.clear();
-    this.#hasVisibilitySnapshot = false;
-    this.#visibilitySnapshotState = undefined;
-    this.#visibilitySnapshotCoversShortList = false;
-    this.#visibilitySnapshotTopGap = 0;
-    this.#visibilitySnapshotBottomGap = 0;
-  }
-
-  #createLayer(
-    node: Node<C>,
-    fromAlpha: number,
-    toAlpha: number,
-    startTime: number,
-    duration: number,
-    fromTranslateY: number,
-    toTranslateY: number,
-  ): TransitionLayer<C> {
-    return {
-      node,
-      fromAlpha,
-      toAlpha,
-      fromTranslateY,
-      toTranslateY,
-      startTime,
-      duration,
-    };
-  }
-
-  #sampleLayerAlpha(layer: TransitionLayer<C>, now: number): number {
-    return interpolate(
-      layer.fromAlpha,
-      layer.toAlpha,
-      layer.startTime,
-      layer.duration,
+      distance,
       now,
+      this.getViewportTranslateY(now),
+      ctx,
     );
-  }
-
-  #sampleLayerTranslateY(layer: TransitionLayer<C>, now: number): number {
-    return interpolate(
-      layer.fromTranslateY,
-      layer.toTranslateY,
-      layer.startTime,
-      layer.duration,
-      now,
-    );
-  }
-
-  #sampleTransitionHeight(transition: ItemTransition<C>, now: number): number {
-    return interpolate(
-      transition.fromHeight,
-      transition.toHeight,
-      transition.startTime,
-      transition.duration,
-      now,
-    );
-  }
-
-  #readTransitionLayers(
-    transition: ItemTransition<C>,
-    now: number,
-  ): SampledLayer<C>[] {
-    return [transition.fromLayer, transition.toLayer]
-      .filter((layer): layer is TransitionLayer<C> => layer != null)
-      .map((layer) => ({
-        alpha: this.#sampleLayerAlpha(layer, now),
-        node: layer.node,
-        translateY: this.#sampleLayerTranslateY(layer, now),
-      }))
-      .filter((layer) => layer.alpha > ALPHA_EPSILON);
-  }
-
-  #drawTransitionLayers(
-    item: T,
-    transition: ItemTransition<C>,
-    layers: SampledLayer<C>[],
-    slotHeight: number,
-    y: number,
-    now: number,
-    adapter: TransitionRendererAdapter<C, T>,
-  ): boolean {
-    if (slotHeight <= 0) {
-      return false;
+    if (plan == null) {
+      return;
     }
-
-    const resolvedY = this.#resolveTransitionY(
-      item,
-      transition,
-      y,
-      now,
-      adapter,
-    );
-
-    let result = false;
-    for (const layer of layers) {
-      const alpha = clamp(layer.alpha, 0, 1);
-      if (alpha <= ALPHA_EPSILON) {
-        continue;
-      }
-
-      adapter.graphics.save();
-      try {
-        if (typeof adapter.graphics.globalAlpha === "number") {
-          adapter.graphics.globalAlpha *= alpha;
-        }
-        const layerY = resolvedY + layer.translateY;
-        if (adapter.drawNode(layer.node, 0, layerY)) {
-          result = true;
-        }
-      } finally {
-        adapter.graphics.restore();
-      }
+    if (plan.kind === "viewport-slide") {
+      this.#viewportTranslateAnimation = plan.animation;
+      return;
     }
-    return result;
-  }
-
-  #isIndexVisible(
-    index: number,
-    resolveVisibleWindow: () => VisibleWindowResult<unknown>,
-    readVisibleRange: (
-      top: number,
-      height: number,
-    ) => { top: number; bottom: number } | undefined,
-  ): boolean {
-    if (index < 0) {
-      return false;
+    for (const entry of plan.entries) {
+      this.#store.set(entry.item, entry.transition);
     }
-    const solution = resolveVisibleWindow();
-    for (const entry of solution.window.drawList) {
-      if (entry.idx !== index) {
-        continue;
-      }
-      if (
-        readVisibleRange(entry.offset + solution.window.shift, entry.height) !=
-        null
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  #canAnimateUpdate(
-    nextIndex: number,
-    prevItem: T,
-    ctx: TransitionContext<C, T>,
-  ): boolean {
-    if (nextIndex < 0) {
-      return false;
-    }
-    if (
-      this.#hasVisibilitySnapshot &&
-      this.#visibilitySnapshotState != null &&
-      sameState(this.#visibilitySnapshotState, ctx.position, ctx.offset)
-    ) {
-      return (
-        this.#visibleItems.has(prevItem) ||
-        this.#activeTransitionItems.has(prevItem)
-      );
-    }
-    return this.#isIndexVisible(
-      nextIndex,
-      ctx.resolveVisibleWindow,
-      ctx.readVisibleRange,
-    );
-  }
-
-  #canAnimateInsert(
-    direction: "push" | "unshift",
-    count: number,
-    ctx: TransitionContext<C, T>,
-  ): boolean {
-    if (
-      !this.#hasVisibilitySnapshot ||
-      this.#visibilitySnapshotState == null ||
-      !this.#visibilitySnapshotCoversShortList
-    ) {
-      return false;
-    }
-
-    const expectedPosition =
-      direction === "unshift" && this.#visibilitySnapshotState.position != null
-        ? this.#visibilitySnapshotState.position + count
-        : this.#visibilitySnapshotState.position;
-    return sameState(
-      {
-        position: expectedPosition,
-        offset: this.#visibilitySnapshotState.offset,
-      },
-      ctx.position,
-      ctx.offset,
-    );
-  }
-
-  #readCurrentVisualState(
-    item: T,
-    transition: ItemTransition<C> | undefined,
-    now: number,
-    ctx: TransitionContext<C, T>,
-  ): CurrentVisualState<C> {
-    if (transition?.toLayer != null) {
-      return {
-        node: transition.toLayer.node,
-        alpha: this.#sampleLayerAlpha(transition.toLayer, now),
-        height: this.#sampleTransitionHeight(transition, now),
-        translateY: this.#sampleLayerTranslateY(transition.toLayer, now),
-      };
-    }
-    if (transition?.fromLayer != null) {
-      return {
-        node: transition.fromLayer.node,
-        alpha: this.#sampleLayerAlpha(transition.fromLayer, now),
-        height: this.#sampleTransitionHeight(transition, now),
-        translateY: this.#sampleLayerTranslateY(transition.fromLayer, now),
-      };
-    }
-
-    const node = ctx.renderItem(item);
-    return {
-      node,
-      alpha: 1,
-      height: ctx.measureNode(node).height,
-      translateY: 0,
-    };
-  }
-
-  #resolveTransitionY(
-    item: T,
-    transition: ItemTransition<C>,
-    y: number,
-    now: number,
-    adapter: TransitionRendererAdapter<C, T>,
-  ): number {
-    if (transition.kind !== "delete" || transition.deleteAnchor == null) {
-      return y;
-    }
-
-    const baselineY = this.#resolveViewportYForState(
-      item,
-      transition.deleteAnchor.startState,
-      now,
-      adapter,
-    );
-    if (baselineY == null) {
-      return y;
-    }
-    return transition.deleteAnchor.startViewportY + (y - baselineY);
-  }
-
-  #resolveViewportYForState(
-    item: T,
-    state: ControlledState,
-    now: number,
-    adapter: Pick<
-      TransitionRendererAdapter<C, T>,
-      "getItemIndex" | "resolveVisibleWindowForState"
-    >,
-  ): number | undefined {
-    const index = adapter.getItemIndex(item);
-    if (index < 0) {
-      return undefined;
-    }
-
-    const solution = adapter.resolveVisibleWindowForState(state, now);
-    const entry = solution.window.drawList.find((candidate) => {
-      return candidate.idx === index;
-    });
-    if (entry == null) {
-      return undefined;
-    }
-    const viewportY = entry.offset + solution.window.shift;
-    return Number.isFinite(viewportY) ? viewportY : undefined;
   }
 
   #cleanupViewportTranslateAnimation(now: number): void {
-    const transition = this.#viewportTranslateAnimation;
-    if (
-      transition != null &&
-      getProgress(transition.startTime, transition.duration, now) >= 1
-    ) {
+    const animation = this.#viewportTranslateAnimation;
+    if (animation == null) {
+      return;
+    }
+    if (getProgress(animation.startTime, animation.duration, now) >= 1) {
       this.#viewportTranslateAnimation = undefined;
     }
   }

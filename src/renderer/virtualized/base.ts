@@ -21,8 +21,9 @@ import {
 } from "./base-types";
 import {
   TransitionController,
-  type TransitionContext,
-  type TransitionRendererAdapter,
+  type TransitionLifecycleAdapter,
+  type TransitionPlanningAdapter,
+  type TransitionRenderAdapter,
 } from "./base-transition";
 import type {
   NormalizedListState,
@@ -372,7 +373,6 @@ export abstract class VirtualizedRenderer<
       this.items,
       this.graphics.canvas.clientHeight,
       normalizedState,
-      this._getLayoutOptions(),
       extraShift,
       this._readVisibleRange.bind(this),
     );
@@ -450,7 +450,8 @@ export abstract class VirtualizedRenderer<
     return this.#transitionController.resolveItem(
       item,
       now,
-      this.#getTransitionRendererAdapter(),
+      this.#getTransitionRenderAdapter(),
+      this.#getTransitionLifecycleAdapter(),
     );
   }
 
@@ -522,7 +523,13 @@ export abstract class VirtualizedRenderer<
     this.options.list.finalizeDelete(item);
   }
 
-  #getTransitionRendererAdapter(): TransitionRendererAdapter<C, T> {
+  #getTransitionLifecycleAdapter(): TransitionLifecycleAdapter<T> {
+    return {
+      onDeleteComplete: this.#handleDeleteComplete.bind(this),
+    };
+  }
+
+  #getTransitionRenderAdapter(): TransitionRenderAdapter<C, T> {
     return {
       renderItem: this.options.renderItem,
       measureNode: this.measureRootNode.bind(this),
@@ -530,20 +537,19 @@ export abstract class VirtualizedRenderer<
       getRootContext: this.getRootContext.bind(this),
       graphics: this.graphics,
       getItemIndex: (item) => this.items.indexOf(item),
-      readListState: this._readListState.bind(this),
       resolveVisibleWindowForState: (state, now) =>
         this._resolveVisibleWindowForState(state, now),
-      onDeleteComplete: this.#handleDeleteComplete.bind(this),
     };
   }
 
-  #getTransitionContext(): TransitionContext<C, T> {
+  #getTransitionPlanningAdapter(): TransitionPlanningAdapter<C, T> {
     return {
-      ...this.#getTransitionRendererAdapter(),
       items: this.items,
       position: this.position,
       offset: this.offset,
-      layout: this._getLayoutOptions(),
+      underflowAlign: this._getLayoutOptions().underflowAlign,
+      renderItem: this.options.renderItem,
+      measureNode: this.measureRootNode.bind(this),
       readListState: this._readListState.bind(this),
       readVisibleRange: this._readVisibleRange.bind(this),
       resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),
@@ -555,7 +561,8 @@ export abstract class VirtualizedRenderer<
   #handleListStateChange(change: ListStateChange<T>): void {
     this.#transitionController.handleListStateChange(
       change,
-      this.#getTransitionContext(),
+      this.#getTransitionPlanningAdapter(),
+      this.#getTransitionLifecycleAdapter(),
     );
   }
 }

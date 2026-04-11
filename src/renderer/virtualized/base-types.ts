@@ -6,12 +6,6 @@ export type ControlledState = {
   offset: number;
 };
 
-/** Viewport-space anchor captured when a delete transition begins. */
-export type DeleteTransitionAnchor = {
-  startState: ControlledState;
-  startViewportY: number;
-};
-
 /** A positive-length pixel segment within a jump path. */
 export type JumpPathSegment = {
   anchorStart: number;
@@ -35,30 +29,6 @@ export type JumpAnimation = {
   duration: number;
   needsMoreFrames: boolean;
   onComplete: (() => void) | undefined;
-};
-
-/** A single cross-fade layer within an item transition. */
-export type TransitionLayer<C extends CanvasRenderingContext2D> = {
-  node: Node<C>;
-  fromAlpha: number;
-  toAlpha: number;
-  fromTranslateY: number;
-  toTranslateY: number;
-  startTime: number;
-  duration: number;
-};
-
-/** Full state for an item transition (cross-fade + height). */
-export type ItemTransition<C extends CanvasRenderingContext2D> = {
-  kind: "update" | "delete" | "insert";
-  fromLayer: TransitionLayer<C> | undefined;
-  /** undefined for delete transitions where the slot shrinks to nothing. */
-  toLayer: TransitionLayer<C> | undefined;
-  fromHeight: number;
-  toHeight: number;
-  startTime: number;
-  duration: number;
-  deleteAnchor?: DeleteTransitionAnchor;
 };
 
 /** Per-item draw/hittest callbacks produced by the resolver. */
