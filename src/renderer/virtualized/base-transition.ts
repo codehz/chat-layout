@@ -604,6 +604,8 @@ export class VisibilitySnapshot<T extends {}> {
   #coversShortList = false;
   #topGap = 0;
   #bottomGap = 0;
+  #atStartBoundary = false;
+  #atEndBoundary = false;
 
   get coversShortList(): boolean {
     return (
@@ -686,6 +688,16 @@ export class VisibilitySnapshot<T extends {}> {
     this.#bottomGap = this.#coversShortList
       ? Math.max(0, viewportHeight - bottomMostY)
       : 0;
+    this.#atStartBoundary =
+      window.drawList.length > 0 &&
+      items.length > 0 &&
+      minVisibleIndex === 0 &&
+      topMostY >= -Number.EPSILON;
+    this.#atEndBoundary =
+      window.drawList.length > 0 &&
+      items.length > 0 &&
+      maxVisibleIndex === items.length - 1 &&
+      bottomMostY <= viewportHeight + Number.EPSILON;
   }
 
   matchesCurrentState(position: number | undefined, offset: number): boolean {
@@ -705,14 +717,52 @@ export class VisibilitySnapshot<T extends {}> {
     if (!this.coversShortList || this.#snapshotState == null) {
       return false;
     }
+    return this.#matchesStateAfterBoundaryInsert(
+      direction,
+      count,
+      position,
+      offset,
+    );
+  }
+
+  matchesFollowBoundaryInsertState(
+    direction: BoundaryInsertDirection,
+    count: number,
+    position: number | undefined,
+    offset: number,
+  ): boolean {
+    if (!this.#hasSnapshot || this.#snapshotState == null) {
+      return false;
+    }
+    if (direction === "push" ? !this.#atEndBoundary : !this.#atStartBoundary) {
+      return false;
+    }
+    return this.#matchesStateAfterBoundaryInsert(
+      direction,
+      count,
+      position,
+      offset,
+    );
+  }
+
+  #matchesStateAfterBoundaryInsert(
+    direction: BoundaryInsertDirection,
+    count: number,
+    position: number | undefined,
+    offset: number,
+  ): boolean {
+    const snapshotState = this.#snapshotState;
+    if (snapshotState == null) {
+      return false;
+    }
     const expectedPosition =
-      direction === "unshift" && this.#snapshotState.position != null
-        ? this.#snapshotState.position + count
-        : this.#snapshotState.position;
+      direction === "unshift" && snapshotState.position != null
+        ? snapshotState.position + count
+        : snapshotState.position;
     return sameState(
       {
         position: expectedPosition,
-        offset: this.#snapshotState.offset,
+        offset: snapshotState.offset,
       },
       position,
       offset,
@@ -762,6 +812,8 @@ export class VisibilitySnapshot<T extends {}> {
     this.#coversShortList = false;
     this.#topGap = 0;
     this.#bottomGap = 0;
+    this.#atStartBoundary = false;
+    this.#atEndBoundary = false;
   }
 }
 
@@ -1086,6 +1138,20 @@ export class TransitionController<
     return this.#viewportTranslateAnimation == null
       ? 0
       : sampleScalarAnimation(this.#viewportTranslateAnimation, now);
+  }
+
+  canAutoFollowBoundaryInsert(
+    direction: BoundaryInsertDirection,
+    count: number,
+    position: number | undefined,
+    offset: number,
+  ): boolean {
+    return this.#snapshot.matchesFollowBoundaryInsertState(
+      direction,
+      count,
+      position,
+      offset,
+    );
   }
 
   getItemHeight(

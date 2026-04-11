@@ -67,6 +67,15 @@ list.unshiftAll([olderMessage], {
 });
 ```
 
+To make chat-style inserts automatically follow the latest visible edge, pass `followIfAtBoundary: true`. When the viewport was already pinned to that edge, the insert behaves like a conditional `jumpTo()` instead of combining with the enter animation:
+
+```ts
+list.pushAll([nextMessage], {
+  followIfAtBoundary: true,
+  duration: 220,
+});
+```
+
 ## Layout notes
 
 - `Flex` handles the main axis only. It shrink-wraps on the cross axis unless you opt into stretch behavior.

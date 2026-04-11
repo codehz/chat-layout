@@ -22,6 +22,10 @@ export type JumpPath = {
   segments: JumpPathSegment[];
 };
 
+export type JumpAnimationSource =
+  | { kind: "manual" }
+  | { kind: "auto-follow"; direction: "push" | "unshift" };
+
 /** Tracks an in-progress programmatic jump animation. */
 export type JumpAnimation = {
   path: JumpPath;
@@ -29,6 +33,7 @@ export type JumpAnimation = {
   duration: number;
   needsMoreFrames: boolean;
   onComplete: (() => void) | undefined;
+  source: JumpAnimationSource;
 };
 
 /** Per-item draw/hittest callbacks produced by the resolver. */

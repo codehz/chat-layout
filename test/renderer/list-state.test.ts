@@ -189,10 +189,12 @@ describe("ListState item identity", () => {
     list.pushAll([{ id: "tail" }], {
       duration: 180,
       distance: -5,
+      followIfAtBoundary: true,
     });
     list.unshiftAll([{ id: "head" }], {
       duration: 180,
       distance: -5,
+      followIfAtBoundary: true,
     });
 
     expect(changes).toEqual([
@@ -202,6 +204,7 @@ describe("ListState item identity", () => {
         animation: {
           duration: 180,
           distance: 0,
+          followIfAtBoundary: true,
         },
       },
       {
@@ -210,6 +213,43 @@ describe("ListState item identity", () => {
         animation: {
           duration: 180,
           distance: 0,
+          followIfAtBoundary: true,
+        },
+      },
+    ]);
+  });
+
+  test("pushAll and unshiftAll default follow duration to the insert animation default", () => {
+    const list = new ListState<Item>([{ id: "existing" }]);
+    const owner = {};
+    const changes: object[] = [];
+
+    subscribeListState(list, owner, (_owner, change) => {
+      changes.push(change);
+    });
+
+    list.pushAll([{ id: "tail" }], {
+      followIfAtBoundary: true,
+    });
+    list.unshiftAll([{ id: "head" }], {
+      followIfAtBoundary: true,
+    });
+
+    expect(changes).toEqual([
+      {
+        type: "push",
+        count: 1,
+        animation: {
+          duration: 220,
+          followIfAtBoundary: true,
+        },
+      },
+      {
+        type: "unshift",
+        count: 1,
+        animation: {
+          duration: 220,
+          followIfAtBoundary: true,
         },
       },
     ]);
@@ -227,8 +267,12 @@ describe("ListState item identity", () => {
     list.pushAll([{ id: "tail" }], {
       duration: 0,
       distance: 12,
+      followIfAtBoundary: true,
     });
-    list.unshiftAll([{ id: "head" }], { duration: -1 });
+    list.unshiftAll([{ id: "head" }], {
+      duration: -1,
+      followIfAtBoundary: true,
+    });
 
     expect(changes).toEqual([
       {

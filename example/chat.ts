@@ -644,6 +644,7 @@ button("unshift", () => {
     ],
     {
       duration: INSERT_ANIMATION_DURATION,
+      followIfAtBoundary: true,
     },
   );
 });
@@ -660,6 +661,7 @@ button("push", () => {
     ],
     {
       distance: 24,
+      followIfAtBoundary: true,
     },
   );
 });

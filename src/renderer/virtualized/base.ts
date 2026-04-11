@@ -3,6 +3,7 @@ import { BaseRenderer } from "../base";
 import {
   ListState,
   subscribeListState,
+  type InsertListItemsAnimationOptions,
   type ListStateChange,
 } from "../list-state";
 import {
@@ -192,57 +193,7 @@ export abstract class VirtualizedRenderer<
       this.#cancelJumpAnimation();
       return;
     }
-
-    const targetIndex = this._clampItemIndex(index);
-    const currentState = this._normalizeListState(this._readListState());
-    const targetBlock = options.block ?? this._getDefaultJumpBlock();
-    const targetAnchor = this._getTargetAnchor(targetIndex, targetBlock);
-
-    const animated = options.animated ?? true;
-    if (!animated) {
-      this.#cancelJumpAnimation();
-      this._applyAnchor(targetAnchor);
-      options.onComplete?.();
-      return;
-    }
-
-    const startAnchor = this._readAnchor(currentState);
-    if (!Number.isFinite(startAnchor)) {
-      this.#cancelJumpAnimation();
-      this._applyAnchor(targetAnchor);
-      options.onComplete?.();
-      return;
-    }
-
-    const path = buildJumpPath(
-      this.items.length,
-      this._getItemHeight.bind(this),
-      startAnchor,
-      targetAnchor,
-    );
-    const duration = clamp(
-      options.duration ??
-        VirtualizedRenderer.MIN_JUMP_DURATION +
-          path.totalDistance * VirtualizedRenderer.JUMP_DURATION_PER_PIXEL,
-      0,
-      VirtualizedRenderer.MAX_JUMP_DURATION,
-    );
-
-    if (duration <= 0 || path.totalDistance <= Number.EPSILON) {
-      this.#cancelJumpAnimation();
-      this._applyAnchor(targetAnchor);
-      options.onComplete?.();
-      return;
-    }
-
-    this.#jumpAnimation = {
-      path,
-      startTime: getNow(),
-      duration,
-      needsMoreFrames: true,
-      onComplete: options.onComplete,
-    };
-    this.#controlledState = this._readListState();
+    this.#startJumpToIndex(index, options, { kind: "manual" });
   }
 
   protected _resetRenderFeedback(feedback?: RenderFeedback): void {
@@ -560,10 +511,184 @@ export abstract class VirtualizedRenderer<
   }
 
   #handleListStateChange(change: ListStateChange<T>): void {
+    const followChange = this.#resolveAutoFollowChange(change);
+    if (
+      followChange != null &&
+      (this.#shouldAutoFollowFromSnapshot(
+        followChange.direction,
+        followChange.count,
+        followChange.animation,
+      ) ||
+        this.#shouldChainAutoFollow(
+          followChange.direction,
+          followChange.animation,
+        ))
+    ) {
+      if (
+        this.#shouldChainAutoFollow(
+          followChange.direction,
+          followChange.animation,
+        )
+      ) {
+        this.#rebaseJumpAnchorForBoundaryInsert(
+          followChange.direction,
+          followChange.count,
+          getNow(),
+        );
+      }
+      this.#transitionController.handleListStateChange(
+        { ...followChange.change, animation: undefined },
+        this.#getTransitionPlanningAdapter(),
+        this.#getTransitionLifecycleAdapter(),
+      );
+      this.#startJumpToIndex(
+        followChange.direction === "push" ? this.items.length - 1 : 0,
+        {
+          block: followChange.direction === "push" ? "end" : "start",
+          duration: followChange.animation?.duration,
+        },
+        { kind: "auto-follow", direction: followChange.direction },
+      );
+      return;
+    }
     this.#transitionController.handleListStateChange(
       change,
       this.#getTransitionPlanningAdapter(),
       this.#getTransitionLifecycleAdapter(),
+    );
+  }
+
+  #startJumpToIndex(
+    index: number,
+    options: JumpToOptions,
+    source: JumpAnimation["source"],
+  ): void {
+    const targetIndex = this._clampItemIndex(index);
+    const currentState = this._normalizeListState(this._readListState());
+    const targetBlock = options.block ?? this._getDefaultJumpBlock();
+    const targetAnchor = this._getTargetAnchor(targetIndex, targetBlock);
+
+    const animated = options.animated ?? true;
+    if (!animated) {
+      this.#cancelJumpAnimation();
+      this._applyAnchor(targetAnchor);
+      options.onComplete?.();
+      return;
+    }
+
+    const startAnchor = this._readAnchor(currentState);
+    if (!Number.isFinite(startAnchor)) {
+      this.#cancelJumpAnimation();
+      this._applyAnchor(targetAnchor);
+      options.onComplete?.();
+      return;
+    }
+
+    const path = buildJumpPath(
+      this.items.length,
+      this._getItemHeight.bind(this),
+      startAnchor,
+      targetAnchor,
+    );
+    const duration = clamp(
+      options.duration ??
+        VirtualizedRenderer.MIN_JUMP_DURATION +
+          path.totalDistance * VirtualizedRenderer.JUMP_DURATION_PER_PIXEL,
+      0,
+      VirtualizedRenderer.MAX_JUMP_DURATION,
+    );
+
+    if (duration <= 0 || path.totalDistance <= Number.EPSILON) {
+      this.#cancelJumpAnimation();
+      this._applyAnchor(targetAnchor);
+      options.onComplete?.();
+      return;
+    }
+
+    this.#jumpAnimation = {
+      path,
+      startTime: getNow(),
+      duration,
+      needsMoreFrames: true,
+      onComplete: options.onComplete,
+      source,
+    };
+    this.#controlledState = this._readListState();
+  }
+
+  #resolveAutoFollowChange(change: ListStateChange<T>):
+    | {
+        change: Extract<
+          ListStateChange<T>,
+          { type: "push" } | { type: "unshift" }
+        >;
+        direction: "push" | "unshift";
+        count: number;
+        animation: InsertListItemsAnimationOptions | undefined;
+      }
+    | undefined {
+    switch (change.type) {
+      case "push":
+      case "unshift":
+        return change.animation?.followIfAtBoundary === true
+          ? {
+              change,
+              direction: change.type,
+              count: change.count,
+              animation: change.animation,
+            }
+          : undefined;
+      default:
+        return undefined;
+    }
+  }
+
+  #shouldAutoFollowFromSnapshot(
+    direction: "push" | "unshift",
+    count: number,
+    animation: InsertListItemsAnimationOptions | undefined,
+  ): boolean {
+    if (animation?.followIfAtBoundary !== true) {
+      return false;
+    }
+    return this.#transitionController.canAutoFollowBoundaryInsert(
+      direction,
+      count,
+      this.position,
+      this.offset,
+    );
+  }
+
+  #shouldChainAutoFollow(
+    direction: "push" | "unshift",
+    animation: InsertListItemsAnimationOptions | undefined,
+  ): boolean {
+    if (animation?.followIfAtBoundary !== true) {
+      return false;
+    }
+    return this.#jumpAnimation?.source.kind === "auto-follow"
+      ? this.#jumpAnimation.source.direction === direction
+      : false;
+  }
+
+  #rebaseJumpAnchorForBoundaryInsert(
+    direction: "push" | "unshift",
+    count: number,
+    now: number,
+  ): void {
+    const animation = this.#jumpAnimation;
+    if (animation == null) {
+      return;
+    }
+    const progress = getProgress(animation.startTime, animation.duration, now);
+    const eased = progress >= 1 ? 1 : smoothstep(progress);
+    const anchorAtNow = getAnchorAtDistance(
+      animation.path,
+      animation.path.totalDistance * eased,
+    );
+    this.#cancelJumpAnimation();
+    this._applyAnchor(
+      direction === "unshift" ? anchorAtNow + count : anchorAtNow,
     );
   }
 }

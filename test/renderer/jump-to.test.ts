@@ -680,6 +680,313 @@ describe("jumpTo", () => {
     }
   });
 
+  test("pushAll auto-follows the end boundary when pinned there", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(heights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      renderer.render();
+
+      list.pushAll([50], {
+        duration: 200,
+        distance: 999,
+        followIfAtBoundary: true,
+      });
+
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedHeights = [...heights, 50];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("unshiftAll auto-follows the start boundary when pinned there", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      renderer.render();
+
+      list.unshiftAll([30], {
+        duration: 200,
+        distance: 999,
+        followIfAtBoundary: true,
+      });
+
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedHeights = [30, ...heights];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("fully visible short lists can auto-follow both insertion edges", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 120;
+      const heights = [20, 20];
+
+      const pushList = new ListState<number>();
+      pushList.pushAll(heights);
+      const pushRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: pushList,
+        renderItem: (height) => createNode(height),
+      });
+      pushRenderer.render();
+      pushList.pushAll([30], {
+        followIfAtBoundary: true,
+      });
+      for (const time of [0, 110, 220]) {
+        now.current = time;
+        pushRenderer.render();
+      }
+      const expectedPushList = new ListState<number>();
+      expectedPushList.pushAll([...heights, 30]);
+      const expectedPushRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: expectedPushList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedPushRenderer.jumpTo(2, {
+        animated: false,
+        block: "end",
+      });
+      expectedPushRenderer.render();
+      expect(pushList.position).toBe(expectedPushList.position);
+      expect(pushList.offset).toBeCloseTo(expectedPushList.offset);
+
+      now.current = 0;
+      const unshiftList = new ListState<number>();
+      unshiftList.pushAll(heights);
+      const unshiftRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list: unshiftList,
+        renderItem: (height) => createNode(height),
+      });
+      unshiftRenderer.render();
+      unshiftList.unshiftAll([30], {
+        followIfAtBoundary: true,
+      });
+      for (const time of [0, 110, 220]) {
+        now.current = time;
+        unshiftRenderer.render();
+      }
+      const expectedUnshiftList = new ListState<number>();
+      expectedUnshiftList.pushAll([30, ...heights]);
+      const expectedUnshiftRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list: expectedUnshiftList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedUnshiftRenderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      expectedUnshiftRenderer.render();
+      expect(unshiftList.position).toBe(expectedUnshiftList.position);
+      expect(unshiftList.offset).toBeCloseTo(expectedUnshiftList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("pushAll does not auto-follow when the viewport is away from the end boundary", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const list = new ListState<number>();
+      list.pushAll([40, 40, 40]);
+      const renderer = createRenderer(100, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      list.pushAll([50], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+
+      now.current = 0;
+      expect(renderer.render()).toBe(false);
+      expect(list.position).toBe(0);
+      expect(list.offset).toBe(0);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("same-direction follow inserts retarget to the latest boundary item", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      list.pushAll([30], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+
+      now.current = 100;
+      expect(renderer.render()).toBe(true);
+
+      list.pushAll([20], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+
+      now.current = 200;
+      expect(renderer.render()).toBe(true);
+
+      now.current = 300;
+      expect(renderer.render()).toBe(false);
+
+      const expectedHeights = [...heights, 30, 20];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("manual scroll cancels an in-flight auto-follow jump", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const list = new ListState<number>();
+      list.pushAll([40, 40, 40]);
+      const renderer = createRenderer(100, {
+        anchorMode: "bottom",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      list.pushAll([30], {
+        duration: 200,
+        followIfAtBoundary: true,
+      });
+
+      now.current = 100;
+      expect(renderer.render()).toBe(true);
+
+      list.position = 1;
+      list.offset = 5;
+
+      const expectedList = new ListState<number>();
+      expectedList.pushAll([40, 40, 40, 30]);
+      expectedList.position = 1;
+      expectedList.offset = 5;
+      const expectedRenderer = createRenderer(100, {
+        anchorMode: "bottom",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+
+      now.current = 200;
+      expect(renderer.render()).toBe(false);
+      expectedRenderer.render();
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBe(expectedList.offset);
+
+      now.current = 300;
+      renderer.render();
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBe(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("far jump renders without measuring the whole list", () => {
     type Item = { height: number };
 
