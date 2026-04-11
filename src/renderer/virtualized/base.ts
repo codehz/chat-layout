@@ -73,7 +73,8 @@ export abstract class VirtualizedRenderer<
       getItemCount: () => this.items.length,
       readListState: this._readListState.bind(this),
       normalizeListState: this._normalizeListState.bind(this),
-      readAnchor: this._readAnchor.bind(this),
+      readAnchor: (state) =>
+        this._readAnchor(state, this._getItemHeight.bind(this)),
       applyAnchor: this._applyAnchor.bind(this),
       getDefaultJumpBlock: this._getDefaultJumpBlock.bind(this),
       getTargetAnchor: this._getTargetAnchor.bind(this),
@@ -138,8 +139,8 @@ export abstract class VirtualizedRenderer<
         this.#transitionController.getViewportTranslateY(frameNow),
       captureVisibleItemSnapshot: (solution, extraShift) =>
         this._captureVisibleItemSnapshot(solution, extraShift),
-      pruneTransitionAnimations: (window) =>
-        this._pruneTransitionAnimations(window),
+      pruneTransitionAnimations: (window, frameNow) =>
+        this._pruneTransitionAnimations(window, frameNow),
     });
     const requestRedraw = this._renderVisibleWindow(
       frame.solution.window,
@@ -160,15 +161,20 @@ export abstract class VirtualizedRenderer<
     type: "click" | "auxclick" | "hover";
   }): boolean {
     this.#jumpController.beforeFrame();
+    const now = getNow();
+    this.#transitionController.settle(
+      now,
+      this.#getTransitionLifecycleAdapter(),
+    );
     const frame = prepareFrameSession({
-      now: getNow(),
+      now,
       resolveVisibleWindow: (frameNow) => this._resolveVisibleWindow(frameNow),
       getViewportTranslateY: (frameNow) =>
         this.#transitionController.getViewportTranslateY(frameNow),
       captureVisibleItemSnapshot: (solution, extraShift) =>
         this._captureVisibleItemSnapshot(solution, extraShift),
-      pruneTransitionAnimations: (window) =>
-        this._pruneTransitionAnimations(window),
+      pruneTransitionAnimations: (window, frameNow) =>
+        this._pruneTransitionAnimations(window, frameNow),
     });
     return this._hittestVisibleWindow(
       frame.solution.window,
@@ -298,8 +304,10 @@ export abstract class VirtualizedRenderer<
 
   protected _pruneTransitionAnimations(
     _window: VisibleWindow<unknown>,
+    now: number,
   ): boolean {
-    return this.#transitionController.pruneInvisible(
+    return this.#transitionController.pruneInvisibleAt(
+      now,
       this.#getTransitionLifecycleAdapter(),
     );
   }
@@ -357,11 +365,32 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _getItemHeight(index: number): number {
+    return this._getItemHeightAt(index, getNow());
+  }
+
+  protected _getItemHeightAt(index: number, now: number): number {
     const item = this.items[index]!;
-    return this.#transitionController.getItemHeight(item, getNow(), {
+    return this.#transitionController.getItemHeight(item, now, {
       renderItem: this.options.renderItem,
       measureNode: this.measureRootNode.bind(this),
     });
+  }
+
+  protected _readAnchorAt(now: number): number | undefined {
+    if (this.items.length <= 0) {
+      return undefined;
+    }
+    const state = this._normalizeListState(this._readListState());
+    return this._readAnchor(state, (index) =>
+      this._getItemHeightAt(index, now),
+    );
+  }
+
+  protected _restoreAnchor(anchor: number): void {
+    if (!Number.isFinite(anchor) || this.items.length <= 0) {
+      return;
+    }
+    this._applyAnchor(anchor);
   }
 
   protected _resolveItem(
@@ -385,7 +414,10 @@ export abstract class VirtualizedRenderer<
     state: VisibleListState,
     now: number,
   ): VisibleWindowResult<VirtualizedResolvedItem>;
-  protected abstract _readAnchor(state: NormalizedListState): number;
+  protected abstract _readAnchor(
+    state: NormalizedListState,
+    readItemHeight: (index: number) => number,
+  ): number;
   protected abstract _applyAnchor(anchor: number): void;
   protected abstract _getDefaultJumpBlock(): NonNullable<
     JumpToOptions["block"]
@@ -402,6 +434,8 @@ export abstract class VirtualizedRenderer<
   #getTransitionLifecycleAdapter(): TransitionLifecycleAdapter<T> {
     return {
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
+      captureVisualAnchor: this._readAnchorAt.bind(this),
+      restoreVisualAnchor: this._restoreAnchor.bind(this),
     };
   }
 

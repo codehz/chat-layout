@@ -8,7 +8,10 @@ import {
   resolveTransitionedItem,
 } from "./transition-planner";
 import { VisibilitySnapshot } from "./transition-snapshot";
-import { TransitionStore } from "./transition-store";
+import {
+  TransitionStore,
+  type StoredTransitionEntry,
+} from "./transition-store";
 import { sampleScalarAnimation } from "./transition-planner";
 import type {
   BoundaryInsertDirection,
@@ -72,13 +75,14 @@ export class TransitionController<
   }
 
   pruneInvisible(lifecycle: TransitionLifecycleAdapter<T>): boolean {
-    return this.#store.pruneInvisible(this.#snapshot, lifecycle);
+    return this.pruneInvisibleAt(getNow(), lifecycle);
   }
 
   prepare(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
+    this.settle(now, lifecycle);
     this.#cleanupViewportTranslateAnimation(now);
     const keepViewportAnimating = this.#viewportTranslateAnimation != null;
-    return this.#store.prepare(now, lifecycle) || keepViewportAnimating;
+    return this.#store.prepare(now) || keepViewportAnimating;
   }
 
   getViewportTranslateY(now: number): number {
@@ -125,6 +129,7 @@ export class TransitionController<
     lifecycle: TransitionLifecycleAdapter<T>,
   ): void {
     const now = getNow();
+    this.settle(now, lifecycle);
     const result = handleTransitionStateChange(
       this.#store,
       this.#snapshot,
@@ -142,6 +147,27 @@ export class TransitionController<
     }
   }
 
+  settle(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
+    const changed = this.#settleTransitions(
+      this.#store.findCompleted(now),
+      now,
+      lifecycle,
+    );
+    this.#cleanupViewportTranslateAnimation(now);
+    return changed;
+  }
+
+  pruneInvisibleAt(
+    now: number,
+    lifecycle: TransitionLifecycleAdapter<T>,
+  ): boolean {
+    return this.#settleTransitions(
+      this.#store.findInvisible(this.#snapshot),
+      now,
+      lifecycle,
+    );
+  }
+
   reset(): void {
     this.#store.reset();
     this.#snapshot.reset();
@@ -156,5 +182,27 @@ export class TransitionController<
     if (getProgress(animation.startTime, animation.duration, now) >= 1) {
       this.#viewportTranslateAnimation = undefined;
     }
+  }
+
+  #settleTransitions(
+    removals: readonly StoredTransitionEntry<C, T>[],
+    now: number,
+    lifecycle: TransitionLifecycleAdapter<T>,
+  ): boolean {
+    if (removals.length === 0) {
+      return false;
+    }
+
+    const anchor = lifecycle.captureVisualAnchor(now);
+    for (const { item, transition } of removals) {
+      this.#store.delete(item);
+      if (transition.kind === "delete") {
+        lifecycle.onDeleteComplete(item);
+      }
+    }
+    if (anchor != null && Number.isFinite(anchor)) {
+      lifecycle.restoreVisualAnchor(anchor);
+    }
+    return true;
   }
 }

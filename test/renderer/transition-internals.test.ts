@@ -350,10 +350,9 @@ describe("visibility snapshot", () => {
 });
 
 describe("transition store lifecycle", () => {
-  test("completed delete transitions finalize through the active-read cleanup path", () => {
+  test("completed delete transitions remain discoverable until an explicit settlement pass removes them", () => {
     const store = new TransitionStore<C, Item>();
     const item = { id: "ghost" };
-    const finalized: Item[] = [];
 
     store.set(
       item,
@@ -363,24 +362,16 @@ describe("transition store lifecycle", () => {
       }),
     );
 
-    expect(
-      store.prepare(50, {
-        onDeleteComplete: (completedItem) => finalized.push(completedItem),
-      }),
-    ).toBe(true);
-    expect(finalized).toEqual([]);
+    expect(store.prepare(50)).toBe(true);
 
+    expect(store.readActive(item, 100)).toBeUndefined();
     expect(
-      store.readActive(item, 100, {
-        onDeleteComplete: (completedItem) => finalized.push(completedItem),
-      }),
-    ).toBeUndefined();
-    expect(finalized).toEqual([item]);
-    expect(store.size).toBe(0);
+      store.findCompleted(100).map(({ item: completed }) => completed),
+    ).toEqual([item]);
+    expect(store.size).toBe(1);
   });
 
-  test("offscreen pruning finalizes delete ghosts and manual removal skips callbacks", () => {
-    const finalized: Item[] = [];
+  test("offscreen pruning reports delete ghosts for external settlement and manual removal skips callbacks", () => {
     const deleteItem = { id: "delete" };
     const insertItem = { id: "insert" };
 
@@ -402,12 +393,11 @@ describe("transition store lifecycle", () => {
     );
 
     expect(
-      prunedStore.pruneInvisible(new VisibilitySnapshot<Item>(), {
-        onDeleteComplete: (completedItem) => finalized.push(completedItem),
-      }),
-    ).toBe(true);
-    expect(finalized).toEqual([deleteItem]);
-    expect(prunedStore.size).toBe(0);
+      prunedStore
+        .findInvisible(new VisibilitySnapshot<Item>())
+        .map(({ item }) => item),
+    ).toEqual([deleteItem, insertItem]);
+    expect(prunedStore.size).toBe(2);
 
     const manualStore = new TransitionStore<C, Item>();
     manualStore.set(
@@ -419,10 +409,9 @@ describe("transition store lifecycle", () => {
     );
     expect(manualStore.delete(deleteItem)?.kind).toBe("delete");
     expect(manualStore.size).toBe(0);
-    expect(finalized).toEqual([deleteItem]);
   });
 
-  test("visible-retained transitions survive pruning while they still have any visible area", () => {
+  test("visible-retained transitions survive invisible scans while they still have any visible area", () => {
     const item = { id: "visible-item" };
     const store = new TransitionStore<C, Item>();
     const snapshot = new VisibilitySnapshot<Item>();
@@ -447,15 +436,7 @@ describe("transition store lifecycle", () => {
       readVisibleRange,
     );
 
-    expect(
-      store.pruneInvisible(snapshot, {
-        onDeleteComplete: () => {
-          throw new Error(
-            "should not finalize while the item is still visible",
-          );
-        },
-      }),
-    ).toBe(false);
+    expect(store.findInvisible(snapshot)).toEqual([]);
     expect(store.size).toBe(1);
   });
 });

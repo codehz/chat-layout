@@ -1,9 +1,14 @@
 import { getProgress } from "./base-animation";
-import type {
-  ActiveItemTransition,
-  TransitionLifecycleAdapter,
-} from "./transition-runtime";
+import type { ActiveItemTransition } from "./transition-runtime";
 import { VisibilitySnapshot } from "./transition-snapshot";
+
+export type StoredTransitionEntry<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+> = {
+  item: T;
+  transition: ActiveItemTransition<C>;
+};
 
 export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
   #transitions = new Map<T, ActiveItemTransition<C>>();
@@ -33,60 +38,50 @@ export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
     return transition;
   }
 
-  readActive(
-    item: T,
-    now: number,
-    lifecycle?: TransitionLifecycleAdapter<T>,
-  ): ActiveItemTransition<C> | undefined {
+  readActive(item: T, now: number): ActiveItemTransition<C> | undefined {
     const transition = this.#transitions.get(item);
     if (transition == null) {
       return undefined;
     }
-    if (
+    return this.#isComplete(transition, now) ? undefined : transition;
+  }
+
+  prepare(now: number): boolean {
+    for (const transition of this.#transitions.values()) {
+      if (!this.#isComplete(transition, now)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  findCompleted(now: number): StoredTransitionEntry<C, T>[] {
+    return [...this.#transitions.entries()]
+      .filter(([, transition]) => this.#isComplete(transition, now))
+      .map(([item, transition]) => ({ item, transition }));
+  }
+
+  findInvisible(
+    snapshot: VisibilitySnapshot<T>,
+  ): StoredTransitionEntry<C, T>[] {
+    return [...this.#transitions.entries()]
+      .filter(
+        ([item, transition]) => !snapshot.tracks(item, transition.retention),
+      )
+      .map(([item, transition]) => ({ item, transition }));
+  }
+
+  reset(): void {
+    this.#transitions.clear();
+  }
+
+  #isComplete(transition: ActiveItemTransition<C>, now: number): boolean {
+    return (
       getProgress(
         transition.height.startTime,
         transition.height.duration,
         now,
       ) >= 1
-    ) {
-      this.#transitions.delete(item);
-      if (transition.kind === "delete") {
-        lifecycle?.onDeleteComplete(item);
-      }
-      return undefined;
-    }
-    return transition;
-  }
-
-  prepare(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
-    let keepAnimating = false;
-    for (const item of [...this.#transitions.keys()]) {
-      if (this.readActive(item, now, lifecycle) != null) {
-        keepAnimating = true;
-      }
-    }
-    return keepAnimating;
-  }
-
-  pruneInvisible(
-    snapshot: VisibilitySnapshot<T>,
-    lifecycle: TransitionLifecycleAdapter<T>,
-  ): boolean {
-    let changed = false;
-    for (const [item, transition] of [...this.#transitions.entries()]) {
-      if (snapshot.tracks(item, transition.retention)) {
-        continue;
-      }
-      this.#transitions.delete(item);
-      if (transition.kind === "delete") {
-        lifecycle.onDeleteComplete(item);
-      }
-      changed = true;
-    }
-    return changed;
-  }
-
-  reset(): void {
-    this.#transitions.clear();
+    );
   }
 }

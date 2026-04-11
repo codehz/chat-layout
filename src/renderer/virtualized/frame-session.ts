@@ -14,12 +14,15 @@ export function prepareFrameSession<T>(params: {
     solution: VisibleWindowResult<T>,
     extraShift: number,
   ) => void;
-  pruneTransitionAnimations: (window: VisibleWindow<T>) => boolean;
+  pruneTransitionAnimations: (window: VisibleWindow<T>, now: number) => boolean;
 }): PreparedFrameSession<T> {
   let solution = params.resolveVisibleWindow(params.now);
   let viewportTranslateY = params.getViewportTranslateY(params.now);
   params.captureVisibleItemSnapshot(solution, viewportTranslateY);
-  const requestSettleRedraw = params.pruneTransitionAnimations(solution.window);
+  const requestSettleRedraw = params.pruneTransitionAnimations(
+    solution.window,
+    params.now,
+  );
   if (requestSettleRedraw) {
     solution = params.resolveVisibleWindow(params.now);
     viewportTranslateY = params.getViewportTranslateY(params.now);

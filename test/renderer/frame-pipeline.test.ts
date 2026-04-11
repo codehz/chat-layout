@@ -61,7 +61,10 @@ class PipelineProbeRenderer extends VirtualizedRenderer<C, number> {
     };
   }
 
-  protected _readAnchor(state: NormalizedListState): number {
+  protected _readAnchor(
+    state: NormalizedListState,
+    _readItemHeight: (index: number) => number,
+  ): number {
     return state.position;
   }
 
@@ -91,7 +94,10 @@ class PipelineProbeRenderer extends VirtualizedRenderer<C, number> {
     super._captureVisibleItemSnapshot(solution, extraShift);
   }
 
-  protected _pruneTransitionAnimations(): boolean {
+  protected _pruneTransitionAnimations(
+    _window?: unknown,
+    _now?: number,
+  ): boolean {
     this.calls.prune += 1;
     if (!this.shouldPrune) {
       return false;

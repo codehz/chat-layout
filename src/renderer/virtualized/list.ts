@@ -64,12 +64,15 @@ export class ListRenderer<
     return normalizeVisibleState(this.items.length, state, this.#layout);
   }
 
-  protected _readAnchor(state: NormalizedListState): number {
+  protected _readAnchor(
+    state: NormalizedListState,
+    readItemHeight: (index: number) => number,
+  ): number {
     return readAnchorFromState(
       this.items.length,
       state,
       this.#layout.anchorMode,
-      this._getItemHeight.bind(this),
+      readItemHeight,
     );
   }
 

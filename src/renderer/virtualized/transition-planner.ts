@@ -662,7 +662,7 @@ export function resolveTransitionedItem<
   adapter: TransitionRenderAdapter<C, T>,
   lifecycle: TransitionLifecycleAdapter<T>,
 ): { value: VirtualizedResolvedItem; height: number } {
-  const transition = store.readActive(item, now, lifecycle);
+  const transition = store.readActive(item, now);
   if (transition == null) {
     const node = adapter.renderItem(item);
     return {

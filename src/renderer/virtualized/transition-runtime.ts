@@ -8,6 +8,8 @@ export type VisibleRange = {
 
 export type TransitionLifecycleAdapter<T extends {}> = {
   onDeleteComplete: (item: T) => void;
+  captureVisualAnchor: (now: number) => number | undefined;
+  restoreVisualAnchor: (anchor: number) => void;
 };
 
 export type VirtualizedRuntime<
