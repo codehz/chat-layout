@@ -5,6 +5,7 @@ import {
   TransitionStore,
   VisibilitySnapshot,
   canAnimateExistingItem,
+  remapAnchorAfterDeletes,
   resolveBoundaryInsertStrategy,
   sampleActiveTransition,
   type ActiveItemTransition,
@@ -284,6 +285,28 @@ describe("transition sampling", () => {
     expect(sampledInsert.layers).toHaveLength(1);
     expect(sampledInsert.layers[0]?.alpha).toBeCloseTo(0.5);
     expect(sampledInsert.layers[0]?.translateY).toBeCloseTo(12);
+  });
+});
+
+describe("delete-finalize anchor remapping", () => {
+  test("shifts anchors left when deletions happen entirely before them", () => {
+    expect(remapAnchorAfterDeletes(4.25, [1])).toBeCloseTo(3.25);
+    expect(remapAnchorAfterDeletes(4.25, [1, 3])).toBeCloseTo(2.25);
+  });
+
+  test("collapses anchors that land inside a deleted interval", () => {
+    expect(remapAnchorAfterDeletes(1.5, [1])).toBeCloseTo(1);
+    expect(remapAnchorAfterDeletes(3.2, [1, 3])).toBeCloseTo(2);
+  });
+
+  test("leaves anchors unchanged when deletions happen after them", () => {
+    expect(remapAnchorAfterDeletes(0.75, [2])).toBeCloseTo(0.75);
+    expect(remapAnchorAfterDeletes(1, [3, 5])).toBeCloseTo(1);
+  });
+
+  test("applies multiple same-frame deletes in old-index order", () => {
+    expect(remapAnchorAfterDeletes(2.5, [2, 1])).toBeCloseTo(1);
+    expect(remapAnchorAfterDeletes(5.5, [4, 1, 3])).toBeCloseTo(2.5);
   });
 });
 

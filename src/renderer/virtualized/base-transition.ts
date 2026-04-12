@@ -46,6 +46,32 @@ export type {
   VisibleRange,
 } from "./transition-runtime";
 
+export function remapAnchorAfterDeletes(
+  anchor: number,
+  deletedIndices: readonly number[],
+): number {
+  if (!Number.isFinite(anchor) || deletedIndices.length === 0) {
+    return anchor;
+  }
+
+  const sortedIndices = [...deletedIndices]
+    .filter((index) => Number.isFinite(index) && index >= 0)
+    .sort((a, b) => a - b);
+  let removedBeforeAnchor = 0;
+
+  for (const index of sortedIndices) {
+    if (anchor > index + 1) {
+      removedBeforeAnchor += 1;
+      continue;
+    }
+    if (anchor >= index) {
+      return index - removedBeforeAnchor;
+    }
+  }
+
+  return anchor - removedBeforeAnchor;
+}
+
 export class TransitionController<
   C extends CanvasRenderingContext2D,
   T extends {},
@@ -194,14 +220,23 @@ export class TransitionController<
     }
 
     const anchor = lifecycle.captureVisualAnchor(now);
+    const completedDeleteIndices: number[] = [];
     for (const { item, transition } of removals) {
+      if (transition.kind === "delete") {
+        const index = lifecycle.readItemIndex(item);
+        if (index >= 0) {
+          completedDeleteIndices.push(index);
+        }
+      }
       this.#store.delete(item);
       if (transition.kind === "delete") {
         lifecycle.onDeleteComplete(item);
       }
     }
     if (anchor != null && Number.isFinite(anchor)) {
-      lifecycle.restoreVisualAnchor(anchor);
+      lifecycle.restoreVisualAnchor(
+        remapAnchorAfterDeletes(anchor, completedDeleteIndices),
+      );
     }
     return true;
   }

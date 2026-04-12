@@ -500,6 +500,7 @@ export abstract class VirtualizedRenderer<
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
       captureVisualAnchor: this._readAnchorAt.bind(this),
       restoreVisualAnchor: this._restoreAnchor.bind(this),
+      readItemIndex: (item) => this.items.indexOf(item),
     };
   }
 

@@ -28,6 +28,10 @@ type DrawProbe = {
   y: number;
 };
 
+function readDrawY(draws: DrawProbe[], id: string): number | undefined {
+  return draws.find((draw) => draw.id === id)?.y;
+}
+
 function createProbeNode(
   item: Item,
   draws: DrawProbe[],
@@ -1554,9 +1558,9 @@ describe("delete animation", () => {
 
       now.current = 50;
       expect(renderer.render()).toBe(true);
-      expect(draws.map((draw) => draw.id)).toEqual(["tail", "middle"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(-40);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(0);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(-10);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(30);
       expect(list.items.map((current) => current.id)).toEqual([
         "middle",
         "tail",
@@ -1565,8 +1569,9 @@ describe("delete animation", () => {
       now.current = 75;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.map((draw) => draw.id)).toEqual(["tail"]);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(0);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(-10);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(30);
       expect(list.items.map((current) => current.id)).toEqual([
         "middle",
         "tail",
@@ -1575,10 +1580,105 @@ describe("delete animation", () => {
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(-10);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(30);
       expect(list.items.map((current) => current.id)).toEqual([
         "middle",
         "tail",
       ]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("bottom-anchor delete-finalize remaps anchors when a hidden leading item disappears", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const items = [
+        { id: "head", height: 80 },
+        { id: "middle", height: 40 },
+        { id: "tail", height: 40 },
+      ] as const;
+      const { list, renderer } = createBottomRenderer(
+        [...items],
+        draws,
+        [],
+        60,
+      );
+
+      list.setAnchor(0, -50);
+      renderer.render();
+
+      list.delete(items[0]!, { duration: 100 });
+
+      now.current = 99;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      const middleAt99 = readDrawY(draws, "middle");
+      const tailAt99 = readDrawY(draws, "tail");
+      expect(middleAt99).toBeCloseTo(0.02384, 4);
+      expect(tailAt99).toBeCloseTo(40.02384, 4);
+      expect(list.position).toBe(2);
+      expect(list.offset).toBeCloseTo(20.02384, 4);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(Math.abs(readDrawY(draws, "middle")! - middleAt99!)).toBeLessThan(
+        0.05,
+      );
+      expect(Math.abs(readDrawY(draws, "tail")! - tailAt99!)).toBeLessThan(
+        0.05,
+      );
+      expect(list.items.map((item) => item.id)).toEqual(["middle", "tail"]);
+      expect(list.position).toBe(1);
+      expect(list.offset).toBeCloseTo(20, 2);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top-anchor delete-finalize remaps anchors when a hidden prior item disappears", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const items = [
+        { id: "head", height: 80 },
+        { id: "middle", height: 40 },
+        { id: "tail", height: 40 },
+      ] as const;
+      const { list, renderer } = createTopRenderer([...items], draws, [], 60);
+
+      list.setAnchor(0, -90);
+      renderer.render();
+
+      list.delete(items[1]!, { duration: 100 });
+
+      now.current = 99;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      const headAt99 = readDrawY(draws, "head");
+      const tailAt99 = readDrawY(draws, "tail");
+      expect(headAt99).toBeCloseTo(-60.01192, 4);
+      expect(tailAt99).toBeCloseTo(20, 4);
+      expect(list.position).toBe(2);
+      expect(list.offset).toBeCloseTo(20, 4);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(Math.abs(readDrawY(draws, "head")! - headAt99!)).toBeLessThan(
+        0.05,
+      );
+      expect(Math.abs(readDrawY(draws, "tail")! - tailAt99!)).toBeLessThan(
+        0.05,
+      );
+      expect(list.items.map((item) => item.id)).toEqual(["head", "tail"]);
+      expect(list.position).toBe(1);
+      expect(list.offset).toBeCloseTo(20, 2);
     } finally {
       restoreNow();
     }
@@ -1606,8 +1706,8 @@ describe("delete animation", () => {
       now.current = 50;
       expect(renderer.render()).toBe(true);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-30);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(10);
+      expect(readDrawY(draws, "head")).toBeCloseTo(-30);
       expect(list.items.map((current) => current.id)).toEqual([
         "head",
         "middle",
@@ -1618,8 +1718,8 @@ describe("delete animation", () => {
       draws.length = 0;
       expect(renderer.render()).toBe(false);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-30);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(10);
+      expect(readDrawY(draws, "head")).toBeCloseTo(-30);
       expect(list.items.map((current) => current.id)).toEqual([
         "head",
         "middle",
