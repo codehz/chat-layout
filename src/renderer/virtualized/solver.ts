@@ -44,7 +44,7 @@ export interface NormalizedListState {
 }
 
 export interface VisibleWindowEntry<T> {
-  idx: number;
+  index: number;
   value: T;
   offset: number;
   height: number;
@@ -196,7 +196,7 @@ export function resolveVisibleWindow<T, V>(
     for (let i = position; i < items.length; i += 1) {
       const { value, height } = readResolvedItem(items[i]!, i);
       if (y + height > 0) {
-        drawList.push({ idx: i, value, offset: y, height });
+        drawList.push({ index: i, value, offset: y, height });
         drawLength += height;
       } else {
         offset += height;
@@ -212,7 +212,7 @@ export function resolveVisibleWindow<T, V>(
     if (y < contentHeight) {
       const hasDeferredTrailingBoundarySlot =
         drawList.length > 0 &&
-        drawList.at(-1)?.idx === items.length - 1 &&
+        drawList.at(-1)?.index === items.length - 1 &&
         !(drawList.at(-1)?.height! > Number.EPSILON);
       if (hasDeferredTrailingBoundarySlot) {
         return finalizeVisibleWindowResult(
@@ -240,7 +240,7 @@ export function resolveVisibleWindow<T, V>(
           const { value, height } = readResolvedItem(items[i]!, i);
           drawLength += height;
           y -= height;
-          drawList.push({ idx: i, value, offset: y - shift, height });
+          drawList.push({ index: i, value, offset: y - shift, height });
           lastIdx = i;
           if (y < 0) {
             break;
@@ -294,7 +294,7 @@ export function resolveVisibleWindow<T, V>(
     const { value, height } = readResolvedItem(items[i]!, i);
     y -= height;
     if (y <= contentHeight) {
-      drawList.push({ idx: i, value, offset: y, height });
+      drawList.push({ index: i, value, offset: y, height });
       drawLength += height;
     } else {
       offset -= height;
@@ -312,7 +312,7 @@ export function resolveVisibleWindow<T, V>(
       y = drawLength;
       for (let i = position + 1; i < items.length; i += 1) {
         const { value, height } = readResolvedItem(items[i]!, i);
-        drawList.push({ idx: i, value, offset: y - shift, height });
+        drawList.push({ index: i, value, offset: y - shift, height });
         y = drawLength += height;
         if (height > Number.EPSILON) {
           position = i;
@@ -371,8 +371,8 @@ function finalizeVisibleWindowResult<T>(
       minOffset = Math.min(minOffset, entry.offset);
       maxBottom = Math.max(maxBottom, entry.offset + entry.height);
     }
-    minIndex = Math.min(minIndex, entry.idx);
-    maxIndex = Math.max(maxIndex, entry.idx);
+    minIndex = Math.min(minIndex, entry.index);
+    maxIndex = Math.max(maxIndex, entry.index);
   }
 
   if (!Number.isFinite(minOffset) || !Number.isFinite(maxBottom)) {
@@ -424,7 +424,7 @@ function extendVisibleWindowToOuterBounds<T, V>(
   }
 
   const drawList = [...window.drawList];
-  const existingIndices = new Set(drawList.map((entry) => entry.idx));
+  const existingIndices = new Set(drawList.map((entry) => entry.index));
   let topEntry = drawList[0]!;
   let bottomEntry = drawList[0]!;
   for (const entry of drawList) {
@@ -436,12 +436,12 @@ function extendVisibleWindowToOuterBounds<T, V>(
     }
   }
 
-  let topIdx = topEntry.idx;
+  let topIdx = topEntry.index;
   let topY = topEntry.offset + window.shift;
   while (topIdx > 0) {
     const prevIdx = topIdx - 1;
     if (existingIndices.has(prevIdx)) {
-      const existing = drawList.find((entry) => entry.idx === prevIdx);
+      const existing = drawList.find((entry) => entry.index === prevIdx);
       topIdx = prevIdx;
       if (existing != null) {
         topY = existing.offset + window.shift;
@@ -454,7 +454,7 @@ function extendVisibleWindowToOuterBounds<T, V>(
       break;
     }
     drawList.push({
-      idx: prevIdx,
+      index: prevIdx,
       value,
       offset: prevY - window.shift,
       height,
@@ -464,12 +464,12 @@ function extendVisibleWindowToOuterBounds<T, V>(
     topY = prevY;
   }
 
-  let bottomIdx = bottomEntry.idx;
+  let bottomIdx = bottomEntry.index;
   let bottomY = bottomEntry.offset + window.shift + bottomEntry.height;
   while (bottomIdx < items.length - 1) {
     const nextIdx = bottomIdx + 1;
     if (existingIndices.has(nextIdx)) {
-      const existing = drawList.find((entry) => entry.idx === nextIdx);
+      const existing = drawList.find((entry) => entry.index === nextIdx);
       bottomIdx = nextIdx;
       if (existing != null) {
         bottomY = Math.max(
@@ -484,7 +484,7 @@ function extendVisibleWindowToOuterBounds<T, V>(
       break;
     }
     drawList.push({
-      idx: nextIdx,
+      index: nextIdx,
       value,
       offset: bottomY - window.shift,
       height,

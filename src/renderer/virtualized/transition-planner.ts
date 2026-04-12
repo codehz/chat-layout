@@ -1,7 +1,10 @@
 import type { Node } from "../../types";
 import type { ListStateChange } from "../list-state";
-import { clamp, getNow, interpolate } from "./base-animation";
-import { ALPHA_EPSILON, type VirtualizedResolvedItem } from "./base-types";
+import { clamp, getNow, interpolate } from "./virtualized-animation";
+import {
+  ALPHA_EPSILON,
+  type VirtualizedResolvedItem,
+} from "./virtualized-types";
 import type { VisibleWindowResult } from "./solver";
 import {
   type ActiveItemTransition,
@@ -96,7 +99,7 @@ function findVisibleEntry(
   >["readVisibleRange"],
 ):
   | {
-      idx: number;
+      index: number;
       offset: number;
       height: number;
     }
@@ -106,7 +109,7 @@ function findVisibleEntry(
   }
   const solution = resolveVisibleWindow();
   for (const entry of solution.window.drawList) {
-    if (entry.idx !== index) {
+    if (entry.index !== index) {
       continue;
     }
     if (
@@ -195,8 +198,8 @@ function hasVisibleBoundaryInsertItems<
   const solution = ctx.resolveVisibleWindow();
   return solution.window.drawList.some(
     (entry) =>
-      entry.idx >= start &&
-      entry.idx < end &&
+      entry.index >= start &&
+      entry.index < end &&
       ctx.readOuterVisibleRange(
         entry.offset + solution.window.shift,
         entry.height,

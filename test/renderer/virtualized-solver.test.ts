@@ -44,7 +44,7 @@ describe("virtualized solvers", () => {
     expect(state).toEqual({ position: undefined, offset: 0 });
     expect(solution.normalizedState).toEqual({ position: 0, offset: 0 });
     expect(solution.resolutionPath).toEqual([0, 1]);
-    expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([0, 1]);
+    expect(solution.window.drawList.map(({ index }) => index)).toEqual([0, 1]);
   });
 
   test("bottom-anchor solver returns normalized state and leaves the input state untouched", () => {
@@ -64,7 +64,7 @@ describe("virtualized solvers", () => {
     expect(state).toEqual({ position: undefined, offset: 0 });
     expect(solution.normalizedState).toEqual({ position: 2, offset: 0 });
     expect(solution.resolutionPath).toEqual([2, 1]);
-    expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([2, 1]);
+    expect(solution.window.drawList.map(({ index }) => index)).toEqual([2, 1]);
   });
 
   test("core solver defaults to top anchor and supports both anchor modes", () => {
@@ -186,7 +186,9 @@ describe("virtualized solvers", () => {
     );
     expect(forward.normalizedState).toEqual({ position: 1, offset: 20 });
     expect(forward.window.shift).toBe(20);
-    expect(forward.window.drawList.map(({ idx }) => idx)).toEqual([1, 2, 0]);
+    expect(forward.window.drawList.map(({ index }) => index)).toEqual([
+      1, 2, 0,
+    ]);
 
     const backward = resolveVisibleWindow(
       items,
@@ -197,7 +199,9 @@ describe("virtualized solvers", () => {
     );
     expect(backward.normalizedState).toEqual({ position: 2, offset: 20 });
     expect(backward.window.shift).toBe(-20);
-    expect(backward.window.drawList.map(({ idx }) => idx)).toEqual([1, 0, 2]);
+    expect(backward.window.drawList.map(({ index }) => index)).toEqual([
+      1, 0, 2,
+    ]);
   });
 
   test("resolutionPath includes normalization-consumed items even when they are not drawn", () => {
@@ -213,7 +217,7 @@ describe("virtualized solvers", () => {
     );
 
     expect(solution.normalizedState).toEqual({ position: 1, offset: -20 });
-    expect(solution.window.drawList.map(({ idx }) => idx)).toEqual([1, 2]);
+    expect(solution.window.drawList.map(({ index }) => index)).toEqual([1, 2]);
     expect(solution.resolutionPath).toEqual([0, 1, 2]);
   });
 });

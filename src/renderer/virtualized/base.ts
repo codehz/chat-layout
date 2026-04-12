@@ -8,13 +8,13 @@ import {
   type ListStateChange,
   writeInternalListScrollState,
 } from "../list-state";
-import { clamp, getNow } from "./base-animation";
+import { clamp, getNow } from "./virtualized-animation";
 import type {
   AutoFollowCapabilities,
-  ControlledState,
+  ListScrollStateSnapshot,
   VirtualizedResolvedItem,
-} from "./base-types";
-import { VIEWPORT_BOUNDARY_EPSILON } from "./base-types";
+} from "./virtualized-types";
+import { VIEWPORT_BOUNDARY_EPSILON } from "./virtualized-types";
 import { prepareFrameSession } from "./frame-session";
 import { JumpController } from "./jump-controller";
 import {
@@ -23,7 +23,7 @@ import {
   type TransitionPlanningAdapter,
   type TransitionRenderAdapter,
   type VirtualizedRuntime,
-} from "./base-transition";
+} from "./transition-controller";
 import type {
   ListViewportMetrics,
   NormalizedListState,
@@ -265,10 +265,10 @@ export abstract class VirtualizedRenderer<
     let result = false;
     const viewport = this._getViewportMetrics();
 
-    for (const { idx, value: item, offset, height } of list) {
+    for (const { index, value: item, offset, height } of list) {
       const y = offset + shift + viewport.contentTop;
       if (feedback != null) {
-        this._accumulateRenderFeedback(feedback, idx, y, height);
+        this._accumulateRenderFeedback(feedback, index, y, height);
       }
       if (y + height < 0 || y > viewport.outerHeight) {
         continue;
@@ -305,9 +305,9 @@ export abstract class VirtualizedRenderer<
     let bottomMostY = Number.NEGATIVE_INFINITY;
     const viewport = this._getViewportMetrics();
 
-    for (const { idx, offset, height } of window.drawList) {
-      minIndex = Math.min(minIndex, idx);
-      maxIndex = Math.max(maxIndex, idx);
+    for (const { index, offset, height } of window.drawList) {
+      minIndex = Math.min(minIndex, index);
+      maxIndex = Math.max(maxIndex, index);
       const y = offset + window.shift + viewport.contentTop;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);

@@ -1,6 +1,6 @@
-import type { ControlledState } from "./base-types";
-import { VIEWPORT_BOUNDARY_EPSILON } from "./base-types";
-import { sameState } from "./base-animation";
+import { sameState } from "./virtualized-animation";
+import type { ListScrollStateSnapshot } from "./virtualized-types";
+import { VIEWPORT_BOUNDARY_EPSILON } from "./virtualized-types";
 import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import type {
   BoundaryInsertDirection,
@@ -12,9 +12,9 @@ export class VisibilitySnapshot<T extends {}> {
   #visibleItems = new Set<T>();
   #previousVisibleItems = new Set<T>();
   #hasSnapshot = false;
-  #snapshotState: ControlledState | undefined;
-  #previousSnapshotState: ControlledState | undefined;
-  #emptyState: ControlledState | undefined;
+  #snapshotState: ListScrollStateSnapshot | undefined;
+  #previousSnapshotState: ListScrollStateSnapshot | undefined;
+  #emptyState: ListScrollStateSnapshot | undefined;
   #coversShortList = false;
   #atStartBoundary = false;
   #atEndBoundary = false;
@@ -33,7 +33,7 @@ export class VisibilitySnapshot<T extends {}> {
     return this.#hasSnapshot;
   }
 
-  get previousState(): ControlledState | undefined {
+  get previousState(): ListScrollStateSnapshot | undefined {
     return this.#previousSnapshotState;
   }
 
@@ -66,7 +66,7 @@ export class VisibilitySnapshot<T extends {}> {
     _resolutionPath: readonly number[],
     items: readonly T[],
     viewport: ListViewportMetrics,
-    snapshotState: ControlledState,
+    snapshotState: ListScrollStateSnapshot,
     readVisibleRange: (top: number, height: number) => VisibleRange | undefined,
     readOuterVisibleRange: (
       top: number,
@@ -90,16 +90,16 @@ export class VisibilitySnapshot<T extends {}> {
     const effectiveShift = window.shift;
     const contentOriginY = viewport.contentTop;
 
-    for (const { idx, offset, height } of window.drawList) {
+    for (const { index, offset, height } of window.drawList) {
       const y = offset + effectiveShift + contentOriginY;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
 
-      const item = items[idx];
+      const item = items[index];
       if (item != null && readOuterVisibleRange(y, height) != null) {
         nextDrawnItems.add(item);
-        nextMinDrawnIndex = Math.min(nextMinDrawnIndex, idx);
-        nextMaxDrawnIndex = Math.max(nextMaxDrawnIndex, idx);
+        nextMinDrawnIndex = Math.min(nextMinDrawnIndex, index);
+        nextMaxDrawnIndex = Math.max(nextMaxDrawnIndex, index);
       }
       if (item == null) {
         continue;
@@ -107,8 +107,8 @@ export class VisibilitySnapshot<T extends {}> {
 
       const visibleRange = readVisibleRange(y, height);
       if (visibleRange != null) {
-        minVisibleIndex = Math.min(minVisibleIndex, idx);
-        maxVisibleIndex = Math.max(maxVisibleIndex, idx);
+        minVisibleIndex = Math.min(minVisibleIndex, index);
+        maxVisibleIndex = Math.max(maxVisibleIndex, index);
         nextVisibleItems.add(item);
         if (y < nextTopBoundaryY) {
           nextTopBoundaryY = y;

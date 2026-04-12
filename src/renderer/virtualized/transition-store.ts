@@ -1,4 +1,4 @@
-import { getProgress } from "./base-animation";
+import { getProgress } from "./virtualized-animation";
 import type { ActiveItemTransition } from "./transition-runtime";
 import { VisibilitySnapshot } from "./transition-snapshot";
 

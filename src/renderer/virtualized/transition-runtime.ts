@@ -1,5 +1,5 @@
 import type { Box, Context, Node } from "../../types";
-import type { ControlledState } from "./base-types";
+import type { ListScrollStateSnapshot } from "./virtualized-types";
 import type {
   ListViewportMetrics,
   ResolvedListLayoutOptions,
@@ -15,7 +15,7 @@ export type TransitionLifecycleAdapter<T extends {}> = {
   onDeleteComplete: (item: T) => void;
   captureVisualAnchor: (now: number) => number | undefined;
   restoreVisualAnchor: (anchor: number) => void;
-  readScrollState: () => ControlledState;
+  readScrollState: () => ListScrollStateSnapshot;
   readItemIndex: (item: T) => number;
   snapItemToViewportBoundary: (item: T, boundary: "top" | "bottom") => void;
   onTransitionSettleScrollAdjusted: () => void;
@@ -38,7 +38,7 @@ export type VirtualizedRuntime<
   ) => VisibleRange | undefined;
   resolveVisibleWindow: () => VisibleWindowResult<unknown>;
   resolveVisibleWindowForState: (
-    state: ControlledState,
+    state: ListScrollStateSnapshot,
     now: number,
   ) => VisibleWindowResult<unknown>;
 };

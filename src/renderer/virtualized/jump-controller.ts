@@ -10,13 +10,13 @@ import {
   getNow,
   getProgress,
   smoothstep,
-} from "./base-animation";
+} from "./virtualized-animation";
 import type {
   AutoFollowBoundary,
   AutoFollowCapabilities,
-  ControlledState,
   JumpAnimation,
-} from "./base-types";
+  ListScrollStateSnapshot,
+} from "./virtualized-types";
 import type { JumpBlock } from "./anchor-model";
 import type { NormalizedListState } from "./solver";
 
@@ -55,9 +55,9 @@ export interface JumpControllerOptions<T extends {}> {
   maxJumpDuration: number;
   jumpDurationPerPixel: number;
   getItemCount: () => number;
-  readListState: () => ControlledState;
+  readListState: () => ListScrollStateSnapshot;
   readScrollMutation: () => ListScrollMutation;
-  normalizeListState: (state: ControlledState) => NormalizedListState;
+  normalizeListState: (state: ListScrollStateSnapshot) => NormalizedListState;
   readAnchor: (state: NormalizedListState) => number;
   applyAnchor: (anchor: number) => void;
   getDefaultJumpBlock: () => JumpBlock;
@@ -171,7 +171,7 @@ export class JumpController<T extends {}> {
     return requestRedraw || this.#jumpAnimation != null;
   }
 
-  commit(state: ControlledState): void {
+  commit(state: ListScrollStateSnapshot): void {
     void state;
     this.#lastHandledScrollMutationVersion =
       this.#options.readScrollMutation().version;

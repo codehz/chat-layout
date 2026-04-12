@@ -1,7 +1,9 @@
 import type { ListStateChange } from "../list-state";
-import { getNow } from "./base-animation";
-import { sameState } from "./base-animation";
-import type { ControlledState, VirtualizedResolvedItem } from "./base-types";
+import { getNow, sameState } from "./virtualized-animation";
+import type {
+  ListScrollStateSnapshot,
+  VirtualizedResolvedItem,
+} from "./virtualized-types";
 import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import {
   getTransitionedItemHeight,
@@ -86,7 +88,7 @@ export class TransitionController<
     resolutionPath: readonly number[],
     items: readonly T[],
     viewport: ListViewportMetrics,
-    snapshotState: ControlledState,
+    snapshotState: ListScrollStateSnapshot,
     readVisibleRange: TransitionPlanningAdapter<C, T>["readVisibleRange"],
     readOuterVisibleRange: TransitionPlanningAdapter<
       C,
@@ -286,13 +288,13 @@ export class TransitionController<
 
   #isTransitionVisibleInState(
     index: number,
-    state: ControlledState,
+    state: ListScrollStateSnapshot,
     now: number,
     ctx: TransitionPlanningAdapter<C, T>,
   ): boolean {
     const solution = ctx.resolveVisibleWindowForState(state, now);
     for (const entry of solution.window.drawList) {
-      if (entry.idx !== index) {
+      if (entry.index !== index) {
         continue;
       }
       return (

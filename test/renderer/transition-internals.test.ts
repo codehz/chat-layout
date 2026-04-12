@@ -10,7 +10,7 @@ import {
   type ActiveItemTransition,
   type LayerAnimation,
   type ScalarAnimation,
-} from "../../src/renderer/virtualized/base-transition";
+} from "../../src/renderer/virtualized/transition-controller";
 import { resolveListViewport } from "../../src/renderer/virtualized/solver";
 
 type C = CanvasRenderingContext2D;
@@ -83,14 +83,14 @@ function readVisibleRange(
 
 function resolveVisibleWindow(
   drawList: Array<{
-    idx: number;
+    index: number;
     offset: number;
     height: number;
   }>,
 ): () => {
   window: {
     drawList: Array<{
-      idx: number;
+      index: number;
       offset: number;
       height: number;
       value: null;
@@ -109,7 +109,7 @@ function resolveVisibleWindow(
       position: 0,
       offset: 0,
     },
-    resolutionPath: drawList.map((entry) => entry.idx),
+    resolutionPath: drawList.map((entry) => entry.index),
   });
 }
 
@@ -122,7 +122,7 @@ describe("transition eligibility", () => {
     const snapshot = new VisibilitySnapshot<Item>();
     snapshot.capture(
       {
-        drawList: [{ idx: 0, offset: 10, height: 20, value: null }],
+        drawList: [{ index: 0, offset: 10, height: 20, value: null }],
         shift: 0,
       },
       [0],
@@ -155,7 +155,7 @@ describe("transition eligibility", () => {
         snapshot,
         hasActiveTransition: false,
         resolveVisibleWindow: resolveVisibleWindow([
-          { idx: 0, offset: 10, height: 20 },
+          { index: 0, offset: 10, height: 20 },
         ]),
         readOuterVisibleRange: readVisibleRange,
       }),
@@ -183,7 +183,7 @@ describe("transition eligibility", () => {
         snapshot,
         hasActiveTransition: false,
         resolveVisibleWindow: resolveVisibleWindow([
-          { idx: 1, offset: 15, height: 25 },
+          { index: 1, offset: 15, height: 25 },
         ]),
         readOuterVisibleRange: readVisibleRange,
       }),
@@ -198,7 +198,7 @@ describe("transition eligibility", () => {
         snapshot,
         hasActiveTransition: false,
         resolveVisibleWindow: resolveVisibleWindow([
-          { idx: 1, offset: 140, height: 25 },
+          { index: 1, offset: 140, height: 25 },
         ]),
         readOuterVisibleRange: readVisibleRange,
       }),
@@ -213,7 +213,7 @@ describe("transition eligibility", () => {
         snapshot,
         hasActiveTransition: true,
         resolveVisibleWindow: resolveVisibleWindow([
-          { idx: 0, offset: 10, height: 20 },
+          { index: 0, offset: 10, height: 20 },
         ]),
         readOuterVisibleRange: readVisibleRange,
       }),
@@ -282,7 +282,6 @@ describe("delete-finalize anchor remapping", () => {
     expect(remapAnchorAfterDeletes(5.5, [4, 1, 3])).toBeCloseTo(2.5);
   });
 });
-
 describe("visibility snapshot", () => {
   test("tracks short-list gaps and expected boundary-insert state", () => {
     const a = { id: "a" };
@@ -292,8 +291,8 @@ describe("visibility snapshot", () => {
     snapshot.capture(
       {
         drawList: [
-          { idx: 0, offset: 10, height: 20, value: null },
-          { idx: 1, offset: 30, height: 20, value: null },
+          { index: 0, offset: 10, height: 20, value: null },
+          { index: 1, offset: 30, height: 20, value: null },
         ],
         shift: 0,
       },
@@ -419,7 +418,7 @@ describe("transition store lifecycle", () => {
     );
     snapshot.capture(
       {
-        drawList: [{ idx: 0, offset: 90, height: 20, value: null }],
+        drawList: [{ index: 0, offset: 90, height: 20, value: null }],
         shift: 0,
       },
       [0],

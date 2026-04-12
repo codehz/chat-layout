@@ -1,4 +1,8 @@
-import type { ControlledState, JumpPath, JumpPathSegment } from "./base-types";
+import type {
+  JumpPath,
+  JumpPathSegment,
+  ListScrollStateSnapshot,
+} from "./virtualized-types";
 
 const CONTROLLED_STATE_OFFSET_EPSILON = 1e-9;
 
@@ -7,7 +11,7 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 export function sameState(
-  state: ControlledState,
+  state: ListScrollStateSnapshot,
   position: number | undefined,
   offset: number,
 ): boolean {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { VirtualizedRenderer } from "../../src/renderer/virtualized/base";
-import type { VirtualizedResolvedItem } from "../../src/renderer/virtualized/base-types";
+import type { VirtualizedResolvedItem } from "../../src/renderer/virtualized/virtualized-types";
 import {
   normalizeVisibleState,
   type NormalizedListState,
@@ -46,7 +46,7 @@ class PipelineProbeRenderer extends VirtualizedRenderer<C, number> {
     const drawList = this.items.map((item, idx) => {
       const resolved = this._resolveItem(item, idx, now);
       return {
-        idx,
+        index: idx,
         value: resolved.value,
         offset: idx * 20,
         height: 20,

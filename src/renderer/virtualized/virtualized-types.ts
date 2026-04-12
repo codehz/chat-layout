@@ -1,7 +1,7 @@
 import type { HitTest, Node } from "../../types";
 
 /** Scroll position snapshot used to detect external state changes. */
-export type ControlledState = {
+export type ListScrollStateSnapshot = {
   position?: number;
   offset: number;
 };
