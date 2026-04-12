@@ -336,4 +336,101 @@ describe("jump controller", () => {
       restoreNow();
     }
   });
+
+  test("transition settle preserves a latched follow boundary while starting a corrective snap", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const harness = createController({
+        heights: [20, 20, 20, 20],
+        state: { position: 2, offset: 0 },
+        viewportHeight: 40,
+      });
+      harness.controller.commit(harness.getState());
+      harness.recompute(false, true);
+
+      harness.setState({ position: 2, offset: -5 }, "internal");
+      harness.controller.reconcileAutoFollowAfterTransitionSettle();
+
+      expect(harness.recompute(false, false)).toEqual({
+        top: false,
+        bottom: true,
+      });
+
+      now.current = 60;
+      expect(harness.controller.prepare(now.current)).toBe(true);
+      expect(harness.getState().offset).toBeGreaterThan(-5);
+      expect(harness.getState().offset).toBeLessThan(0);
+      expect(harness.controller.finishFrame(false)).toBe(true);
+
+      now.current = 120;
+      expect(harness.controller.prepare(now.current)).toBe(false);
+      expect(harness.getState().offset).toBeCloseTo(0);
+      expect(harness.controller.finishFrame(false)).toBe(false);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("external scroll cancels a corrective settle snap and lets strict recompute clear follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const harness = createController({
+        heights: [20, 20, 20, 20],
+        state: { position: 2, offset: 0 },
+        viewportHeight: 40,
+      });
+      harness.controller.commit(harness.getState());
+      harness.recompute(false, true);
+
+      harness.setState({ position: 2, offset: -5 }, "internal");
+      harness.controller.reconcileAutoFollowAfterTransitionSettle();
+      expect(harness.recompute(false, false)).toEqual({
+        top: false,
+        bottom: true,
+      });
+
+      now.current = 60;
+      expect(harness.controller.prepare(now.current)).toBe(true);
+      expect(harness.controller.finishFrame(false)).toBe(true);
+
+      harness.setState({ position: 1, offset: 3 }, "external");
+      now.current = 61;
+      expect(harness.controller.prepare(now.current)).toBe(false);
+      expect(harness.controller.finishFrame(false)).toBe(false);
+      expect(harness.recompute(false, false)).toEqual({
+        top: false,
+        bottom: false,
+      });
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("dual latched follow preserves the most recently armed boundary when settle makes them incompatible", () => {
+    const harness = createController({
+      heights: [20, 20],
+      state: { position: 0, offset: 0 },
+      viewportHeight: 80,
+    });
+    harness.controller.commit(harness.getState());
+
+    expect(harness.recompute(true, true)).toEqual({
+      top: true,
+      bottom: true,
+    });
+
+    harness.controller.jumpToBoundary("bottom", { animated: false });
+    expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+      top: true,
+      bottom: true,
+    });
+
+    harness.controller.reconcileAutoFollowAfterTransitionSettle();
+    expect(harness.recompute(true, false)).toEqual({
+      top: false,
+      bottom: true,
+    });
+  });
 });

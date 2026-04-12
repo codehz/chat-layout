@@ -529,8 +529,8 @@ export abstract class VirtualizedRenderer<
       readScrollState: this._readListState.bind(this),
       readItemIndex: (item) => this.items.indexOf(item),
       snapItemToViewportBoundary: this.#snapItemToViewportBoundary.bind(this),
-      onScrollPositionChanged: () =>
-        this.#jumpController.markAutoFollowForTransitionSettle(),
+      onTransitionSettleScrollAdjusted: () =>
+        this.#jumpController.reconcileAutoFollowAfterTransitionSettle(),
     };
   }
 

@@ -7,6 +7,7 @@ import {
   type ListPadding,
   type ListUnderflowAlign,
 } from "../../src/renderer";
+import { writeInternalListScrollState } from "../../src/renderer/list-state";
 import type { Box, Context, HitTest, Node } from "../../src/types";
 import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
 import {
@@ -948,6 +949,144 @@ describe("update animation", () => {
     }
   });
 
+  test("bottom auto-follow stays armed through update settle reconciliation and keeps feedback latched during the corrective snap", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createBottomRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, item],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.jumpToBottom({ animated: false });
+      renderer.render();
+
+      writeInternalListScrollState(list, {
+        position: 2,
+        offset: 35,
+      });
+      renderer.render();
+
+      list.update(item, { id: "new", height: 30 }, { duration: 100 });
+
+      now.current = 100;
+      draws.length = 0;
+      const settledFeedback = createFeedback();
+      expect(renderer.render(settledFeedback)).toBe(true);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+      expect(readDrawY(draws, "middle")!).toBeGreaterThan(0);
+
+      now.current = 110;
+      draws.length = 0;
+      const snappingFeedback = createFeedback();
+      expect(renderer.render(snappingFeedback)).toBe(true);
+      expect(snappingFeedback.canAutoFollowBottom).toBe(true);
+      expect(readDrawY(draws, "middle")!).toBeGreaterThan(0);
+
+      list.pushAll([{ id: "tail-2", height: 20 }], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      for (const time of [110, 210, 310]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expected = createBottomRenderer(
+        [
+          { id: "head", height: 40 },
+          { id: "middle", height: 40 },
+          { id: "new", height: 30 },
+          { id: "tail-2", height: 20 },
+        ],
+        [],
+        [],
+        40,
+      );
+      expected.renderer.jumpToBottom({ animated: false });
+      expected.renderer.render();
+
+      expect(list.position).toBe(expected.list.position);
+      expect(list.offset).toBeCloseTo(expected.list.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top auto-follow stays armed through update settle reconciliation and still auto-follows unshift while snapping back", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createTopRenderer(
+        [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        40,
+      );
+
+      renderer.jumpToTop({ animated: false });
+      renderer.render();
+
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -35,
+      });
+      renderer.render();
+
+      list.update(item, { id: "new", height: 30 }, { duration: 100 });
+
+      now.current = 100;
+      draws.length = 0;
+      const settledFeedback = createFeedback();
+      expect(renderer.render(settledFeedback)).toBe(true);
+      expect(settledFeedback.canAutoFollowTop).toBe(true);
+      expect(readDrawY(draws, "middle")!).toBeLessThan(0);
+
+      now.current = 110;
+      draws.length = 0;
+      const snappingFeedback = createFeedback();
+      expect(renderer.render(snappingFeedback)).toBe(true);
+      expect(snappingFeedback.canAutoFollowTop).toBe(true);
+      expect(readDrawY(draws, "middle")!).toBeLessThan(0);
+
+      list.unshiftAll([{ id: "head-2", height: 20 }], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      for (const time of [110, 210, 310]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expected = createTopRenderer(
+        [
+          { id: "head-2", height: 20 },
+          { id: "new", height: 30 },
+          { id: "middle", height: 40 },
+          { id: "tail", height: 40 },
+        ],
+        [],
+        [],
+        40,
+      );
+      expected.renderer.jumpToTop({ animated: false });
+      expected.renderer.render();
+
+      expect(list.position).toBe(expected.list.position);
+      expect(list.offset).toBeCloseTo(expected.list.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("insert animation disables hittest for the animated slot while neighbors stay interactive", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -1350,32 +1489,60 @@ describe("delete animation", () => {
     }
   });
 
-  test("delete settle recomputes the latched auto-follow state after the final anchor adjustment", () => {
+  test("delete settle keeps a latched bottom follow armed so the next push still auto-follows", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
       const draws: DrawProbe[] = [];
       const item = { id: "item", height: 80 };
-      const { list, renderer } = createTopRenderer(
-        [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+      const { list, renderer } = createBottomRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, item],
         draws,
         [],
         40,
       );
 
-      list.setAnchor(0, -50);
-      const initialFeedback = createFeedback();
-      renderer.render(initialFeedback);
-      expect(initialFeedback.canAutoFollowTop).toBe(false);
-      expect(initialFeedback.canAutoFollowBottom).toBe(false);
+      renderer.jumpToBottom({ animated: false });
+      renderer.render();
+
+      writeInternalListScrollState(list, {
+        position: 2,
+        offset: 35,
+      });
+      renderer.render();
 
       list.delete(item, { duration: 100 });
 
-      now.current = 50;
+      now.current = 60;
       const settledFeedback = createFeedback();
       renderer.render(settledFeedback);
-      expect(settledFeedback.canAutoFollowTop).toBe(true);
-      expect(settledFeedback.canAutoFollowBottom).toBe(false);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+
+      list.pushAll([{ id: "tail-2", height: 20 }], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      for (const time of [60, 160, 260]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expected = createBottomRenderer(
+        [
+          { id: "head", height: 40 },
+          { id: "middle", height: 40 },
+          { id: "tail-2", height: 20 },
+        ],
+        [],
+        [],
+        40,
+      );
+      expected.renderer.jumpToBottom({ animated: false });
+      expected.renderer.render();
+
+      expect(list.position).toBe(expected.list.position);
+      expect(list.offset).toBeCloseTo(expected.list.offset);
     } finally {
       restoreNow();
     }

@@ -40,8 +40,7 @@ type AutoFollowRecomputeReason =
   | "manual-scroll"
   | "viewport-width-change"
   | "reset"
-  | "set"
-  | "transition-settle";
+  | "set";
 
 type AutoFollowSetReason =
   | `strict-recompute:${AutoFollowRecomputeReason}`
@@ -66,12 +65,16 @@ export interface JumpControllerOptions<T extends {}> {
 }
 
 export class JumpController<T extends {}> {
+  static readonly TRANSITION_SETTLE_SNAP_DURATION = 120;
+
   #canAutoFollowTop = false;
   #canAutoFollowBottom = false;
   #pendingAutoFollowRecomputeTop = true;
   #pendingAutoFollowRecomputeBottom = true;
   #pendingAutoFollowRecomputeReasonTop: AutoFollowRecomputeReason = "init";
   #pendingAutoFollowRecomputeReasonBottom: AutoFollowRecomputeReason = "init";
+  #pendingTransitionSettleReconcile = false;
+  #lastArmedAutoFollowBoundary: AutoFollowBoundary | undefined;
   #lastViewportWidth: number | undefined;
   #lastHandledScrollMutationVersion: number;
   #jumpAnimation: JumpAnimation | undefined;
@@ -102,6 +105,7 @@ export class JumpController<T extends {}> {
     }
     this.#lastViewportWidth = width;
     this.#clearPendingPostJumpBoundary();
+    this.#clearPendingTransitionSettleReconcile();
     this.#markAutoFollowRecompute(undefined, "viewport-width-change");
   }
 
@@ -170,6 +174,7 @@ export class JumpController<T extends {}> {
   }
 
   jumpTo(index: number, options: JumpOptions = {}): void {
+    this.#clearPendingTransitionSettleReconcile();
     this.#clearPendingPostJumpBoundary();
     if (this.#options.getItemCount() === 0) {
       this.#cancelJumpAnimation();
@@ -182,6 +187,7 @@ export class JumpController<T extends {}> {
     boundary: AutoFollowBoundary,
     options: JumpOptions = {},
   ): void {
+    this.#clearPendingTransitionSettleReconcile();
     this.#clearPendingPostJumpBoundary();
     this.#armAutoFollowBoundary(boundary, "jump-to-boundary");
     if (this.#options.getItemCount() === 0) {
@@ -216,6 +222,11 @@ export class JumpController<T extends {}> {
       );
       this.#pendingAutoFollowRecomputeBottom = false;
     }
+    this.#syncLastArmedBoundaryFromLatchedState();
+    if (this.#pendingTransitionSettleReconcile) {
+      this.#reconcileLatchedAutoFollowAfterTransitionSettle(capabilities);
+      this.#pendingTransitionSettleReconcile = false;
+    }
     return this.getAutoFollowCapabilities();
   }
 
@@ -226,8 +237,8 @@ export class JumpController<T extends {}> {
     };
   }
 
-  markAutoFollowForTransitionSettle(): void {
-    this.#markAutoFollowRecompute(undefined, "transition-settle");
+  reconcileAutoFollowAfterTransitionSettle(): void {
+    this.#pendingTransitionSettleReconcile = true;
   }
 
   handleListStateChange(change: ListStateChange<T>): ListStateChange<T> {
@@ -236,6 +247,7 @@ export class JumpController<T extends {}> {
       case "set":
         this.#cancelJumpAnimation();
         this.#clearPendingPostJumpBoundary();
+        this.#clearPendingTransitionSettleReconcile();
         this.#syncScrollMutationVersion();
         this.#markAutoFollowRecompute(undefined, change.type);
         return change;
@@ -253,6 +265,7 @@ export class JumpController<T extends {}> {
     if (this.#handlePendingExternalScrollMutation()) {
       return change;
     }
+    this.#clearPendingTransitionSettleReconcile();
     const followChange = this.#resolveAutoFollowChange(change);
     const boundary = change.type === "push" ? "bottom" : "top";
     if (this.#pendingPostJumpBoundary === boundary) {
@@ -411,6 +424,7 @@ export class JumpController<T extends {}> {
     reason: AutoFollowSetReason,
   ): void {
     this.#setAutoFollowBoundary(boundary, true, reason);
+    this.#lastArmedAutoFollowBoundary = boundary;
     if (boundary === "top") {
       this.#pendingAutoFollowRecomputeTop = false;
       return;
@@ -435,6 +449,10 @@ export class JumpController<T extends {}> {
   #clearPendingPostJumpBoundary(): void {
     this.#pendingPostJumpBoundary = undefined;
     this.#pendingPostJumpBoundaryBlocked = false;
+  }
+
+  #clearPendingTransitionSettleReconcile(): void {
+    this.#pendingTransitionSettleReconcile = false;
   }
 
   #materializeAnimatedAnchor(
@@ -472,6 +490,85 @@ export class JumpController<T extends {}> {
     }
   }
 
+  #syncLastArmedBoundaryFromLatchedState(): void {
+    if (this.#canAutoFollowTop === this.#canAutoFollowBottom) {
+      return;
+    }
+    this.#lastArmedAutoFollowBoundary = this.#canAutoFollowTop
+      ? "top"
+      : "bottom";
+  }
+
+  #reconcileLatchedAutoFollowAfterTransitionSettle(
+    capabilities: AutoFollowCapabilities,
+  ): void {
+    if (!this.#canAutoFollowTop && !this.#canAutoFollowBottom) {
+      return;
+    }
+
+    const preferredBoundary =
+      this.#resolvePreferredLatchedBoundary(capabilities);
+    if (preferredBoundary == null) {
+      return;
+    }
+
+    const otherBoundary = preferredBoundary === "top" ? "bottom" : "top";
+    if (this.#hasAutoFollowCapability(otherBoundary)) {
+      this.#setAutoFollowBoundary(otherBoundary, false, "strict-recompute:set");
+    }
+
+    if (!this.#readCapabilityForBoundary(capabilities, preferredBoundary)) {
+      this.#startTransitionSettleSnap(preferredBoundary);
+    }
+
+    this.#syncLastArmedBoundaryFromLatchedState();
+  }
+
+  #resolvePreferredLatchedBoundary(
+    capabilities: AutoFollowCapabilities,
+  ): AutoFollowBoundary | undefined {
+    if (this.#canAutoFollowTop && this.#canAutoFollowBottom) {
+      if (capabilities.top && capabilities.bottom) {
+        return undefined;
+      }
+      if (this.#lastArmedAutoFollowBoundary != null) {
+        return this.#lastArmedAutoFollowBoundary;
+      }
+      if (capabilities.top !== capabilities.bottom) {
+        return capabilities.top ? "top" : "bottom";
+      }
+      return "bottom";
+    }
+
+    if (this.#canAutoFollowTop) {
+      return "top";
+    }
+    if (this.#canAutoFollowBottom) {
+      return "bottom";
+    }
+    return undefined;
+  }
+
+  #readCapabilityForBoundary(
+    capabilities: AutoFollowCapabilities,
+    boundary: AutoFollowBoundary,
+  ): boolean {
+    return boundary === "top" ? capabilities.top : capabilities.bottom;
+  }
+
+  #startTransitionSettleSnap(boundary: AutoFollowBoundary): void {
+    if (this.#options.getItemCount() <= 0) {
+      return;
+    }
+    this.#startJumpToIndex(
+      boundary === "bottom" ? this.#options.getItemCount() - 1 : 0,
+      {
+        block: boundary === "bottom" ? "end" : "start",
+        duration: JumpController.TRANSITION_SETTLE_SNAP_DURATION,
+      },
+    );
+  }
+
   #syncScrollMutationVersion(): void {
     this.#lastHandledScrollMutationVersion =
       this.#options.readScrollMutation().version;
@@ -490,6 +587,7 @@ export class JumpController<T extends {}> {
 
     this.#cancelJumpAnimation();
     this.#clearPendingPostJumpBoundary();
+    this.#clearPendingTransitionSettleReconcile();
     this.#markAutoFollowRecompute(undefined, "manual-scroll");
     return true;
   }

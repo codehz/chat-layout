@@ -228,7 +228,7 @@ export class TransitionController<
     }
     const afterState = lifecycle.readScrollState();
     if (!sameState(beforeState, afterState.position, afterState.offset)) {
-      lifecycle.onScrollPositionChanged();
+      lifecycle.onTransitionSettleScrollAdjusted();
     }
     return true;
   }

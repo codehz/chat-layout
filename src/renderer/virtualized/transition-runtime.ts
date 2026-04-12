@@ -18,7 +18,7 @@ export type TransitionLifecycleAdapter<T extends {}> = {
   readScrollState: () => ControlledState;
   readItemIndex: (item: T) => number;
   snapItemToViewportBoundary: (item: T, boundary: "top" | "bottom") => void;
-  onScrollPositionChanged: () => void;
+  onTransitionSettleScrollAdjusted: () => void;
 };
 
 export type VirtualizedRuntime<
