@@ -125,12 +125,17 @@ type ListScrollStatePatch = {
 };
 
 const WRITE_LIST_SCROLL_STATE = Symbol("writeListScrollState");
+const FINALIZE_LIST_DELETE = Symbol("finalizeListDelete");
 
 type InternalListStateWriter = {
   [WRITE_LIST_SCROLL_STATE]: (
     patch: ListScrollStatePatch,
     source: ListScrollMutationSource,
   ) => void;
+};
+
+type InternalListStateDeleteFinalizer<T extends {}> = {
+  [FINALIZE_LIST_DELETE]: (item: T) => void;
 };
 
 function normalizePosition(value: number | undefined): number | undefined {
@@ -187,6 +192,15 @@ export function writeInternalListScrollState<T extends {}>(
     state,
     "internal",
   );
+}
+
+export function finalizeInternalListDelete<T extends {}>(
+  list: ListState<T>,
+  item: T,
+): void {
+  (list as unknown as InternalListStateDeleteFinalizer<T>)[
+    FINALIZE_LIST_DELETE
+  ](item);
 }
 
 function deleteListStateListener(list: ListState<{}>, token: symbol): void {
@@ -467,7 +481,7 @@ export class ListState<T extends {}> {
     const duration = normalizedAnimation?.duration ?? 0;
     if (!(duration > 0)) {
       this.#pendingDeletes.add(item);
-      this.finalizeDelete(item);
+      this[FINALIZE_LIST_DELETE](item);
       return;
     }
     this.#pendingDeletes.add(item);
@@ -481,7 +495,7 @@ export class ListState<T extends {}> {
   /**
    * Finalizes a pending delete by removing the item from the list.
    */
-  finalizeDelete(item: T): void {
+  [FINALIZE_LIST_DELETE](item: T): void {
     if (!this.#pendingDeletes.has(item)) {
       return;
     }

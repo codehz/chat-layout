@@ -1,6 +1,7 @@
 import type { HitTest, Node, RenderFeedback } from "../../types";
 import { BaseRenderer } from "../base";
 import {
+  finalizeInternalListDelete,
   ListState,
   readListScrollMutation,
   subscribeListState,
@@ -508,7 +509,7 @@ export abstract class VirtualizedRenderer<
   }
 
   #handleDeleteComplete(item: T): void {
-    this.options.list.finalizeDelete(item);
+    finalizeInternalListDelete(this.options.list, item);
   }
 
   #getTransitionLifecycleAdapter(): TransitionLifecycleAdapter<T> {
