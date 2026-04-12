@@ -43,7 +43,9 @@ type AutoFollowRecomputeReason =
   | "set";
 
 type AutoFollowSetReason =
+  | "boundary-insert-narrow"
   | `strict-recompute:${AutoFollowRecomputeReason}`
+  | "dual-boundary-promotion"
   | "jump-to-boundary"
   | "jump-to-boundary-settle"
   | "jump-to-boundary-instant";
@@ -75,6 +77,8 @@ export class JumpController<T extends {}> {
   #pendingAutoFollowRecomputeReasonBottom: AutoFollowRecomputeReason = "init";
   #pendingTransitionSettleReconcile = false;
   #lastArmedAutoFollowBoundary: AutoFollowBoundary | undefined;
+  #lastObservedRenderedAutoFollowTop = false;
+  #lastObservedRenderedAutoFollowBottom = false;
   #lastViewportWidth: number | undefined;
   #lastHandledScrollMutationVersion: number;
   #jumpAnimation: JumpAnimation | undefined;
@@ -206,6 +210,17 @@ export class JumpController<T extends {}> {
   recomputeAutoFollowCapabilities(
     capabilities: AutoFollowCapabilities,
   ): AutoFollowCapabilities {
+    const previouslyObservedDualBoundary =
+      this.#lastObservedRenderedAutoFollowTop &&
+      this.#lastObservedRenderedAutoFollowBottom;
+    const currentlyObservedDualBoundary =
+      capabilities.top && capabilities.bottom;
+
+    if (currentlyObservedDualBoundary && !previouslyObservedDualBoundary) {
+      this.#setAutoFollowBoundary("top", true, "dual-boundary-promotion");
+      this.#setAutoFollowBoundary("bottom", true, "dual-boundary-promotion");
+    }
+
     if (this.#pendingAutoFollowRecomputeTop) {
       this.#setAutoFollowBoundary(
         "top",
@@ -227,6 +242,8 @@ export class JumpController<T extends {}> {
       this.#reconcileLatchedAutoFollowAfterTransitionSettle(capabilities);
       this.#pendingTransitionSettleReconcile = false;
     }
+    this.#lastObservedRenderedAutoFollowTop = capabilities.top;
+    this.#lastObservedRenderedAutoFollowBottom = capabilities.bottom;
     return this.getAutoFollowCapabilities();
   }
 
@@ -276,6 +293,20 @@ export class JumpController<T extends {}> {
       !this.#hasAutoFollowCapability(followChange.boundary)
     ) {
       return change;
+    }
+    if (
+      this.#canAutoFollowTop &&
+      this.#canAutoFollowBottom &&
+      this.#lastObservedRenderedAutoFollowTop &&
+      this.#lastObservedRenderedAutoFollowBottom
+    ) {
+      const otherBoundary = followChange.boundary === "top" ? "bottom" : "top";
+      this.#setAutoFollowBoundary(
+        otherBoundary,
+        false,
+        "boundary-insert-narrow",
+      );
+      this.#lastArmedAutoFollowBoundary = followChange.boundary;
     }
 
     this.#clearPendingPostJumpBoundary();

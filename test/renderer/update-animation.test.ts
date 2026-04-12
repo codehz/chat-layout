@@ -1594,6 +1594,73 @@ describe("delete animation", () => {
     }
   });
 
+  test("bottom auto-follow promotes to both boundaries when a delete settles from overflow into underflow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createBottomRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, item],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.jumpToBottom({ animated: false });
+      const initialFeedback = createFeedback();
+      renderer.render(initialFeedback);
+      expect(initialFeedback.canAutoFollowTop).toBe(false);
+      expect(initialFeedback.canAutoFollowBottom).toBe(true);
+
+      list.delete(item, { duration: 100 });
+
+      now.current = 100;
+      const settledFeedback = createFeedback();
+      expect(renderer.render(settledFeedback)).toBe(false);
+      expect(settledFeedback.canAutoFollowTop).toBe(true);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("bottom auto-follow keeps only the inserted boundary when push leaves underflow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createBottomRenderer(
+        [
+          { id: "head", height: 20 },
+          { id: "tail", height: 20 },
+        ],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.jumpToBottom({ animated: false });
+      const initialFeedback = createFeedback();
+      renderer.render(initialFeedback);
+      expect(initialFeedback.canAutoFollowTop).toBe(true);
+      expect(initialFeedback.canAutoFollowBottom).toBe(true);
+
+      list.pushAll([{ id: "new", height: 80 }], {
+        duration: 100,
+        autoFollow: true,
+      });
+
+      now.current = 100;
+      const settledFeedback = createFeedback();
+      expect(renderer.render(settledFeedback)).toBe(false);
+      expect(settledFeedback.canAutoFollowTop).toBe(false);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("delete ghosts stay visible while fading inside bottom padding", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);

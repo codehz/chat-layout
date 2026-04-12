@@ -372,6 +372,54 @@ describe("jump controller", () => {
     }
   });
 
+  test("observed overflow to underflow promotes both follow latches without a pending strict recompute", () => {
+    const harness = createController({
+      heights: [20, 20, 20, 20],
+      state: { position: 2, offset: 0 },
+      viewportHeight: 40,
+    });
+    harness.controller.commit(harness.getState());
+
+    expect(harness.recompute(false, true)).toEqual({
+      top: false,
+      bottom: true,
+    });
+
+    expect(harness.recompute(true, true)).toEqual({
+      top: true,
+      bottom: true,
+    });
+  });
+
+  test("auto-follow boundary inserts narrow a dual underflow latch to the inserted boundary", () => {
+    const harness = createController({
+      heights: [20, 20],
+      state: { position: 1, offset: 0 },
+      viewportHeight: 80,
+    });
+    harness.controller.commit(harness.getState());
+
+    expect(harness.recompute(true, true)).toEqual({
+      top: true,
+      bottom: true,
+    });
+
+    harness.setHeights([20, 20, 80]);
+    harness.controller.handleListStateChange({
+      type: "push",
+      count: 1,
+      animation: {
+        duration: 100,
+        autoFollow: true,
+      },
+    });
+
+    expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+      top: false,
+      bottom: true,
+    });
+  });
+
   test("external scroll cancels a corrective settle snap and lets strict recompute clear follow", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
