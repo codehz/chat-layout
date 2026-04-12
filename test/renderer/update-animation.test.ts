@@ -471,7 +471,7 @@ describe("update animation", () => {
     }
   });
 
-  test("top-anchor clipped-leading shrink updates preserve the visual anchor when pruning the invisible slot", () => {
+  test("top-anchor clipped-leading shrink updates snap the first visible item to the viewport edge", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -485,7 +485,7 @@ describe("update animation", () => {
         40,
       );
 
-      list.setAnchor(0, -50);
+      list.setAnchor(0, -45);
       renderer.render();
 
       draws.length = 0;
@@ -493,35 +493,77 @@ describe("update animation", () => {
 
       now.current = 50;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(5);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
 
+      now.current = 70;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle"]);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(0);
+      expect(list.position).toBe(1);
+      expect(list.offset).toBeCloseTo(0);
+
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(0);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top-anchor clipped-leading shrink updates keep the current scroll stop when user scrolling causes the prune", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 80 };
+      const newItem = { id: "new", height: 30 };
+      const { list, renderer } = createTopRenderer(
+        [oldItem, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        40,
+      );
+
+      list.setAnchor(0, -45);
+      renderer.render();
+
+      draws.length = 0;
+      list.update(oldItem, newItem, { duration: 100 });
+
+      now.current = 50;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(10);
+
+      list.applyScroll(-10);
       now.current = 60;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
       expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        -2.0168067226890773,
+        -6.218487394957979,
       );
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(
-        37.983193277310924,
+        33.78151260504202,
       );
       expect(list.position).toBe(1);
-      expect(list.offset).toBeCloseTo(-2.0168067226890773);
+      expect(list.offset).toBeCloseTo(-6.218487394957979);
 
       draws.length = 0;
       expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
       expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        -2.0168067226890773,
+        -6.218487394957979,
       );
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(
-        37.983193277310924,
+        33.78151260504202,
       );
     } finally {
       restoreNow();
     }
   });
 
-  test("bottom-anchor clipped-trailing shrink updates preserve the visual anchor when pruning the invisible slot", () => {
+  test("bottom-anchor clipped-trailing shrink updates snap the last visible item to the viewport edge", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -549,23 +591,15 @@ describe("update animation", () => {
       draws.length = 0;
       expect(renderer.render()).toBe(true);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        2.0168067226890773,
-      );
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(
-        -37.983193277310924,
-      );
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-40);
       expect(list.position).toBe(1);
-      expect(list.offset).toBeCloseTo(2.0168067226890773);
+      expect(list.offset).toBeCloseTo(0);
 
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(
-        2.0168067226890773,
-      );
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(
-        -37.983193277310924,
-      );
+      expect(draws.find((draw) => draw.id === "middle")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(-40);
     } finally {
       restoreNow();
     }
@@ -1537,7 +1571,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("top-anchor clipped-leading deletes finalize on the first fully invisible frame", () => {
+  test("top-anchor clipped-leading deletes snap the first visible item to the viewport edge", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1558,20 +1592,20 @@ describe("delete animation", () => {
 
       now.current = 50;
       expect(renderer.render()).toBe(true);
-      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
-      expect(readDrawY(draws, "middle")).toBeCloseTo(-10);
-      expect(readDrawY(draws, "tail")).toBeCloseTo(30);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle"]);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(0);
       expect(list.items.map((current) => current.id)).toEqual([
         "middle",
         "tail",
       ]);
+      expect(list.position).toBe(0);
+      expect(list.offset).toBeCloseTo(0);
 
       now.current = 75;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
-      expect(readDrawY(draws, "middle")).toBeCloseTo(-10);
-      expect(readDrawY(draws, "tail")).toBeCloseTo(30);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle"]);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(0);
       expect(list.items.map((current) => current.id)).toEqual([
         "middle",
         "tail",
@@ -1580,12 +1614,54 @@ describe("delete animation", () => {
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(readDrawY(draws, "middle")).toBeCloseTo(-10);
-      expect(readDrawY(draws, "tail")).toBeCloseTo(30);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(0);
       expect(list.items.map((current) => current.id)).toEqual([
         "middle",
         "tail",
       ]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top-anchor clipped-leading deletes keep the current scroll stop when user scrolling causes the prune", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createTopRenderer(
+        [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        40,
+      );
+
+      list.setAnchor(0, -35);
+      renderer.render();
+
+      list.delete(item, { duration: 100 });
+
+      now.current = 35;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(22.46, 2);
+
+      list.applyScroll(-10);
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(-5);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(35);
+      expect(list.position).toBe(0);
+      expect(list.offset).toBeCloseTo(-5);
+
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.map((draw) => draw.id)).toEqual(["middle", "tail"]);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(-5);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(35);
     } finally {
       restoreNow();
     }
@@ -1684,7 +1760,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("bottom-anchor clipped-trailing deletes preserve the visual anchor when pruning the ghost slot", () => {
+  test("bottom-anchor clipped-trailing deletes snap the last visible item to the viewport edge", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1706,20 +1782,20 @@ describe("delete animation", () => {
       now.current = 50;
       expect(renderer.render()).toBe(true);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(readDrawY(draws, "middle")).toBeCloseTo(10);
-      expect(readDrawY(draws, "head")).toBeCloseTo(-30);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(0);
+      expect(readDrawY(draws, "head")).toBeCloseTo(-40);
       expect(list.items.map((current) => current.id)).toEqual([
         "head",
         "middle",
       ]);
       expect(list.position).toBe(1);
-      expect(list.offset).toBeCloseTo(10);
+      expect(list.offset).toBeCloseTo(0);
 
       draws.length = 0;
       expect(renderer.render()).toBe(false);
       expect(draws.map((draw) => draw.id)).toEqual(["middle", "head"]);
-      expect(readDrawY(draws, "middle")).toBeCloseTo(10);
-      expect(readDrawY(draws, "head")).toBeCloseTo(-30);
+      expect(readDrawY(draws, "middle")).toBeCloseTo(0);
+      expect(readDrawY(draws, "head")).toBeCloseTo(-40);
       expect(list.items.map((current) => current.id)).toEqual([
         "head",
         "middle",

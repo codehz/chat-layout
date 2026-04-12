@@ -9,14 +9,21 @@ import type {
 export class VisibilitySnapshot<T extends {}> {
   #drawnItems = new Set<T>();
   #visibleItems = new Set<T>();
+  #previousVisibleItems = new Set<T>();
   #hasSnapshot = false;
   #snapshotState: ControlledState | undefined;
+  #previousSnapshotState: ControlledState | undefined;
   #emptyState: ControlledState | undefined;
   #coversShortList = false;
   #topGap = 0;
   #bottomGap = 0;
   #atStartBoundary = false;
   #atEndBoundary = false;
+  #currentExtraShift = 0;
+  #minDrawnIndex = Number.POSITIVE_INFINITY;
+  #maxDrawnIndex = Number.NEGATIVE_INFINITY;
+  #topBoundaryItem: T | undefined;
+  #bottomBoundaryItem: T | undefined;
 
   get coversShortList(): boolean {
     return (
@@ -32,6 +39,38 @@ export class VisibilitySnapshot<T extends {}> {
     return this.#bottomGap;
   }
 
+  get previousState(): ControlledState | undefined {
+    return this.#previousSnapshotState;
+  }
+
+  get currentExtraShift(): number {
+    return this.#currentExtraShift;
+  }
+
+  readDrawnIndexRange():
+    | {
+        minIndex: number;
+        maxIndex: number;
+      }
+    | undefined {
+    if (
+      !Number.isFinite(this.#minDrawnIndex) ||
+      !Number.isFinite(this.#maxDrawnIndex)
+    ) {
+      return undefined;
+    }
+    return {
+      minIndex: this.#minDrawnIndex,
+      maxIndex: this.#maxDrawnIndex,
+    };
+  }
+
+  readBoundaryItem(boundary: "top" | "bottom"): T | undefined {
+    return boundary === "top"
+      ? this.#topBoundaryItem
+      : this.#bottomBoundaryItem;
+  }
+
   capture(
     window: VisibleWindow<unknown>,
     _resolutionPath: readonly number[],
@@ -41,17 +80,27 @@ export class VisibilitySnapshot<T extends {}> {
     extraShift: number,
     readVisibleRange: (top: number, height: number) => VisibleRange | undefined,
   ): void {
+    this.#previousVisibleItems = this.#visibleItems;
+    this.#previousSnapshotState = this.#snapshotState;
     const nextDrawnItems = new Set<T>();
     const nextVisibleItems = new Set<T>();
     let minVisibleIndex = Number.POSITIVE_INFINITY;
     let maxVisibleIndex = Number.NEGATIVE_INFINITY;
     let topMostY = Number.POSITIVE_INFINITY;
     let bottomMostY = Number.NEGATIVE_INFINITY;
+    let nextMinDrawnIndex = Number.POSITIVE_INFINITY;
+    let nextMaxDrawnIndex = Number.NEGATIVE_INFINITY;
+    let nextTopBoundaryItem: T | undefined;
+    let nextBottomBoundaryItem: T | undefined;
+    let nextTopBoundaryY = Number.POSITIVE_INFINITY;
+    let nextBottomBoundaryY = Number.NEGATIVE_INFINITY;
     const effectiveShift = window.shift + extraShift;
 
     for (const { idx, offset, height } of window.drawList) {
       minVisibleIndex = Math.min(minVisibleIndex, idx);
       maxVisibleIndex = Math.max(maxVisibleIndex, idx);
+      nextMinDrawnIndex = Math.min(nextMinDrawnIndex, idx);
+      nextMaxDrawnIndex = Math.max(nextMaxDrawnIndex, idx);
       const y = offset + effectiveShift;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
@@ -59,6 +108,14 @@ export class VisibilitySnapshot<T extends {}> {
       const item = items[idx];
       if (item != null) {
         nextDrawnItems.add(item);
+        if (y < nextTopBoundaryY) {
+          nextTopBoundaryY = y;
+          nextTopBoundaryItem = item;
+        }
+        if (y + height > nextBottomBoundaryY) {
+          nextBottomBoundaryY = y + height;
+          nextBottomBoundaryItem = item;
+        }
       }
       if (item == null || readVisibleRange(y, height) == null) {
         continue;
@@ -70,6 +127,11 @@ export class VisibilitySnapshot<T extends {}> {
     this.#visibleItems = nextVisibleItems;
     this.#hasSnapshot = true;
     this.#snapshotState = snapshotState;
+    this.#currentExtraShift = extraShift;
+    this.#minDrawnIndex = nextMinDrawnIndex;
+    this.#maxDrawnIndex = nextMaxDrawnIndex;
+    this.#topBoundaryItem = nextTopBoundaryItem;
+    this.#bottomBoundaryItem = nextBottomBoundaryItem;
     this.#emptyState =
       items.length === 0 && window.drawList.length === 0
         ? snapshotState
@@ -174,6 +236,10 @@ export class VisibilitySnapshot<T extends {}> {
     return this.#visibleItems.has(item);
   }
 
+  wasVisible(item: T): boolean {
+    return this.#previousVisibleItems.has(item);
+  }
+
   tracks(item: T, retention: "drawn" | "visible"): boolean {
     return retention === "drawn"
       ? this.#drawnItems.has(item)
@@ -183,14 +249,21 @@ export class VisibilitySnapshot<T extends {}> {
   reset(): void {
     this.#drawnItems.clear();
     this.#visibleItems.clear();
+    this.#previousVisibleItems.clear();
     this.#hasSnapshot = false;
     this.#snapshotState = undefined;
+    this.#previousSnapshotState = undefined;
     this.#emptyState = undefined;
     this.#coversShortList = false;
     this.#topGap = 0;
     this.#bottomGap = 0;
     this.#atStartBoundary = false;
     this.#atEndBoundary = false;
+    this.#currentExtraShift = 0;
+    this.#minDrawnIndex = Number.POSITIVE_INFINITY;
+    this.#maxDrawnIndex = Number.NEGATIVE_INFINITY;
+    this.#topBoundaryItem = undefined;
+    this.#bottomBoundaryItem = undefined;
   }
 
   #matchesStateAfterBoundaryInsert(

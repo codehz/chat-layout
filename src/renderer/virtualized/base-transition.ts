@@ -72,6 +72,11 @@ export function remapAnchorAfterDeletes(
   return anchor - removedBeforeAnchor;
 }
 
+type NaturalBoundarySnap<T extends {}> = {
+  item: T;
+  boundary: "top" | "bottom";
+};
+
 export class TransitionController<
   C extends CanvasRenderingContext2D,
   T extends {},
@@ -100,8 +105,11 @@ export class TransitionController<
     );
   }
 
-  pruneInvisible(lifecycle: TransitionLifecycleAdapter<T>): boolean {
-    return this.pruneInvisibleAt(getNow(), lifecycle);
+  pruneInvisible(
+    ctx: TransitionPlanningAdapter<C, T>,
+    lifecycle: TransitionLifecycleAdapter<T>,
+  ): boolean {
+    return this.pruneInvisibleAt(getNow(), ctx, lifecycle);
   }
 
   prepare(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
@@ -185,12 +193,15 @@ export class TransitionController<
 
   pruneInvisibleAt(
     now: number,
+    ctx: TransitionPlanningAdapter<C, T>,
     lifecycle: TransitionLifecycleAdapter<T>,
   ): boolean {
+    const removals = this.#store.findInvisible(this.#snapshot);
     return this.#settleTransitions(
-      this.#store.findInvisible(this.#snapshot),
+      removals,
       now,
       lifecycle,
+      this.#resolveNaturalBoundarySnap(removals, now, ctx, lifecycle),
     );
   }
 
@@ -214,6 +225,7 @@ export class TransitionController<
     removals: readonly StoredTransitionEntry<C, T>[],
     now: number,
     lifecycle: TransitionLifecycleAdapter<T>,
+    boundarySnap?: NaturalBoundarySnap<T>,
   ): boolean {
     if (removals.length === 0) {
       return false;
@@ -238,6 +250,93 @@ export class TransitionController<
         remapAnchorAfterDeletes(anchor, completedDeleteIndices),
       );
     }
+    if (boundarySnap != null) {
+      lifecycle.snapItemToViewportBoundary(
+        boundarySnap.item,
+        boundarySnap.boundary,
+      );
+    }
     return true;
+  }
+
+  #resolveNaturalBoundarySnap(
+    removals: readonly StoredTransitionEntry<C, T>[],
+    now: number,
+    ctx: TransitionPlanningAdapter<C, T>,
+    lifecycle: TransitionLifecycleAdapter<T>,
+  ): NaturalBoundarySnap<T> | undefined {
+    const previousState = this.#snapshot.previousState;
+    const drawnRange = this.#snapshot.readDrawnIndexRange();
+    if (previousState == null || drawnRange == null) {
+      return undefined;
+    }
+
+    const naturalIndices: number[] = [];
+    for (const { item, transition } of removals) {
+      if (transition.kind !== "update" && transition.kind !== "delete") {
+        continue;
+      }
+
+      const index = lifecycle.readItemIndex(item);
+      if (index < 0 || !this.#snapshot.wasVisible(item)) {
+        return undefined;
+      }
+      if (
+        this.#isTransitionVisibleInState(
+          index,
+          previousState,
+          now,
+          this.#snapshot.currentExtraShift,
+          ctx,
+        )
+      ) {
+        return undefined;
+      }
+      naturalIndices.push(index);
+    }
+
+    if (naturalIndices.length === 0) {
+      return undefined;
+    }
+
+    const allBefore = naturalIndices.every(
+      (index) => index < drawnRange.minIndex,
+    );
+    if (allBefore) {
+      const item = this.#snapshot.readBoundaryItem("top");
+      return item == null ? undefined : { item, boundary: "top" };
+    }
+
+    const allAfter = naturalIndices.every(
+      (index) => index > drawnRange.maxIndex,
+    );
+    if (allAfter) {
+      const item = this.#snapshot.readBoundaryItem("bottom");
+      return item == null ? undefined : { item, boundary: "bottom" };
+    }
+
+    return undefined;
+  }
+
+  #isTransitionVisibleInState(
+    index: number,
+    state: ControlledState,
+    now: number,
+    extraShift: number,
+    ctx: TransitionPlanningAdapter<C, T>,
+  ): boolean {
+    const solution = ctx.resolveVisibleWindowForState(state, now);
+    for (const entry of solution.window.drawList) {
+      if (entry.idx !== index) {
+        continue;
+      }
+      return (
+        ctx.readVisibleRange(
+          entry.offset + solution.window.shift + extraShift,
+          entry.height,
+        ) != null
+      );
+    }
+    return false;
   }
 }

@@ -1,4 +1,5 @@
 import type { Box, Context, Node } from "../../types";
+import type { ControlledState } from "./base-types";
 import type { ResolvedListLayoutOptions, VisibleWindowResult } from "./solver";
 
 export type VisibleRange = {
@@ -11,6 +12,7 @@ export type TransitionLifecycleAdapter<T extends {}> = {
   captureVisualAnchor: (now: number) => number | undefined;
   restoreVisualAnchor: (anchor: number) => void;
   readItemIndex: (item: T) => number;
+  snapItemToViewportBoundary: (item: T, boundary: "top" | "bottom") => void;
 };
 
 export type VirtualizedRuntime<
@@ -24,6 +26,10 @@ export type VirtualizedRuntime<
   measureNode: (node: Node<C>) => Box;
   readVisibleRange: (top: number, height: number) => VisibleRange | undefined;
   resolveVisibleWindow: () => VisibleWindowResult<unknown>;
+  resolveVisibleWindowForState: (
+    state: ControlledState,
+    now: number,
+  ) => VisibleWindowResult<unknown>;
 };
 
 export type TransitionPlanningAdapter<

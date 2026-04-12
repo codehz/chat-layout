@@ -372,6 +372,7 @@ export abstract class VirtualizedRenderer<
   ): boolean {
     return this.#transitionController.pruneInvisibleAt(
       now,
+      this.#getTransitionPlanningAdapter(),
       this.#getTransitionLifecycleAdapter(),
     );
   }
@@ -457,6 +458,16 @@ export abstract class VirtualizedRenderer<
     this._applyAnchor(anchor);
   }
 
+  #snapItemToViewportBoundary(item: T, boundary: "top" | "bottom"): void {
+    const index = this.items.indexOf(item);
+    if (index < 0) {
+      return;
+    }
+    this._applyAnchor(
+      this._getTargetAnchor(index, boundary === "top" ? "start" : "end"),
+    );
+  }
+
   protected _resolveItem(
     item: T,
     _index: number,
@@ -501,6 +512,7 @@ export abstract class VirtualizedRenderer<
       captureVisualAnchor: this._readAnchorAt.bind(this),
       restoreVisualAnchor: this._restoreAnchor.bind(this),
       readItemIndex: (item) => this.items.indexOf(item),
+      snapItemToViewportBoundary: this.#snapItemToViewportBoundary.bind(this),
     };
   }
 
@@ -513,6 +525,8 @@ export abstract class VirtualizedRenderer<
       measureNode: this.measureRootNode.bind(this),
       readVisibleRange: this._readVisibleRange.bind(this),
       resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),
+      resolveVisibleWindowForState: (state, now) =>
+        this._resolveVisibleWindowForState(state, now),
     };
   }
 
