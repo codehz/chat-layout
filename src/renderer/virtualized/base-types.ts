@@ -52,3 +52,11 @@ export type VirtualizedResolvedItem = {
 
 /** Alpha values below this threshold are treated as fully transparent. */
 export const ALPHA_EPSILON = 1e-3;
+
+/**
+ * Pixel-space tolerance for viewport boundary checks.
+ * This is intentionally much larger than Number.EPSILON so summed fractional
+ * heights and padded viewports do not lose boundary alignment due to floating
+ * point drift.
+ */
+export const VIEWPORT_BOUNDARY_EPSILON = 1e-6;

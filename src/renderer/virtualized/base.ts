@@ -11,6 +11,7 @@ import type {
   ControlledState,
   VirtualizedResolvedItem,
 } from "./base-types";
+import { VIEWPORT_BOUNDARY_EPSILON } from "./base-types";
 import { prepareFrameSession } from "./frame-session";
 import { JumpController } from "./jump-controller";
 import {
@@ -318,10 +319,12 @@ export abstract class VirtualizedRenderer<
     }
 
     return {
-      top: minIndex === 0 && topMostY >= viewport.contentTop - Number.EPSILON,
+      top:
+        minIndex === 0 &&
+        topMostY >= viewport.contentTop - VIEWPORT_BOUNDARY_EPSILON,
       bottom:
         maxIndex === this.items.length - 1 &&
-        bottomMostY <= viewport.contentBottom + Number.EPSILON,
+        bottomMostY <= viewport.contentBottom + VIEWPORT_BOUNDARY_EPSILON,
     };
   }
 

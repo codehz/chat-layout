@@ -1,4 +1,5 @@
 import type { ControlledState } from "./base-types";
+import { VIEWPORT_BOUNDARY_EPSILON } from "./base-types";
 import { sameState } from "./base-animation";
 import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import type {
@@ -139,19 +140,19 @@ export class VisibilitySnapshot<T extends {}> {
       window.drawList.length === items.length &&
       minVisibleIndex === 0 &&
       maxVisibleIndex === items.length - 1 &&
-      topMostY >= viewport.contentTop - Number.EPSILON &&
-      bottomMostY <= viewport.contentBottom + Number.EPSILON &&
-      contentHeight < viewport.contentHeight - Number.EPSILON;
+      topMostY >= viewport.contentTop - VIEWPORT_BOUNDARY_EPSILON &&
+      bottomMostY <= viewport.contentBottom + VIEWPORT_BOUNDARY_EPSILON &&
+      contentHeight < viewport.contentHeight - VIEWPORT_BOUNDARY_EPSILON;
     this.#atStartBoundary =
       window.drawList.length > 0 &&
       items.length > 0 &&
       minVisibleIndex === 0 &&
-      topMostY >= viewport.contentTop - Number.EPSILON;
+      topMostY >= viewport.contentTop - VIEWPORT_BOUNDARY_EPSILON;
     this.#atEndBoundary =
       window.drawList.length > 0 &&
       items.length > 0 &&
       maxVisibleIndex === items.length - 1 &&
-      bottomMostY <= viewport.contentBottom + Number.EPSILON;
+      bottomMostY <= viewport.contentBottom + VIEWPORT_BOUNDARY_EPSILON;
   }
 
   matchesCurrentState(position: number | undefined, offset: number): boolean {

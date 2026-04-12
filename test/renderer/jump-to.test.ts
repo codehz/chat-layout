@@ -1323,6 +1323,140 @@ describe("jumpTo", () => {
     }
   });
 
+  test("padded containers keep unshift auto-follow latched after a settled follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 160;
+      const padding = { top: 32, bottom: 28 };
+      const heights = [41.125, 23.5, 57.375, 28.25];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        padding,
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      renderer.render();
+
+      list.unshiftAll([19.875], {
+        duration: 200,
+        autoFollow: true,
+      });
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const settledFeedback = createFeedback();
+      now.current = 200;
+      renderer.render(settledFeedback);
+      expect(settledFeedback.canAutoFollowTop).toBe(true);
+
+      list.unshiftAll([27.625], {
+        duration: 200,
+        autoFollow: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedHeights = [27.625, 19.875, ...heights];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        padding,
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(0, {
+        animated: false,
+        block: "start",
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("padded containers keep push auto-follow latched after a settled follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 168;
+      const padding = { top: 24, bottom: 31 };
+      const heights = [26.75, 44.125, 31.5, 52.875];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        padding,
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.jumpTo(heights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      renderer.render();
+
+      list.pushAll([18.625], {
+        duration: 200,
+        autoFollow: true,
+      });
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const settledFeedback = createFeedback();
+      now.current = 200;
+      renderer.render(settledFeedback);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+
+      list.pushAll([29.375], {
+        duration: 200,
+        autoFollow: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedHeights = [...heights, 18.625, 29.375];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        padding,
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      expectedRenderer.render();
+
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("manual scroll resets the settled auto-follow latch", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
