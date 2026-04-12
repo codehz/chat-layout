@@ -1,6 +1,6 @@
 import { $ } from "bun";
-import { basename, join } from "node:path";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 
 const sourceModuleFilePattern = /\.[cm]?[jt]sx?$/;
 

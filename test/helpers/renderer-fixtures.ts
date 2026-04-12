@@ -1,8 +1,8 @@
 import { expect } from "bun:test";
 
 import { Text } from "../../src/nodes";
-import { BaseRenderer, ListState } from "../../src/renderer";
 import type { ListAnchorMode } from "../../src/renderer";
+import { BaseRenderer, ListState } from "../../src/renderer";
 import type {
   Box,
   Context,

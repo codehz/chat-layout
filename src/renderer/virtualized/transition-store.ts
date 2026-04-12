@@ -1,6 +1,6 @@
-import { getProgress } from "./virtualized-animation";
 import type { ActiveItemTransition } from "./transition-runtime";
 import { VisibilitySnapshot } from "./transition-snapshot";
+import { getProgress } from "./virtualized-animation";
 
 export type StoredTransitionEntry<
   C extends CanvasRenderingContext2D,

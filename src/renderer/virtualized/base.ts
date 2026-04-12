@@ -5,25 +5,11 @@ import {
   ListState,
   readListScrollMutation,
   subscribeListState,
-  type ListStateChange,
   writeInternalListScrollState,
+  type ListStateChange,
 } from "../list-state";
-import { clamp, getNow } from "./virtualized-animation";
-import type {
-  AutoFollowCapabilities,
-  ListScrollStateSnapshot,
-  VirtualizedResolvedItem,
-} from "./virtualized-types";
-import { VIEWPORT_BOUNDARY_EPSILON } from "./virtualized-types";
 import { prepareFrameSession } from "./frame-session";
 import { JumpController } from "./jump-controller";
-import {
-  TransitionController,
-  type TransitionLifecycleAdapter,
-  type TransitionPlanningAdapter,
-  type TransitionRenderAdapter,
-  type VirtualizedRuntime,
-} from "./transition-controller";
 import type {
   ListViewportMetrics,
   NormalizedListState,
@@ -33,6 +19,19 @@ import type {
   VisibleWindowResult,
 } from "./solver";
 import { resolveListViewport } from "./solver";
+import {
+  TransitionController,
+  type TransitionLifecycleAdapter,
+  type TransitionPlanningAdapter,
+  type TransitionRenderAdapter,
+  type VirtualizedRuntime,
+} from "./transition-controller";
+import { clamp, getNow } from "./virtualized-animation";
+import type {
+  AutoFollowCapabilities,
+  VirtualizedResolvedItem,
+} from "./virtualized-types";
+import { VIEWPORT_BOUNDARY_EPSILON } from "./virtualized-types";
 
 /**
  * Options for programmatic scrolling to a target item.

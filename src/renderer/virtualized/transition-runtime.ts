@@ -1,10 +1,10 @@
 import type { Box, Context, Node } from "../../types";
-import type { ListScrollStateSnapshot } from "./virtualized-types";
 import type {
   ListViewportMetrics,
   ResolvedListLayoutOptions,
   VisibleWindowResult,
 } from "./solver";
+import type { ListScrollStateSnapshot } from "./virtualized-types";
 
 export type VisibleRange = {
   top: number;

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
+import type { ListAnchorMode } from "../../src/renderer";
 import {
   ListRenderer,
   ListState,
   type ListPadding,
   type ListUnderflowAlign,
 } from "../../src/renderer";
-import type { ListAnchorMode } from "../../src/renderer";
 import type {
   Box,
   Context,

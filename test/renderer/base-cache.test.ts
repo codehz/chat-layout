@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { Fixed, Flex, Place } from "../../src/nodes";
-import { BaseRenderer } from "../../src/renderer";
 import {
   registerNodeParent,
   unregisterNodeParent,
 } from "../../src/internal/node-registry";
+import { Fixed, Flex, Place } from "../../src/nodes";
+import { BaseRenderer } from "../../src/renderer";
 import type {
   Box,
   Context,

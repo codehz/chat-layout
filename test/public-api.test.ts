@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import * as api from "../src/index";
 import type {
   Context,
   DeleteListItemAnimationOptions,
@@ -19,6 +18,7 @@ import type {
   UnshiftListItemsAnimationOptions,
   UpdateListItemAnimationOptions,
 } from "../src/index";
+import * as api from "../src/index";
 
 type C = CanvasRenderingContext2D;
 

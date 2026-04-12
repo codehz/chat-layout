@@ -1,4 +1,5 @@
 dist/
+example/build/
 node_modules/
 .git/
 coverage/

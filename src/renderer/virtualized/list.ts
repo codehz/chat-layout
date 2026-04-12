@@ -1,5 +1,3 @@
-import { VirtualizedRenderer } from "./base";
-import type { JumpToOptions } from "./base";
 import type { Node } from "../../types";
 import type { ListState } from "../list-state";
 import {
@@ -7,9 +5,11 @@ import {
   getTargetAnchorForItem,
   readAnchorFromState,
 } from "./anchor-model";
+import type { JumpToOptions } from "./base";
+import { VirtualizedRenderer } from "./base";
 import {
-  normalizeVisibleState,
   normalizeListPadding,
+  normalizeVisibleState,
   resolveListLayoutOptions,
   resolveListViewport,
   resolveVisibleWindow,

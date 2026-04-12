@@ -2,12 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import { MultilineText, Text } from "../../src/nodes";
 import type { InlineSpan } from "../../src/types";
+import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
 import {
   createRecordingGraphics,
   createRichRecordingGraphics,
   type RecordedDraw,
 } from "../helpers/text-fixtures";
-import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
 

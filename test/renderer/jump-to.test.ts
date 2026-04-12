@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { ListAnchorMode } from "../../src/renderer";
 import {
   ListRenderer,
   ListState,
@@ -7,7 +8,6 @@ import {
   type ListPadding,
 } from "../../src/renderer";
 import { writeInternalListScrollState } from "../../src/renderer/list-state";
-import type { ListAnchorMode } from "../../src/renderer";
 import type {
   Box,
   Context,

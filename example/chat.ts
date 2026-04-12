@@ -1,7 +1,7 @@
 import {
+  Fixed,
   Flex,
   FlexItem,
-  Fixed,
   ListRenderer,
   ListState,
   MultilineText,

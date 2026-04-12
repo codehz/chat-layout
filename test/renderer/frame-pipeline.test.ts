@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
+import { ListState } from "../../src/renderer/list-state";
 import { VirtualizedRenderer } from "../../src/renderer/virtualized/base";
-import type { VirtualizedResolvedItem } from "../../src/renderer/virtualized/virtualized-types";
 import {
   normalizeVisibleState,
   type NormalizedListState,
@@ -9,7 +9,7 @@ import {
   type VisibleListState,
   type VisibleWindowResult,
 } from "../../src/renderer/virtualized/solver";
-import { ListState } from "../../src/renderer/list-state";
+import type { VirtualizedResolvedItem } from "../../src/renderer/virtualized/virtualized-types";
 import { createGraphics } from "../helpers/graphics";
 import { createHitNode } from "../helpers/renderer-fixtures";
 

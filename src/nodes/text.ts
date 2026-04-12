@@ -1,4 +1,7 @@
 import {
+  analyzeLineForJustify,
+  computeJustifySpacing,
+  isJustifySupported,
   layoutEllipsizedFirstLine,
   layoutFirstLine,
   layoutFirstLineIntrinsic,
@@ -15,25 +18,22 @@ import {
   measureRichTextIntrinsic,
   measureRichTextMinContent,
   measureText,
-  measureTextMinContent,
   measureTextIntrinsic,
+  measureTextMinContent,
+  resolveJustifyMode,
   type RichBlockLayout,
   type RichLineLayout,
   type RichMeasurement,
   type TextLayout,
   type TextMeasurement,
-  analyzeLineForJustify,
-  computeJustifySpacing,
-  isJustifySupported,
-  resolveJustifyMode,
 } from "../text";
-import { readPreparedText } from "../text/plain-core";
 import {
-  readPreparedInlineLayout,
   createRichSourceItems,
   getRichPreparedKey,
+  readPreparedInlineLayout,
   walkPreparedLineRanges,
 } from "../text/inline-engine";
+import { readPreparedText } from "../text/plain-core";
 import type {
   Box,
   Context,

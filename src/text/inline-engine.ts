@@ -1,20 +1,10 @@
 import type {
-  Context,
   InlineSpan,
-  TextEllipsisPosition,
   TextOverflowWrapMode,
   TextWhiteSpaceMode,
   TextWordBreakMode,
 } from "../types";
-import {
-  buildPrefixWidths,
-  buildSuffixWidths,
-  measureEllipsisWidth,
-  readLruValue,
-  selectEllipsisUnitCounts,
-  splitGraphemes,
-  writeLruValue,
-} from "./core";
+import { readLruValue, splitGraphemes, writeLruValue } from "./core";
 
 const LINE_FIT_EPSILON = 0.005;
 const PREPARED_INLINE_CACHE_CAPACITY = 512;

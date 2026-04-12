@@ -6,9 +6,9 @@ import type {
 } from "../types";
 import {
   createPlainSourceItems,
+  getPreparedUnits as getInlinePreparedUnits,
   getPlainPreparedKey,
   getPreparedLineStart,
-  getPreparedUnits as getInlinePreparedUnits,
   joinPreparedUnitText,
   layoutNextPreparedLine,
   materializePreparedLineText,

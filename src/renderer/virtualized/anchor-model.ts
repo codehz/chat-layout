@@ -1,5 +1,5 @@
-import { clamp } from "./virtualized-animation";
 import type { NormalizedListState, ResolvedListLayoutOptions } from "./solver";
+import { clamp } from "./virtualized-animation";
 
 export type JumpBlock = "start" | "center" | "end";
 

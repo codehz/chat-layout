@@ -1,17 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
 import { MultilineText, Text } from "../../src/nodes";
-import type {
-  InlineSpan,
-  MultilineTextOptions,
-  TextOptions,
-} from "../../src/types";
 import {
   DebugRenderer,
   ListRenderer,
   ListState,
   memoRenderItem,
 } from "../../src/renderer";
+import type {
+  InlineSpan,
+  MultilineTextOptions,
+  TextOptions,
+} from "../../src/types";
 import {
   createTextGraphics,
   ensureMockOffscreenCanvas,

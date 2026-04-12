@@ -9,8 +9,7 @@ import {
   measureRichTextIntrinsic,
   measureRichTextMinContent,
 } from "../../src/text";
-import type { Context } from "../../src/types";
-import type { InlineSpan } from "../../src/types";
+import type { Context, InlineSpan } from "../../src/types";
 import { createMeasuredContext } from "../helpers/text-fixtures";
 
 type C = CanvasRenderingContext2D;

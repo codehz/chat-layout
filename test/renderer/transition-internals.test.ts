@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { Box, Context, HitTest, Node } from "../../src/types";
+import { resolveListViewport } from "../../src/renderer/virtualized/solver";
 import {
   TransitionStore,
   VisibilitySnapshot,
@@ -11,7 +11,7 @@ import {
   type LayerAnimation,
   type ScalarAnimation,
 } from "../../src/renderer/virtualized/transition-controller";
-import { resolveListViewport } from "../../src/renderer/virtualized/solver";
+import type { Box, Context, HitTest, Node } from "../../src/types";
 
 type C = CanvasRenderingContext2D;
 type Item = { id: string };

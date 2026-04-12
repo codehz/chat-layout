@@ -1,11 +1,11 @@
-import { sameState } from "./virtualized-animation";
-import type { ListScrollStateSnapshot } from "./virtualized-types";
-import { VIEWPORT_BOUNDARY_EPSILON } from "./virtualized-types";
 import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import type {
   BoundaryInsertDirection,
   VisibleRange,
 } from "./transition-runtime";
+import { sameState } from "./virtualized-animation";
+import type { ListScrollStateSnapshot } from "./virtualized-types";
+import { VIEWPORT_BOUNDARY_EPSILON } from "./virtualized-types";
 
 export class VisibilitySnapshot<T extends {}> {
   #drawnItems = new Set<T>();

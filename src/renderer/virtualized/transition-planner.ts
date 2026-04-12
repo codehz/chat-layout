@@ -1,10 +1,5 @@
 import type { Node } from "../../types";
 import type { ListStateChange } from "../list-state";
-import { clamp, getNow, interpolate } from "./virtualized-animation";
-import {
-  ALPHA_EPSILON,
-  type VirtualizedResolvedItem,
-} from "./virtualized-types";
 import type { VisibleWindowResult } from "./solver";
 import {
   type ActiveItemTransition,
@@ -19,6 +14,11 @@ import {
 } from "./transition-runtime";
 import { VisibilitySnapshot } from "./transition-snapshot";
 import { TransitionStore } from "./transition-store";
+import { clamp, getNow, interpolate } from "./virtualized-animation";
+import {
+  ALPHA_EPSILON,
+  type VirtualizedResolvedItem,
+} from "./virtualized-types";
 
 type CurrentVisualState<C extends CanvasRenderingContext2D> = {
   node: Node<C>;

@@ -15,7 +15,6 @@ import {
   measureFontShift,
   normalizeMaxLines,
   resolveEllipsisSelection,
-  selectEllipsisUnitCounts,
 } from "./core";
 import {
   collectAtomsInRange,
@@ -28,14 +27,12 @@ import {
   materializePreparedLineText,
   measureAtomsWidth,
   measurePreparedLineStats,
+  measurePreparedMinContentWidth,
+  readPreparedInlineLayout,
   walkPreparedLineRanges,
   type InlineAtom,
   type PreparedInlineLayout,
   type PreparedInlineLineRange,
-} from "./inline-engine";
-import {
-  measurePreparedMinContentWidth,
-  readPreparedInlineLayout,
 } from "./inline-engine";
 
 export interface RichFragmentLayout {

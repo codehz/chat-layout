@@ -13,11 +13,10 @@ import {
   measureFontShift,
   normalizeMaxLines,
   resolveEllipsisSelection,
-  selectEllipsisUnitCounts,
 } from "./core";
 import {
-  forEachAtomFromCursorToEnd,
   flattenPreparedLineAtoms,
+  forEachAtomFromCursorToEnd,
   getPreparedLineStart,
   layoutNextPreparedLine,
   materializePreparedLineText,

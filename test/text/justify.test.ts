@@ -1,20 +1,20 @@
 import { describe, expect, test } from "bun:test";
 
+import { MultilineText } from "../../src/nodes";
+import { walkPreparedLineRanges } from "../../src/text/inline-engine";
 import {
-  resolveJustifyMode,
-  isJustifySupported,
-  shouldJustifyLine,
-  computeJustifySpacing,
   analyzeLineForJustify,
+  computeJustifySpacing,
+  isJustifySupported,
   resetJustifySupportedCache,
+  resolveJustifyMode,
+  shouldJustifyLine,
   type JustifyLineInfo,
 } from "../../src/text/justify";
 import { readPreparedText } from "../../src/text/plain-core";
-import { walkPreparedLineRanges } from "../../src/text/inline-engine";
-import { MultilineText } from "../../src/nodes";
 import type { InlineSpan } from "../../src/types";
-import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
 import { ensureMockOffscreenCanvas } from "../helpers/graphics";
+import { ConstraintTestRenderer } from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
 

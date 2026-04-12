@@ -3,6 +3,8 @@ import type {
   ListScrollMutation,
   ListStateChange,
 } from "../list-state";
+import type { JumpBlock } from "./anchor-model";
+import type { NormalizedListState } from "./solver";
 import {
   buildJumpPath,
   clamp,
@@ -17,8 +19,6 @@ import type {
   JumpAnimation,
   ListScrollStateSnapshot,
 } from "./virtualized-types";
-import type { JumpBlock } from "./anchor-model";
-import type { NormalizedListState } from "./solver";
 
 type JumpOptions = {
   animated?: boolean;

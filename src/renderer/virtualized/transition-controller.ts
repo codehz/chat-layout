@@ -1,26 +1,26 @@
 import type { ListStateChange } from "../list-state";
-import { getNow, sameState } from "./virtualized-animation";
-import type {
-  ListScrollStateSnapshot,
-  VirtualizedResolvedItem,
-} from "./virtualized-types";
 import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import {
   getTransitionedItemHeight,
   handleTransitionStateChange,
   resolveTransitionedItem,
 } from "./transition-planner";
-import { VisibilitySnapshot } from "./transition-snapshot";
-import {
-  TransitionStore,
-  type StoredTransitionEntry,
-} from "./transition-store";
 import type {
   BoundaryInsertDirection,
   TransitionLifecycleAdapter,
   TransitionPlanningAdapter,
   TransitionRenderAdapter,
 } from "./transition-runtime";
+import { VisibilitySnapshot } from "./transition-snapshot";
+import {
+  TransitionStore,
+  type StoredTransitionEntry,
+} from "./transition-store";
+import { getNow, sameState } from "./virtualized-animation";
+import type {
+  ListScrollStateSnapshot,
+  VirtualizedResolvedItem,
+} from "./virtualized-types";
 
 export {
   canAnimateExistingItem,
@@ -29,8 +29,6 @@ export {
   sampleLayerAnimation,
   sampleScalarAnimation,
 } from "./transition-planner";
-export { VisibilitySnapshot } from "./transition-snapshot";
-export { TransitionStore } from "./transition-store";
 export type {
   ActiveItemTransition,
   BoundaryInsertDirection,
@@ -44,6 +42,8 @@ export type {
   VirtualizedRuntime,
   VisibleRange,
 } from "./transition-runtime";
+export { VisibilitySnapshot } from "./transition-snapshot";
+export { TransitionStore } from "./transition-store";
 
 export function remapAnchorAfterDeletes(
   anchor: number,
