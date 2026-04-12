@@ -189,12 +189,12 @@ describe("ListState item identity", () => {
     list.pushAll([{ id: "tail" }], {
       duration: 180,
       distance: -5,
-      followIfAtBoundary: true,
+      autoFollow: true,
     });
     list.unshiftAll([{ id: "head" }], {
       duration: 180,
       distance: -5,
-      followIfAtBoundary: true,
+      autoFollow: true,
     });
 
     expect(changes).toEqual([
@@ -204,7 +204,7 @@ describe("ListState item identity", () => {
         animation: {
           duration: 180,
           distance: 0,
-          followIfAtBoundary: true,
+          autoFollow: true,
         },
       },
       {
@@ -213,7 +213,7 @@ describe("ListState item identity", () => {
         animation: {
           duration: 180,
           distance: 0,
-          followIfAtBoundary: true,
+          autoFollow: true,
         },
       },
     ]);
@@ -229,10 +229,10 @@ describe("ListState item identity", () => {
     });
 
     list.pushAll([{ id: "tail" }], {
-      followIfAtBoundary: true,
+      autoFollow: true,
     });
     list.unshiftAll([{ id: "head" }], {
-      followIfAtBoundary: true,
+      autoFollow: true,
     });
 
     expect(changes).toEqual([
@@ -241,7 +241,7 @@ describe("ListState item identity", () => {
         count: 1,
         animation: {
           duration: 220,
-          followIfAtBoundary: true,
+          autoFollow: true,
         },
       },
       {
@@ -249,7 +249,7 @@ describe("ListState item identity", () => {
         count: 1,
         animation: {
           duration: 220,
-          followIfAtBoundary: true,
+          autoFollow: true,
         },
       },
     ]);
@@ -267,11 +267,11 @@ describe("ListState item identity", () => {
     list.pushAll([{ id: "tail" }], {
       duration: 0,
       distance: 12,
-      followIfAtBoundary: true,
+      autoFollow: true,
     });
     list.unshiftAll([{ id: "head" }], {
       duration: -1,
-      followIfAtBoundary: true,
+      autoFollow: true,
     });
 
     expect(changes).toEqual([

@@ -18,16 +18,9 @@ function createController(params?: {
   heights?: number[];
   state?: State;
   viewportHeight?: number;
-  followPredicate?: (
-    direction: "push" | "unshift",
-    count: number,
-    position: number | undefined,
-    offset: number,
-  ) => boolean;
 }) {
   let heights = params?.heights ?? [20, 20, 20];
   let state: State = params?.state ?? { position: 0, offset: 0 };
-  let followPredicate = params?.followPredicate ?? (() => false);
   const viewportHeight = params?.viewportHeight ?? 100;
   const getHeight = (index: number) => heights[index] ?? 0;
   const controller = new JumpController({
@@ -72,8 +65,6 @@ function createController(params?: {
       ),
     clampItemIndex: (index) => clampItemIndex(index, heights.length),
     getItemHeight: getHeight,
-    canAutoFollowBoundaryInsert: (direction, count, position, offset) =>
-      followPredicate(direction, count, position, offset),
   });
   return {
     controller,
@@ -84,33 +75,27 @@ function createController(params?: {
     setHeights(nextHeights: number[]) {
       heights = nextHeights;
     },
-    setFollowPredicate(
-      nextPredicate: (
-        direction: "push" | "unshift",
-        count: number,
-        position: number | undefined,
-        offset: number,
-      ) => boolean,
-    ) {
-      followPredicate = nextPredicate;
+    syncCapabilities(top: boolean, bottom: boolean) {
+      controller.syncAutoFollowCapabilities({ top, bottom });
     },
   };
 }
 
 describe("jump controller", () => {
-  test("strips boundary-insert animation when the snapshot says to auto-follow", () => {
+  test("strips boundary-insert animation when the bottom capability allows auto-follow", () => {
     const harness = createController({
       heights: [20, 20, 20, 20],
       state: { position: 2, offset: 0 },
-      followPredicate: () => true,
     });
+    harness.controller.commit(harness.getState());
+    harness.syncCapabilities(false, true);
 
     const nextChange = harness.controller.handleListStateChange({
       type: "push",
       count: 1,
       animation: {
         duration: 220,
-        followIfAtBoundary: true,
+        autoFollow: true,
       },
     });
 
@@ -121,31 +106,31 @@ describe("jump controller", () => {
     });
   });
 
-  test("settled auto-follow latch survives matching inserts and resets after manual scroll", () => {
+  test("confirmed bottom capability survives matching inserts and resets after manual scroll", () => {
     const harness = createController({
       heights: [20, 20, 20, 20],
       state: { position: 2, offset: 0 },
-      followPredicate: () => true,
     });
+    harness.controller.commit(harness.getState());
+    harness.syncCapabilities(false, true);
 
     harness.controller.handleListStateChange({
       type: "push",
       count: 1,
       animation: {
         duration: 0,
-        followIfAtBoundary: true,
+        autoFollow: true,
       },
     });
     harness.controller.commit(harness.getState());
 
     harness.setHeights([20, 20, 20, 20, 20]);
-    harness.setFollowPredicate(() => false);
     const chainedChange = harness.controller.handleListStateChange({
       type: "push",
       count: 1,
       animation: {
         duration: 220,
-        followIfAtBoundary: true,
+        autoFollow: true,
       },
     });
     expect(chainedChange).toMatchObject({
@@ -162,7 +147,7 @@ describe("jump controller", () => {
       count: 1,
       animation: {
         duration: 220,
-        followIfAtBoundary: true,
+        autoFollow: true,
       },
     });
     expect(resetChange).toMatchObject({
@@ -170,7 +155,7 @@ describe("jump controller", () => {
       count: 1,
       animation: {
         duration: 220,
-        followIfAtBoundary: true,
+        autoFollow: true,
       },
     });
   });
@@ -183,27 +168,27 @@ describe("jump controller", () => {
         heights: [10, 10, 10],
         state: { position: 1, offset: 0 },
         viewportHeight: 10,
-        followPredicate: () => true,
       });
+      harness.controller.commit(harness.getState());
+      harness.syncCapabilities(false, true);
 
       harness.controller.handleListStateChange({
         type: "push",
         count: 1,
         animation: {
           duration: 100,
-          followIfAtBoundary: true,
+          autoFollow: true,
         },
       });
 
       now.current = 50;
       harness.setHeights([10, 10, 10, 10]);
-      harness.setFollowPredicate(() => false);
       const nextChange = harness.controller.handleListStateChange({
         type: "push",
         count: 1,
         animation: {
           duration: 100,
-          followIfAtBoundary: true,
+          autoFollow: true,
         },
       });
 
@@ -223,6 +208,29 @@ describe("jump controller", () => {
     } finally {
       restoreNow();
     }
+  });
+
+  test("boundary jumps expose effective auto-follow before the first render sync", () => {
+    const harness = createController({
+      heights: [20, 20, 20, 20, 20, 20],
+      state: { position: 0, offset: 0 },
+      viewportHeight: 40,
+    });
+
+    harness.controller.jumpToBoundary("bottom", { duration: 100 });
+    expect(harness.controller.getEffectiveAutoFollowCapabilities()).toEqual({
+      top: false,
+      bottom: true,
+    });
+
+    harness.controller.syncAutoFollowCapabilities({
+      top: false,
+      bottom: false,
+    });
+    expect(harness.controller.getEffectiveAutoFollowCapabilities()).toEqual({
+      top: false,
+      bottom: true,
+    });
   });
 
   test("external scroll cancels an in-flight manual jump on the next prepare", () => {

@@ -680,6 +680,195 @@ describe("jumpTo", () => {
     }
   });
 
+  test("jumpToBottom arms bottom auto-follow before the first render", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpToBottom({ duration: 200 });
+      list.pushAll([30], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      const feedbacks: RenderFeedback[] = [];
+      for (const time of [0, 100, 200, 300]) {
+        now.current = time;
+        const feedback = createFeedback();
+        renderer.render(feedback);
+        feedbacks.push({ ...feedback });
+      }
+
+      const expectedHeights = [...heights, 30];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpToBottom({ animated: false });
+      expectedRenderer.render();
+
+      expect(feedbacks[0]?.canAutoFollowBottom).toBe(true);
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("jumpToTop arms top auto-follow before the first render", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpToTop({ duration: 200 });
+      list.unshiftAll([30], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      const feedbacks: RenderFeedback[] = [];
+      for (const time of [0, 100, 200, 300]) {
+        now.current = time;
+        const feedback = createFeedback();
+        renderer.render(feedback);
+        feedbacks.push({ ...feedback });
+      }
+
+      const expectedHeights = [30, ...heights];
+      const expectedList = new ListState<number>();
+      expectedList.pushAll(expectedHeights);
+      const expectedRenderer = createRenderer(viewportHeight, {
+        anchorMode: "bottom",
+        list: expectedList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedRenderer.jumpToTop({ animated: false });
+      expectedRenderer.render();
+
+      expect(feedbacks[0]?.canAutoFollowTop).toBe(true);
+      expect(list.position).toBe(expectedList.position);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("plain jumpTo does not pre-arm boundary auto-follow during the animation", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpTo(heights.length - 1, {
+        duration: 200,
+        block: "end",
+      });
+      list.pushAll([30], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      const feedback = createFeedback();
+      now.current = 0;
+      renderer.render(feedback);
+
+      expect(feedback.canAutoFollowBottom).toBe(false);
+      expect(list.position).toBe(0);
+      expect(list.offset).toBe(0);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("plain jumpTo enables boundary auto-follow after settling at the boundary", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const list = new ListState<number>();
+      list.pushAll(heights);
+      const renderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list,
+        renderItem: (height) => createNode(height),
+      });
+
+      renderer.render();
+      renderer.jumpTo(heights.length - 1, {
+        duration: 200,
+        block: "end",
+      });
+
+      const feedbacks: RenderFeedback[] = [];
+      for (const time of [0, 100, 200]) {
+        now.current = time;
+        const feedback = createFeedback();
+        renderer.render(feedback);
+        feedbacks.push({ ...feedback });
+      }
+
+      expect(feedbacks[0]?.canAutoFollowBottom).toBe(false);
+      expect(feedbacks.at(-1)?.canAutoFollowBottom).toBe(true);
+
+      list.pushAll([20], {
+        duration: 200,
+        autoFollow: true,
+      });
+      for (const time of [200, 300, 400]) {
+        now.current = time;
+        renderer.render();
+      }
+
+      const expectedAfterFollowList = new ListState<number>();
+      expectedAfterFollowList.pushAll([...heights, 20]);
+      const expectedAfterFollowRenderer = createRenderer(viewportHeight, {
+        anchorMode: "top",
+        list: expectedAfterFollowList,
+        renderItem: (height) => createNode(height),
+      });
+      expectedAfterFollowRenderer.jumpToBottom({ animated: false });
+      expectedAfterFollowRenderer.render();
+
+      expect(list.position).toBe(expectedAfterFollowList.position);
+      expect(list.offset).toBeCloseTo(expectedAfterFollowList.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("pushAll auto-follows the end boundary when pinned there", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -703,7 +892,7 @@ describe("jumpTo", () => {
       list.pushAll([50], {
         duration: 200,
         distance: 999,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
 
       for (const time of [0, 100, 200]) {
@@ -755,7 +944,7 @@ describe("jumpTo", () => {
       list.unshiftAll([30], {
         duration: 200,
         distance: 999,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
 
       for (const time of [0, 100, 200]) {
@@ -800,7 +989,7 @@ describe("jumpTo", () => {
       });
       pushRenderer.render();
       pushList.pushAll([30], {
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [0, 110, 220]) {
         now.current = time;
@@ -831,7 +1020,7 @@ describe("jumpTo", () => {
       });
       unshiftRenderer.render();
       unshiftList.unshiftAll([30], {
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [0, 110, 220]) {
         now.current = time;
@@ -871,7 +1060,7 @@ describe("jumpTo", () => {
       renderer.render();
       list.pushAll([50], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
 
       now.current = 0;
@@ -900,7 +1089,7 @@ describe("jumpTo", () => {
       renderer.render();
       list.pushAll([30], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
 
       now.current = 100;
@@ -908,7 +1097,7 @@ describe("jumpTo", () => {
 
       list.pushAll([20], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
 
       now.current = 200;
@@ -960,7 +1149,7 @@ describe("jumpTo", () => {
 
       list.pushAll([30], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [0, 100, 200]) {
         now.current = time;
@@ -969,7 +1158,7 @@ describe("jumpTo", () => {
 
       list.pushAll([20], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [200, 300, 400]) {
         now.current = time;
@@ -1019,7 +1208,7 @@ describe("jumpTo", () => {
 
       list.unshiftAll([30], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [0, 100, 200]) {
         now.current = time;
@@ -1028,7 +1217,7 @@ describe("jumpTo", () => {
 
       list.unshiftAll([20], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [200, 300, 400]) {
         now.current = time;
@@ -1078,7 +1267,7 @@ describe("jumpTo", () => {
 
       list.pushAll([30], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [0, 100, 200]) {
         now.current = time;
@@ -1091,7 +1280,7 @@ describe("jumpTo", () => {
 
       list.pushAll([20], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [200, 300, 400]) {
         now.current = time;
@@ -1138,7 +1327,7 @@ describe("jumpTo", () => {
 
       list.unshiftAll([30], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [0, 100, 200]) {
         now.current = time;
@@ -1152,7 +1341,7 @@ describe("jumpTo", () => {
 
       list.unshiftAll([20], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [200, 300, 400]) {
         now.current = time;
@@ -1200,7 +1389,7 @@ describe("jumpTo", () => {
 
       list.pushAll([30], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [0, 100, 200]) {
         now.current = time;
@@ -1214,7 +1403,7 @@ describe("jumpTo", () => {
 
       list.pushAll([20], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
       for (const time of [200, 300, 400]) {
         now.current = time;
@@ -1255,7 +1444,7 @@ describe("jumpTo", () => {
       renderer.render();
       list.pushAll([30], {
         duration: 200,
-        followIfAtBoundary: true,
+        autoFollow: true,
       });
 
       now.current = 100;

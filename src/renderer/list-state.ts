@@ -23,7 +23,7 @@ export interface InsertListItemsAnimationOptions {
   /** Enter offset in pixels measured from the final resting position. */
   distance?: number;
   /** Auto-follow the insertion edge when the viewport was already pinned there. */
-  followIfAtBoundary?: boolean;
+  autoFollow?: boolean;
 }
 
 export type PushListItemsAnimationOptions = InsertListItemsAnimationOptions;
@@ -238,8 +238,8 @@ function normalizeInsertAnimation(
   ) {
     normalizedAnimation.distance = Math.max(0, animation.distance);
   }
-  if (animation?.followIfAtBoundary === true) {
-    normalizedAnimation.followIfAtBoundary = true;
+  if (animation?.autoFollow === true) {
+    normalizedAnimation.autoFollow = true;
   }
   return normalizedAnimation;
 }

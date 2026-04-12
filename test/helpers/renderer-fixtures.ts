@@ -87,6 +87,8 @@ export function createFeedback(): RenderFeedback {
     maxIdx: Number.NaN,
     min: Number.NaN,
     max: Number.NaN,
+    canAutoFollowTop: false,
+    canAutoFollowBottom: false,
   };
 }
 

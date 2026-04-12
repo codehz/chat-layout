@@ -513,6 +513,8 @@ function drawFrame(): void {
     maxIdx: Number.NaN,
     min: Number.NaN,
     max: Number.NaN,
+    canAutoFollowTop: false,
+    canAutoFollowBottom: false,
   };
   renderer.render(feedback);
 
@@ -644,7 +646,7 @@ button("unshift", () => {
     ],
     {
       duration: INSERT_ANIMATION_DURATION,
-      followIfAtBoundary: true,
+      autoFollow: true,
     },
   );
 });
@@ -661,7 +663,7 @@ button("push", () => {
     ],
     {
       distance: 24,
-      followIfAtBoundary: true,
+      autoFollow: true,
     },
   );
 });

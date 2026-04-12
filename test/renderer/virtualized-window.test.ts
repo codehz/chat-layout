@@ -189,6 +189,8 @@ describe("virtualized visible window", () => {
     expect(feedback.min).toBeCloseTo(0);
     expect(feedback.max).toBeCloseTo(0.5);
     expect(feedback.max).toBeGreaterThanOrEqual(feedback.min);
+    expect(feedback.canAutoFollowTop).toBe(true);
+    expect(feedback.canAutoFollowBottom).toBe(false);
   });
 
   test("bottom-anchor reports a monotonic visible range for an oversized item", () => {
@@ -209,6 +211,8 @@ describe("virtualized visible window", () => {
     expect(feedback.min).toBeCloseTo(0.5);
     expect(feedback.max).toBeCloseTo(1);
     expect(feedback.max).toBeGreaterThanOrEqual(feedback.min);
+    expect(feedback.canAutoFollowTop).toBe(false);
+    expect(feedback.canAutoFollowBottom).toBe(true);
   });
 
   test("top-anchor keeps feedback finite and smooth while crossing into an oversized item", () => {
@@ -332,6 +336,8 @@ describe("virtualized visible window", () => {
     list.reset();
     renderer.render(feedback);
     expectNaNFeedback(feedback);
+    expect(feedback.canAutoFollowTop).toBe(false);
+    expect(feedback.canAutoFollowBottom).toBe(false);
   });
 
   test("zero-height items do not contaminate feedback", () => {
@@ -352,5 +358,50 @@ describe("virtualized visible window", () => {
     expect(feedback.maxIdx).toBe(2);
     expect(feedback.min).toBeCloseTo(0);
     expect(feedback.max).toBeCloseTo(2.5);
+  });
+
+  test("feedback reports top and bottom auto-follow capabilities from the rendered window", () => {
+    const list = new ListState<number>();
+    list.push(50, 50, 50);
+
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    const topFeedback = createFeedback();
+    renderer.render(topFeedback);
+    expect(topFeedback.canAutoFollowTop).toBe(true);
+    expect(topFeedback.canAutoFollowBottom).toBe(false);
+
+    list.applyScroll(-25);
+    const middleFeedback = createFeedback();
+    renderer.render(middleFeedback);
+    expect(middleFeedback.canAutoFollowTop).toBe(false);
+    expect(middleFeedback.canAutoFollowBottom).toBe(false);
+
+    renderer.jumpToBottom({ animated: false });
+    const bottomFeedback = createFeedback();
+    renderer.render(bottomFeedback);
+    expect(bottomFeedback.canAutoFollowTop).toBe(false);
+    expect(bottomFeedback.canAutoFollowBottom).toBe(true);
+  });
+
+  test("short fully visible lists can auto-follow both boundaries", () => {
+    const list = new ListState<number>();
+    list.push(20, 20);
+
+    const renderer = createRenderer(120, {
+      anchorMode: "top",
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    const feedback = createFeedback();
+    renderer.render(feedback);
+
+    expect(feedback.canAutoFollowTop).toBe(true);
+    expect(feedback.canAutoFollowBottom).toBe(true);
   });
 });

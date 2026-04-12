@@ -6,6 +6,13 @@ export type ControlledState = {
   offset: number;
 };
 
+export type AutoFollowBoundary = "top" | "bottom";
+
+export type AutoFollowCapabilities = {
+  top: boolean;
+  bottom: boolean;
+};
+
 /** A positive-length pixel segment within a jump path. */
 export type JumpPathSegment = {
   anchorStart: number;
@@ -24,7 +31,8 @@ export type JumpPath = {
 
 export type JumpAnimationSource =
   | { kind: "manual" }
-  | { kind: "auto-follow"; direction: "push" | "unshift" };
+  | { kind: "boundary-jump"; boundary: AutoFollowBoundary }
+  | { kind: "auto-follow"; boundary: AutoFollowBoundary };
 
 /** Tracks an in-progress programmatic jump animation. */
 export type JumpAnimation = {

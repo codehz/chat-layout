@@ -22,6 +22,10 @@ export interface RenderFeedback {
   min: number;
   /** Largest visible continuous item position, expressed in item coordinates rather than pixels. */
   max: number;
+  /** Whether the current viewport may auto-follow inserts at the visual top edge. */
+  canAutoFollowTop: boolean;
+  /** Whether the current viewport may auto-follow inserts at the visual bottom edge. */
+  canAutoFollowBottom: boolean;
 }
 
 /**

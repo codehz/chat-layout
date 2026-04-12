@@ -6,7 +6,11 @@ import {
   type ListStateChange,
 } from "../list-state";
 import { clamp, getNow } from "./base-animation";
-import type { ControlledState, VirtualizedResolvedItem } from "./base-types";
+import type {
+  AutoFollowCapabilities,
+  ControlledState,
+  VirtualizedResolvedItem,
+} from "./base-types";
 import { prepareFrameSession } from "./frame-session";
 import { JumpController } from "./jump-controller";
 import {
@@ -80,13 +84,6 @@ export abstract class VirtualizedRenderer<
       getTargetAnchor: this._getTargetAnchor.bind(this),
       clampItemIndex: this._clampItemIndex.bind(this),
       getItemHeight: this._getItemHeight.bind(this),
-      canAutoFollowBoundaryInsert: (direction, count, position, offset) =>
-        this.#transitionController.canAutoFollowBoundaryInsert(
-          direction,
-          count,
-          position,
-          offset,
-        ),
     });
     subscribeListState(options.list, this, (owner, change) => {
       owner.#handleListStateChange(change);
@@ -142,11 +139,22 @@ export abstract class VirtualizedRenderer<
       pruneTransitionAnimations: (window, frameNow) =>
         this._pruneTransitionAnimations(window, frameNow),
     });
+    const autoFollowCapabilities =
+      this.#jumpController.syncAutoFollowCapabilities(
+        this._readAutoFollowCapabilities(
+          frame.solution.window,
+          frame.viewportTranslateY,
+        ),
+      );
     const requestRedraw = this._renderVisibleWindow(
       frame.solution.window,
       feedback,
       frame.viewportTranslateY,
     );
+    if (feedback != null) {
+      feedback.canAutoFollowTop = autoFollowCapabilities.top;
+      feedback.canAutoFollowBottom = autoFollowCapabilities.bottom;
+    }
     this._commitListState(frame.solution.normalizedState);
 
     return this._finishRender(
@@ -176,6 +184,12 @@ export abstract class VirtualizedRenderer<
       pruneTransitionAnimations: (window, frameNow) =>
         this._pruneTransitionAnimations(window, frameNow),
     });
+    this.#jumpController.syncAutoFollowCapabilities(
+      this._readAutoFollowCapabilities(
+        frame.solution.window,
+        frame.viewportTranslateY,
+      ),
+    );
     return this._hittestVisibleWindow(
       frame.solution.window,
       test,
@@ -207,6 +221,20 @@ export abstract class VirtualizedRenderer<
     this.#jumpController.jumpTo(index, options);
   }
 
+  /**
+   * Scrolls the viewport to the visual top edge and arms top auto-follow immediately.
+   */
+  jumpToTop(options: JumpToOptions = {}): void {
+    this.#jumpController.jumpToBoundary("top", options);
+  }
+
+  /**
+   * Scrolls the viewport to the visual bottom edge and arms bottom auto-follow immediately.
+   */
+  jumpToBottom(options: JumpToOptions = {}): void {
+    this.#jumpController.jumpToBoundary("bottom", options);
+  }
+
   protected _resetRenderFeedback(feedback?: RenderFeedback): void {
     if (feedback == null) {
       return;
@@ -215,6 +243,8 @@ export abstract class VirtualizedRenderer<
     feedback.maxIdx = Number.NaN;
     feedback.min = Number.NaN;
     feedback.max = Number.NaN;
+    feedback.canAutoFollowTop = false;
+    feedback.canAutoFollowBottom = false;
   }
 
   protected _accumulateRenderFeedback(
@@ -279,6 +309,40 @@ export abstract class VirtualizedRenderer<
       window.shift + extraShift,
       feedback,
     );
+  }
+
+  protected _readAutoFollowCapabilities(
+    window: VisibleWindow<VirtualizedResolvedItem>,
+    extraShift = 0,
+  ): AutoFollowCapabilities {
+    if (window.drawList.length === 0 || this.items.length === 0) {
+      return {
+        top: false,
+        bottom: false,
+      };
+    }
+
+    let minIndex = Number.POSITIVE_INFINITY;
+    let maxIndex = Number.NEGATIVE_INFINITY;
+    let topMostY = Number.POSITIVE_INFINITY;
+    let bottomMostY = Number.NEGATIVE_INFINITY;
+    const effectiveShift = window.shift + extraShift;
+
+    for (const { idx, offset, height } of window.drawList) {
+      minIndex = Math.min(minIndex, idx);
+      maxIndex = Math.max(maxIndex, idx);
+      const y = offset + effectiveShift;
+      topMostY = Math.min(topMostY, y);
+      bottomMostY = Math.max(bottomMostY, y + height);
+    }
+
+    const viewportHeight = this.graphics.canvas.clientHeight;
+    return {
+      top: minIndex === 0 && topMostY >= -Number.EPSILON,
+      bottom:
+        maxIndex === this.items.length - 1 &&
+        bottomMostY <= viewportHeight + Number.EPSILON,
+    };
   }
 
   protected _readVisibleRange(
