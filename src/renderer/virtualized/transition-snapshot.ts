@@ -88,9 +88,10 @@ export class VisibilitySnapshot<T extends {}> {
     let nextTopBoundaryY = Number.POSITIVE_INFINITY;
     let nextBottomBoundaryY = Number.NEGATIVE_INFINITY;
     const effectiveShift = window.shift;
+    const contentOriginY = viewport.contentTop;
 
     for (const { idx, offset, height } of window.drawList) {
-      const y = offset + effectiveShift;
+      const y = offset + effectiveShift + contentOriginY;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
 

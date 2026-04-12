@@ -337,6 +337,7 @@ function planBoundaryInsertItems<
   T extends {},
 >(params: {
   duration: number;
+  animateHeight: boolean;
   now: number;
   measuredItems: MeasuredItem<C, T>[];
 }): BoundaryInsertItemPlan<C, T> | undefined {
@@ -352,7 +353,12 @@ function planBoundaryInsertItems<
         layers: [
           createLayerAnimation(node, 0, 1, params.now, params.duration, 0, 0),
         ],
-        height: createScalarAnimation(0, height, params.now, params.duration),
+        height: createScalarAnimation(
+          params.animateHeight ? 0 : height,
+          height,
+          params.now,
+          params.duration,
+        ),
         retention: "drawn",
       },
     });
@@ -513,36 +519,46 @@ export function planBoundaryInsertTransition<
   if (count <= 0 || normalizedDuration <= 0) {
     return undefined;
   }
+  const matchesBoundaryState = snapshot.matchesBoundaryInsertState(
+    direction,
+    count,
+    ctx.position,
+    ctx.offset,
+  );
+  const matchesFollowState = snapshot.matchesFollowBoundaryInsertState(
+    direction,
+    count,
+    ctx.position,
+    ctx.offset,
+  );
+  const matchesEmptyState = snapshot.matchesEmptyBoundaryInsertState(
+    direction,
+    count,
+    ctx.position,
+    ctx.offset,
+  );
   const canAnimate =
-    snapshot.matchesBoundaryInsertState(
-      direction,
-      count,
-      ctx.position,
-      ctx.offset,
-    ) ||
-    snapshot.matchesFollowBoundaryInsertState(
-      direction,
-      count,
-      ctx.position,
-      ctx.offset,
-    ) ||
-    snapshot.matchesEmptyBoundaryInsertState(
-      direction,
-      count,
-      ctx.position,
-      ctx.offset,
-    ) ||
+    matchesBoundaryState ||
+    matchesFollowState ||
+    matchesEmptyState ||
     (snapshot.hasSnapshot &&
       hasVisibleBoundaryInsertItems(direction, count, ctx));
   if (!canAnimate) {
     return undefined;
   }
+  const animateHeight = !(
+    direction === "unshift" &&
+    matchesFollowState &&
+    !matchesBoundaryState &&
+    !matchesEmptyState
+  );
   const measuredItems = measureBoundaryInsertItems(direction, count, ctx);
   if (measuredItems == null) {
     return undefined;
   }
   return planBoundaryInsertItems({
     duration: normalizedDuration,
+    animateHeight,
     now,
     measuredItems,
   });

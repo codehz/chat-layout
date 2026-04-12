@@ -1018,6 +1018,52 @@ describe("update animation", () => {
     }
   });
 
+  test("padded top auto-follow keeps unshift fade visible while scrolling in", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createBottomRenderer(
+        [
+          { id: "a", height: 40 },
+          { id: "b", height: 40 },
+          { id: "c", height: 40 },
+          { id: "d", height: 40 },
+        ],
+        draws,
+        [],
+        100,
+        "top",
+        { top: 20, bottom: 20 },
+      );
+
+      renderer.jumpToTop({ animated: false });
+      renderer.render();
+
+      list.unshiftAll([{ id: "new", height: 30 }], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(readDrawY(draws, "new")).toBeCloseTo(5);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+
+      now.current = 200;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(readDrawY(draws, "new")).toBeCloseTo(20);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("top auto-follow stays armed through update settle reconciliation and still auto-follows unshift while snapping back", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
