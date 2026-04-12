@@ -16,7 +16,6 @@ import type {
   AutoFollowCapabilities,
   ControlledState,
   JumpAnimation,
-  JumpAnimationSource,
 } from "./base-types";
 import type { JumpBlock } from "./anchor-model";
 import type { NormalizedListState } from "./solver";
@@ -52,14 +51,17 @@ export interface JumpControllerOptions<T extends {}> {
 }
 
 export class JumpController<T extends {}> {
-  #confirmedAutoFollowTop = false;
-  #confirmedAutoFollowBottom = false;
+  #canAutoFollowTop = false;
+  #canAutoFollowBottom = false;
+  #pendingAutoFollowRecomputeTop = true;
+  #pendingAutoFollowRecomputeBottom = true;
+  #lastViewportWidth: number | undefined;
   #controlledState: ControlledState | undefined;
   #jumpAnimation: JumpAnimation | undefined;
   #lastCommittedState: ControlledState | undefined;
   #hasPendingListChange = false;
-  #pendingBoundaryJumpTop = false;
-  #pendingBoundaryJumpBottom = false;
+  #pendingPostJumpBoundary: AutoFollowBoundary | undefined;
+  #pendingPostJumpBoundaryBlocked = false;
   readonly #options: JumpControllerOptions<T>;
 
   constructor(options: JumpControllerOptions<T>) {
@@ -70,7 +72,6 @@ export class JumpController<T extends {}> {
     const currentState = this.#options.readListState();
     if (
       !this.#hasPendingListChange &&
-      this.#jumpAnimation == null &&
       this.#lastCommittedState != null &&
       !sameState(
         this.#lastCommittedState,
@@ -78,9 +79,27 @@ export class JumpController<T extends {}> {
         currentState.offset,
       )
     ) {
-      this.#clearPendingBoundaryJumps();
+      this.#cancelJumpAnimation();
+      this.#clearPendingPostJumpBoundary();
+      this.#markAutoFollowRecompute();
     }
     this.#hasPendingListChange = false;
+  }
+
+  noteViewportWidth(width: number): void {
+    if (!Number.isFinite(width)) {
+      return;
+    }
+    if (this.#lastViewportWidth == null) {
+      this.#lastViewportWidth = width;
+      return;
+    }
+    if (Object.is(this.#lastViewportWidth, width)) {
+      return;
+    }
+    this.#lastViewportWidth = width;
+    this.#clearPendingPostJumpBoundary();
+    this.#markAutoFollowRecompute();
   }
 
   prepare(now: number): boolean {
@@ -92,16 +111,18 @@ export class JumpController<T extends {}> {
       this.#cancelJumpAnimation();
       return false;
     }
+    const currentState = this.#options.readListState();
     if (
       this.#controlledState != null &&
       !sameState(
         this.#controlledState,
-        this.#options.readListState().position,
-        this.#options.readListState().offset,
+        currentState.position,
+        currentState.offset,
       )
     ) {
-      this.#clearPendingBoundaryJumps();
+      this.#clearPendingPostJumpBoundary();
       this.#cancelJumpAnimation();
+      this.#markAutoFollowRecompute();
       return false;
     }
 
@@ -113,6 +134,13 @@ export class JumpController<T extends {}> {
     );
     this.#options.applyAnchor(anchor);
     animation.needsMoreFrames = progress < 1;
+    if (
+      !animation.needsMoreFrames &&
+      this.#pendingPostJumpBoundary != null &&
+      !this.#pendingPostJumpBoundaryBlocked
+    ) {
+      this.#armAutoFollowBoundary(this.#pendingPostJumpBoundary);
+    }
     return animation.needsMoreFrames;
   }
 
@@ -127,8 +155,16 @@ export class JumpController<T extends {}> {
       return true;
     }
 
+    const boundary =
+      this.#pendingPostJumpBoundaryBlocked === true
+        ? undefined
+        : this.#pendingPostJumpBoundary;
     const onComplete = animation.onComplete;
     this.#cancelJumpAnimation();
+    this.#clearPendingPostJumpBoundary();
+    if (boundary != null) {
+      this.#armAutoFollowBoundary(boundary);
+    }
     onComplete?.();
     return requestRedraw || this.#jumpAnimation != null;
   }
@@ -141,88 +177,115 @@ export class JumpController<T extends {}> {
   }
 
   jumpTo(index: number, options: JumpOptions = {}): void {
-    this.#clearPendingBoundaryJumps();
+    this.#clearPendingPostJumpBoundary();
     if (this.#options.getItemCount() === 0) {
       this.#cancelJumpAnimation();
       return;
     }
-    this.#startJumpToIndex(index, options, { kind: "manual" });
+    this.#startJumpToIndex(index, options);
   }
 
   jumpToBoundary(
     boundary: AutoFollowBoundary,
     options: JumpOptions = {},
   ): void {
-    this.#clearPendingBoundaryJumps();
+    this.#clearPendingPostJumpBoundary();
+    this.#armAutoFollowBoundary(boundary);
     if (this.#options.getItemCount() === 0) {
       this.#cancelJumpAnimation();
       return;
     }
-    this.#armBoundaryJump(boundary);
     this.#startJumpToIndex(
       boundary === "bottom" ? this.#options.getItemCount() - 1 : 0,
       {
         ...options,
         block: boundary === "bottom" ? "end" : "start",
       },
-      { kind: "boundary-jump", boundary },
     );
   }
 
-  syncAutoFollowCapabilities(
+  recomputeAutoFollowCapabilities(
     capabilities: AutoFollowCapabilities,
   ): AutoFollowCapabilities {
-    this.#confirmedAutoFollowTop = capabilities.top;
-    this.#confirmedAutoFollowBottom = capabilities.bottom;
-    this.#clearPendingBoundaryJumps();
-    return this.getEffectiveAutoFollowCapabilities();
+    if (this.#pendingAutoFollowRecomputeTop) {
+      this.#canAutoFollowTop = capabilities.top;
+      this.#pendingAutoFollowRecomputeTop = false;
+    }
+    if (this.#pendingAutoFollowRecomputeBottom) {
+      this.#canAutoFollowBottom = capabilities.bottom;
+      this.#pendingAutoFollowRecomputeBottom = false;
+    }
+    return this.getAutoFollowCapabilities();
   }
 
-  getEffectiveAutoFollowCapabilities(): AutoFollowCapabilities {
+  getAutoFollowCapabilities(): AutoFollowCapabilities {
     return {
-      top: this.#hasEffectiveAutoFollowCapability("top"),
-      bottom: this.#hasEffectiveAutoFollowCapability("bottom"),
+      top: this.#canAutoFollowTop,
+      bottom: this.#canAutoFollowBottom,
     };
+  }
+
+  markAutoFollowForTransitionSettle(): void {
+    this.#clearPendingPostJumpBoundary();
+    this.#markAutoFollowRecompute();
   }
 
   handleListStateChange(change: ListStateChange<T>): ListStateChange<T> {
     this.#hasPendingListChange = true;
-    const followChange = this.#resolveAutoFollowChange(change);
-    const canChainAutoFollow =
-      followChange != null
-        ? this.#shouldChainAutoFollow(followChange.boundary)
-        : false;
-    const canCapabilityAutoFollow =
-      followChange != null
-        ? this.#shouldAutoFollowFromCapability(
-            followChange.boundary,
-            followChange.direction,
-            followChange.count,
-          )
-        : false;
-    if (
-      followChange != null &&
-      (canChainAutoFollow || canCapabilityAutoFollow)
-    ) {
-      if (canChainAutoFollow) {
-        this.#rebaseJumpAnchorForBoundaryInsert(
-          followChange.direction,
-          followChange.count,
-          getNow(),
-        );
-      }
-      this.#startJumpToIndex(
-        followChange.boundary === "bottom"
-          ? this.#options.getItemCount() - 1
-          : 0,
-        {
-          block: followChange.boundary === "bottom" ? "end" : "start",
-          duration: followChange.animation?.duration,
-        },
-        { kind: "auto-follow", boundary: followChange.boundary },
-      );
-      return followChange.change;
+    switch (change.type) {
+      case "reset":
+      case "set":
+        this.#cancelJumpAnimation();
+        this.#clearPendingPostJumpBoundary();
+        this.#markAutoFollowRecompute();
+        return change;
+      case "push":
+      case "unshift":
+        return this.#handleBoundaryInsert(change);
+      default:
+        return change;
     }
+  }
+
+  #handleBoundaryInsert(
+    change: Extract<ListStateChange<T>, { type: "push" } | { type: "unshift" }>,
+  ): ListStateChange<T> {
+    const followChange = this.#resolveAutoFollowChange(change);
+    const boundary = change.type === "push" ? "bottom" : "top";
+    const matchesCommittedState =
+      this.#matchesLastCommittedStateAfterBoundaryInsert(
+        change.type,
+        change.count,
+      );
+    if (this.#pendingPostJumpBoundary === boundary) {
+      this.#pendingPostJumpBoundaryBlocked = true;
+    }
+    if (!matchesCommittedState) {
+      this.#cancelJumpAnimation();
+      this.#clearPendingPostJumpBoundary();
+      this.#markAutoFollowRecompute();
+      return change;
+    }
+    if (
+      followChange == null ||
+      !this.#hasAutoFollowCapability(followChange.boundary)
+    ) {
+      return change;
+    }
+
+    this.#clearPendingPostJumpBoundary();
+    this.#materializeAnimatedAnchor(
+      getNow(),
+      followChange.direction,
+      followChange.count,
+    );
+    this.#startJumpToIndex(
+      followChange.boundary === "bottom" ? this.#options.getItemCount() - 1 : 0,
+      {
+        block: followChange.boundary === "bottom" ? "end" : "start",
+        duration: followChange.animation?.duration,
+      },
+    );
     return change;
   }
 
@@ -231,16 +294,19 @@ export class JumpController<T extends {}> {
     this.#controlledState = undefined;
   }
 
-  #startJumpToIndex(
-    index: number,
-    options: JumpOptions,
-    source: JumpAnimationSource,
-  ): void {
+  #startJumpToIndex(index: number, options: JumpOptions): void {
     const targetIndex = this.#options.clampItemIndex(index);
+    const targetBlock = options.block ?? this.#options.getDefaultJumpBlock();
+    const settleBoundary = this.#resolveBoundaryLatchTarget(
+      targetIndex,
+      targetBlock,
+    );
+
+    this.#materializeAnimatedAnchor(getNow());
+
     const currentState = this.#options.normalizeListState(
       this.#options.readListState(),
     );
-    const targetBlock = options.block ?? this.#options.getDefaultJumpBlock();
     const targetAnchor = this.#options.getTargetAnchor(
       targetIndex,
       targetBlock,
@@ -250,6 +316,9 @@ export class JumpController<T extends {}> {
     if (!animated) {
       this.#cancelJumpAnimation();
       this.#options.applyAnchor(targetAnchor);
+      if (settleBoundary != null) {
+        this.#armAutoFollowBoundary(settleBoundary);
+      }
       options.onComplete?.();
       return;
     }
@@ -258,6 +327,9 @@ export class JumpController<T extends {}> {
     if (!Number.isFinite(startAnchor)) {
       this.#cancelJumpAnimation();
       this.#options.applyAnchor(targetAnchor);
+      if (settleBoundary != null) {
+        this.#armAutoFollowBoundary(settleBoundary);
+      }
       options.onComplete?.();
       return;
     }
@@ -279,8 +351,16 @@ export class JumpController<T extends {}> {
     if (duration <= 0 || path.totalDistance <= Number.EPSILON) {
       this.#cancelJumpAnimation();
       this.#options.applyAnchor(targetAnchor);
+      if (settleBoundary != null) {
+        this.#armAutoFollowBoundary(settleBoundary);
+      }
       options.onComplete?.();
       return;
+    }
+
+    if (settleBoundary != null) {
+      this.#pendingPostJumpBoundary = settleBoundary;
+      this.#pendingPostJumpBoundaryBlocked = false;
     }
 
     this.#jumpAnimation = {
@@ -289,9 +369,25 @@ export class JumpController<T extends {}> {
       duration,
       needsMoreFrames: true,
       onComplete: options.onComplete,
-      source,
     };
     this.#controlledState = this.#options.readListState();
+  }
+
+  #resolveBoundaryLatchTarget(
+    index: number,
+    block: JumpBlock,
+  ): AutoFollowBoundary | undefined {
+    const itemCount = this.#options.getItemCount();
+    if (itemCount <= 0) {
+      return undefined;
+    }
+    if (index === 0 && block === "start") {
+      return "top";
+    }
+    if (index === itemCount - 1 && block === "end") {
+      return "bottom";
+    }
+    return undefined;
   }
 
   #resolveAutoFollowChange(
@@ -314,40 +410,34 @@ export class JumpController<T extends {}> {
     }
   }
 
-  #shouldAutoFollowFromCapability(
-    boundary: AutoFollowBoundary,
-    direction: "push" | "unshift",
-    count: number,
-  ): boolean {
-    return (
-      this.#hasEffectiveAutoFollowCapability(boundary) &&
-      this.#matchesLastCommittedStateAfterBoundaryInsert(direction, count)
-    );
+  #hasAutoFollowCapability(boundary: AutoFollowBoundary): boolean {
+    return boundary === "top"
+      ? this.#canAutoFollowTop
+      : this.#canAutoFollowBottom;
   }
 
-  #shouldChainAutoFollow(boundary: AutoFollowBoundary): boolean {
-    return this.#readJumpBoundary() === boundary;
-  }
-
-  #rebaseJumpAnchorForBoundaryInsert(
-    direction: "push" | "unshift",
-    count: number,
-    now: number,
-  ): void {
-    const animation = this.#jumpAnimation;
-    if (animation == null) {
+  #armAutoFollowBoundary(boundary: AutoFollowBoundary): void {
+    if (boundary === "top") {
+      this.#canAutoFollowTop = true;
+      this.#pendingAutoFollowRecomputeTop = false;
       return;
     }
-    const progress = getProgress(animation.startTime, animation.duration, now);
-    const eased = progress >= 1 ? 1 : smoothstep(progress);
-    const anchorAtNow = getAnchorAtDistance(
-      animation.path,
-      animation.path.totalDistance * eased,
-    );
-    this.#cancelJumpAnimation();
-    this.#options.applyAnchor(
-      direction === "unshift" ? anchorAtNow + count : anchorAtNow,
-    );
+    this.#canAutoFollowBottom = true;
+    this.#pendingAutoFollowRecomputeBottom = false;
+  }
+
+  #markAutoFollowRecompute(boundary?: AutoFollowBoundary): void {
+    if (boundary == null || boundary === "top") {
+      this.#pendingAutoFollowRecomputeTop = true;
+    }
+    if (boundary == null || boundary === "bottom") {
+      this.#pendingAutoFollowRecomputeBottom = true;
+    }
+  }
+
+  #clearPendingPostJumpBoundary(): void {
+    this.#pendingPostJumpBoundary = undefined;
+    this.#pendingPostJumpBoundaryBlocked = false;
   }
 
   #matchesLastCommittedStateAfterBoundaryInsert(
@@ -358,45 +448,39 @@ export class JumpController<T extends {}> {
     if (state == null) {
       return false;
     }
+    const currentState = this.#options.readListState();
     return sameState(
       {
         position:
-          direction === "unshift" && state.position != null
-            ? state.position + count
-            : state.position,
-        offset: state.offset,
+          direction === "unshift" && currentState.position != null
+            ? currentState.position - count
+            : currentState.position,
+        offset: currentState.offset,
       },
-      this.#options.readListState().position,
-      this.#options.readListState().offset,
+      state.position,
+      state.offset,
     );
   }
 
-  #hasEffectiveAutoFollowCapability(boundary: AutoFollowBoundary): boolean {
-    const animationBoundary = this.#readJumpBoundary();
-    return boundary === "top"
-      ? this.#confirmedAutoFollowTop ||
-          this.#pendingBoundaryJumpTop ||
-          animationBoundary === "top"
-      : this.#confirmedAutoFollowBottom ||
-          this.#pendingBoundaryJumpBottom ||
-          animationBoundary === "bottom";
-  }
-
-  #readJumpBoundary(): AutoFollowBoundary | undefined {
-    const source = this.#jumpAnimation?.source;
-    if (source == null || source.kind === "manual") {
-      return undefined;
+  #materializeAnimatedAnchor(
+    now: number,
+    direction?: "push" | "unshift",
+    count = 0,
+  ): void {
+    const animation = this.#jumpAnimation;
+    if (animation == null) {
+      return;
     }
-    return source.boundary;
-  }
-
-  #armBoundaryJump(boundary: AutoFollowBoundary): void {
-    this.#pendingBoundaryJumpTop = boundary === "top";
-    this.#pendingBoundaryJumpBottom = boundary === "bottom";
-  }
-
-  #clearPendingBoundaryJumps(): void {
-    this.#pendingBoundaryJumpTop = false;
-    this.#pendingBoundaryJumpBottom = false;
+    const progress = getProgress(animation.startTime, animation.duration, now);
+    const eased = progress >= 1 ? 1 : smoothstep(progress);
+    let anchor = getAnchorAtDistance(
+      animation.path,
+      animation.path.totalDistance * eased,
+    );
+    if (direction === "unshift") {
+      anchor += count;
+    }
+    this.#cancelJumpAnimation();
+    this.#options.applyAnchor(anchor);
   }
 }

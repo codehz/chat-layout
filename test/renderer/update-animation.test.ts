@@ -1350,6 +1350,37 @@ describe("delete animation", () => {
     }
   });
 
+  test("delete settle recomputes the latched auto-follow state after the final anchor adjustment", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createTopRenderer(
+        [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        40,
+      );
+
+      list.setAnchor(0, -50);
+      const initialFeedback = createFeedback();
+      renderer.render(initialFeedback);
+      expect(initialFeedback.canAutoFollowTop).toBe(false);
+      expect(initialFeedback.canAutoFollowBottom).toBe(false);
+
+      list.delete(item, { duration: 100 });
+
+      now.current = 50;
+      const settledFeedback = createFeedback();
+      renderer.render(settledFeedback);
+      expect(settledFeedback.canAutoFollowTop).toBe(true);
+      expect(settledFeedback.canAutoFollowBottom).toBe(false);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("delete ghosts stay visible while fading inside bottom padding", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);

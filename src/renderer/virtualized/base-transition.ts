@@ -1,5 +1,6 @@
 import type { ListStateChange } from "../list-state";
 import { getNow } from "./base-animation";
+import { sameState } from "./base-animation";
 import type { ControlledState, VirtualizedResolvedItem } from "./base-types";
 import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import {
@@ -200,6 +201,7 @@ export class TransitionController<
     }
 
     const anchor = lifecycle.captureVisualAnchor(now);
+    const beforeState = lifecycle.readScrollState();
     const completedDeleteIndices: number[] = [];
     for (const { item, transition } of removals) {
       if (transition.kind === "delete") {
@@ -223,6 +225,10 @@ export class TransitionController<
         boundarySnap.item,
         boundarySnap.boundary,
       );
+    }
+    const afterState = lifecycle.readScrollState();
+    if (!sameState(beforeState, afterState.position, afterState.offset)) {
+      lifecycle.onScrollPositionChanged();
     }
     return true;
   }

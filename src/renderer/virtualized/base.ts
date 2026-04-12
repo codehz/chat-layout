@@ -126,6 +126,7 @@ export abstract class VirtualizedRenderer<
   /** Renders the current visible window. */
   render(feedback?: RenderFeedback): boolean {
     this.#jumpController.beforeFrame();
+    this.#jumpController.noteViewportWidth(this.graphics.canvas.clientWidth);
     const now = getNow();
     const keepAnimating = this._prepareRender(now);
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
@@ -141,7 +142,7 @@ export abstract class VirtualizedRenderer<
         this._pruneTransitionAnimations(window, frameNow),
     });
     const autoFollowCapabilities =
-      this.#jumpController.syncAutoFollowCapabilities(
+      this.#jumpController.recomputeAutoFollowCapabilities(
         this._readAutoFollowCapabilities(frame.solution.window),
       );
     const requestRedraw = this._renderVisibleWindow(
@@ -166,6 +167,7 @@ export abstract class VirtualizedRenderer<
     type: "click" | "auxclick" | "hover";
   }): boolean {
     this.#jumpController.beforeFrame();
+    this.#jumpController.noteViewportWidth(this.graphics.canvas.clientWidth);
     const now = getNow();
     this.#transitionController.settle(
       now,
@@ -179,7 +181,7 @@ export abstract class VirtualizedRenderer<
       pruneTransitionAnimations: (window, frameNow) =>
         this._pruneTransitionAnimations(window, frameNow),
     });
-    this.#jumpController.syncAutoFollowCapabilities(
+    this.#jumpController.recomputeAutoFollowCapabilities(
       this._readAutoFollowCapabilities(frame.solution.window),
     );
     return this._hittestVisibleWindow(frame.solution.window, test);
@@ -522,8 +524,11 @@ export abstract class VirtualizedRenderer<
       onDeleteComplete: this.#handleDeleteComplete.bind(this),
       captureVisualAnchor: this._readAnchorAt.bind(this),
       restoreVisualAnchor: this._restoreAnchor.bind(this),
+      readScrollState: this._readListState.bind(this),
       readItemIndex: (item) => this.items.indexOf(item),
       snapItemToViewportBoundary: this.#snapItemToViewportBoundary.bind(this),
+      onScrollPositionChanged: () =>
+        this.#jumpController.markAutoFollowForTransitionSettle(),
     };
   }
 

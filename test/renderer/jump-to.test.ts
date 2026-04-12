@@ -1579,7 +1579,7 @@ describe("jumpTo", () => {
     }
   });
 
-  test("jumpTo resets the settled auto-follow latch", () => {
+  test("non-boundary jumpTo keeps the settled auto-follow latch until a recompute trigger", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1611,7 +1611,9 @@ describe("jumpTo", () => {
       renderer.jumpTo(1, {
         animated: false,
       });
-      renderer.render();
+      const jumpedFeedback = createFeedback();
+      renderer.render(jumpedFeedback);
+      expect(jumpedFeedback.canAutoFollowBottom).toBe(true);
 
       list.pushAll([20], {
         duration: 200,
@@ -1629,7 +1631,7 @@ describe("jumpTo", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(1, {
+      expectedRenderer.jumpToBottom({
         animated: false,
       });
       expectedRenderer.render();

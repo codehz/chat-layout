@@ -407,6 +407,44 @@ describe("virtualized visible window", () => {
     expect(feedback.canAutoFollowBottom).toBe(true);
   });
 
+  test("viewport width changes strictly recompute the latched auto-follow state", () => {
+    const list = new ListState<number>();
+    list.push(0);
+
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      list,
+      renderItem: () => ({
+        measure(ctx: Context<C>): Box {
+          return {
+            width: 320,
+            height: (ctx.constraints?.maxWidth ?? 320) <= 160 ? 120 : 40,
+          };
+        },
+        draw(_ctx: Context<C>, _x: number, _y: number): boolean {
+          return false;
+        },
+        hittest(_ctx: Context<C>, _test: HitTest): boolean {
+          return false;
+        },
+      }),
+    });
+
+    const wideFeedback = createFeedback();
+    renderer.render(wideFeedback);
+    expect(wideFeedback.canAutoFollowTop).toBe(true);
+    expect(wideFeedback.canAutoFollowBottom).toBe(true);
+
+    (
+      renderer.graphics.canvas as unknown as { clientWidth: number }
+    ).clientWidth = 120;
+
+    const narrowFeedback = createFeedback();
+    renderer.render(narrowFeedback);
+    expect(narrowFeedback.canAutoFollowTop).toBe(true);
+    expect(narrowFeedback.canAutoFollowBottom).toBe(false);
+  });
+
   test("padding areas still draw content and allow hittest while feedback only counts the content viewport", () => {
     const hits: ProbeHit[] = [];
     const list = new ListState<number>();

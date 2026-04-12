@@ -51,6 +51,7 @@ function createController(params?: {
       );
       if (nextState != null) {
         state = nextState;
+        controller.commit(nextState);
       }
     },
     getDefaultJumpBlock: () => "start",
@@ -75,98 +76,66 @@ function createController(params?: {
     setHeights(nextHeights: number[]) {
       heights = nextHeights;
     },
-    syncCapabilities(top: boolean, bottom: boolean) {
-      controller.syncAutoFollowCapabilities({ top, bottom });
+    recompute(top: boolean, bottom: boolean) {
+      return controller.recomputeAutoFollowCapabilities({ top, bottom });
     },
   };
 }
 
 describe("jump controller", () => {
-  test("keeps boundary-insert animation when the bottom capability allows auto-follow", () => {
+  test("boundary jumps arm the targeted latch immediately and survive pending recompute", () => {
     const harness = createController({
-      heights: [20, 20, 20, 20],
-      state: { position: 2, offset: 0 },
-    });
-    harness.controller.commit(harness.getState());
-    harness.syncCapabilities(false, true);
-
-    const nextChange = harness.controller.handleListStateChange({
-      type: "push",
-      count: 1,
-      animation: {
-        duration: 220,
-        autoFollow: true,
-      },
+      heights: [20, 20, 20, 20, 20, 20],
+      state: { position: 0, offset: 0 },
+      viewportHeight: 40,
     });
 
-    expect(nextChange).toEqual({
-      type: "push",
-      count: 1,
-      animation: {
-        duration: 220,
-        autoFollow: true,
-      },
+    harness.controller.jumpToBoundary("bottom", { duration: 100 });
+    expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+      top: false,
+      bottom: true,
+    });
+
+    expect(harness.recompute(false, false)).toEqual({
+      top: false,
+      bottom: true,
     });
   });
 
-  test("confirmed bottom capability survives matching inserts and resets after manual scroll", () => {
-    const harness = createController({
-      heights: [20, 20, 20, 20],
-      state: { position: 2, offset: 0 },
-    });
-    harness.controller.commit(harness.getState());
-    harness.syncCapabilities(false, true);
+  test("plain boundary-aligned jumps latch after animated completion", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const harness = createController({
+        heights: [20, 20, 20, 20],
+        state: { position: 0, offset: 0 },
+        viewportHeight: 40,
+      });
 
-    harness.controller.handleListStateChange({
-      type: "push",
-      count: 1,
-      animation: {
-        duration: 0,
-        autoFollow: true,
-      },
-    });
-    harness.controller.commit(harness.getState());
+      harness.recompute(true, false);
+      harness.controller.jumpTo(3, { block: "end", duration: 100 });
 
-    harness.setHeights([20, 20, 20, 20, 20]);
-    const chainedChange = harness.controller.handleListStateChange({
-      type: "push",
-      count: 1,
-      animation: {
-        duration: 220,
-        autoFollow: true,
-      },
-    });
-    expect(chainedChange).toMatchObject({
-      type: "push",
-      count: 1,
-      animation: {
-        duration: 220,
-        autoFollow: true,
-      },
-    });
+      now.current = 50;
+      expect(harness.controller.prepare(now.current)).toBe(true);
+      expect(harness.controller.finishFrame(false)).toBe(true);
+      expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+        top: true,
+        bottom: false,
+      });
 
-    harness.setState({ position: 1, offset: 0 });
-    harness.controller.beforeFrame();
-    harness.setHeights([20, 20, 20, 20, 20, 20]);
-    const resetChange = harness.controller.handleListStateChange({
-      type: "push",
-      count: 1,
-      animation: {
-        duration: 220,
-        autoFollow: true,
-      },
-    });
-    expect(resetChange).toMatchObject({
-      type: "push",
-      count: 1,
-      animation: {
-        duration: 220,
-        autoFollow: true,
-      },
-    });
+      now.current = 100;
+      expect(harness.controller.prepare(now.current)).toBe(false);
+      expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+        top: true,
+        bottom: true,
+      });
+      expect(harness.controller.finishFrame(false)).toBe(false);
+    } finally {
+      restoreNow();
+    }
   });
 
-  test("same-direction in-flight follow rebases the current anchor before retargeting", () => {
+  test("same-direction follow inserts materialize the current animated anchor before retargeting", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -176,7 +145,7 @@ describe("jump controller", () => {
         viewportHeight: 10,
       });
       harness.controller.commit(harness.getState());
-      harness.syncCapabilities(false, true);
+      harness.recompute(false, true);
 
       harness.controller.handleListStateChange({
         type: "push",
@@ -189,7 +158,7 @@ describe("jump controller", () => {
 
       now.current = 50;
       harness.setHeights([10, 10, 10, 10]);
-      const nextChange = harness.controller.handleListStateChange({
+      harness.controller.handleListStateChange({
         type: "push",
         count: 1,
         animation: {
@@ -198,14 +167,6 @@ describe("jump controller", () => {
         },
       });
 
-      expect(nextChange).toMatchObject({
-        type: "push",
-        count: 1,
-        animation: {
-          duration: 100,
-          autoFollow: true,
-        },
-      });
       expect(
         readAnchorFromState(
           4,
@@ -217,29 +178,6 @@ describe("jump controller", () => {
     } finally {
       restoreNow();
     }
-  });
-
-  test("boundary jumps expose effective auto-follow before the first render sync", () => {
-    const harness = createController({
-      heights: [20, 20, 20, 20, 20, 20],
-      state: { position: 0, offset: 0 },
-      viewportHeight: 40,
-    });
-
-    harness.controller.jumpToBoundary("bottom", { duration: 100 });
-    expect(harness.controller.getEffectiveAutoFollowCapabilities()).toEqual({
-      top: false,
-      bottom: true,
-    });
-
-    harness.controller.syncAutoFollowCapabilities({
-      top: false,
-      bottom: false,
-    });
-    expect(harness.controller.getEffectiveAutoFollowCapabilities()).toEqual({
-      top: false,
-      bottom: true,
-    });
   });
 
   test("external scroll cancels an in-flight manual jump on the next prepare", () => {
@@ -260,5 +198,36 @@ describe("jump controller", () => {
     } finally {
       restoreNow();
     }
+  });
+
+  test("stale latches do not auto-follow inserts after manual scroll before the next frame", () => {
+    const harness = createController({
+      heights: [20, 20, 20, 20],
+      state: { position: 2, offset: 0 },
+      viewportHeight: 40,
+    });
+    harness.controller.commit(harness.getState());
+    harness.recompute(false, true);
+
+    harness.setState({ position: 1, offset: 0 });
+    harness.setHeights([20, 20, 20, 20, 20]);
+    harness.controller.handleListStateChange({
+      type: "push",
+      count: 1,
+      animation: {
+        duration: 220,
+        autoFollow: true,
+      },
+    });
+
+    expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+      top: false,
+      bottom: true,
+    });
+    expect(harness.controller.prepare(0)).toBe(false);
+    expect(harness.recompute(false, false)).toEqual({
+      top: false,
+      bottom: false,
+    });
   });
 });

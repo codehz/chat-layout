@@ -67,11 +67,11 @@ list.unshiftAll([olderMessage], {
 });
 ```
 
-To make chat-style inserts automatically follow the latest visible edge, pass `followIfAtBoundary: true`. When the viewport was already pinned to that edge, the insert behaves like a conditional `jumpTo()` instead of combining with the enter animation:
+To make chat-style inserts automatically follow the latest visible edge, pass `autoFollow: true`. When the corresponding auto-follow latch is armed, the insert behaves like a conditional `jumpToTop()` / `jumpToBottom()` after the items are inserted:
 
 ```ts
 list.pushAll([nextMessage], {
-  followIfAtBoundary: true,
+  autoFollow: true,
   duration: 220,
 });
 ```
