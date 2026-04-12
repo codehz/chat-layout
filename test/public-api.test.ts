@@ -87,11 +87,9 @@ const deleteAnimationOptionsTypecheck: DeleteListItemAnimationOptions = {
 };
 const insertAnimationOptionsTypecheck: InsertListItemsAnimationOptions = {
   duration: 180,
-  distance: 24,
 };
 const unshiftAnimationOptionsTypecheck: UnshiftListItemsAnimationOptions = {
   duration: 180,
-  distance: 12,
 };
 const invalidPushAnimationOptionsTypecheck:
   | PushListItemsAnimationOptions

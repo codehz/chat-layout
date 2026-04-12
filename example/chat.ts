@@ -668,7 +668,6 @@ button("push", () => {
       },
     ],
     {
-      distance: 24,
       autoFollow: true,
     },
   );

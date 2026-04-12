@@ -134,24 +134,18 @@ export abstract class VirtualizedRenderer<
     const frame = prepareFrameSession({
       now,
       resolveVisibleWindow: (frameNow) => this._resolveVisibleWindow(frameNow),
-      getViewportTranslateY: (frameNow) =>
-        this.#transitionController.getViewportTranslateY(frameNow),
-      captureVisibleItemSnapshot: (solution, extraShift) =>
-        this._captureVisibleItemSnapshot(solution, extraShift),
+      captureVisibleItemSnapshot: (solution) =>
+        this._captureVisibleItemSnapshot(solution),
       pruneTransitionAnimations: (window, frameNow) =>
         this._pruneTransitionAnimations(window, frameNow),
     });
     const autoFollowCapabilities =
       this.#jumpController.syncAutoFollowCapabilities(
-        this._readAutoFollowCapabilities(
-          frame.solution.window,
-          frame.viewportTranslateY,
-        ),
+        this._readAutoFollowCapabilities(frame.solution.window),
       );
     const requestRedraw = this._renderVisibleWindow(
       frame.solution.window,
       feedback,
-      frame.viewportTranslateY,
     );
     if (feedback != null) {
       feedback.canAutoFollowTop = autoFollowCapabilities.top;
@@ -179,24 +173,15 @@ export abstract class VirtualizedRenderer<
     const frame = prepareFrameSession({
       now,
       resolveVisibleWindow: (frameNow) => this._resolveVisibleWindow(frameNow),
-      getViewportTranslateY: (frameNow) =>
-        this.#transitionController.getViewportTranslateY(frameNow),
-      captureVisibleItemSnapshot: (solution, extraShift) =>
-        this._captureVisibleItemSnapshot(solution, extraShift),
+      captureVisibleItemSnapshot: (solution) =>
+        this._captureVisibleItemSnapshot(solution),
       pruneTransitionAnimations: (window, frameNow) =>
         this._pruneTransitionAnimations(window, frameNow),
     });
     this.#jumpController.syncAutoFollowCapabilities(
-      this._readAutoFollowCapabilities(
-        frame.solution.window,
-        frame.viewportTranslateY,
-      ),
+      this._readAutoFollowCapabilities(frame.solution.window),
     );
-    return this._hittestVisibleWindow(
-      frame.solution.window,
-      test,
-      frame.viewportTranslateY,
-    );
+    return this._hittestVisibleWindow(frame.solution.window, test);
   }
 
   protected _readListState(): VisibleListState {
@@ -303,19 +288,13 @@ export abstract class VirtualizedRenderer<
   protected _renderVisibleWindow(
     window: VisibleWindow<VirtualizedResolvedItem>,
     feedback?: RenderFeedback,
-    extraShift = 0,
   ): boolean {
     this._resetRenderFeedback(feedback);
-    return this._renderDrawList(
-      window.drawList,
-      window.shift + extraShift,
-      feedback,
-    );
+    return this._renderDrawList(window.drawList, window.shift, feedback);
   }
 
   protected _readAutoFollowCapabilities(
     window: VisibleWindow<VirtualizedResolvedItem>,
-    extraShift = 0,
   ): AutoFollowCapabilities {
     if (window.drawList.length === 0 || this.items.length === 0) {
       return {
@@ -328,13 +307,12 @@ export abstract class VirtualizedRenderer<
     let maxIndex = Number.NEGATIVE_INFINITY;
     let topMostY = Number.POSITIVE_INFINITY;
     let bottomMostY = Number.NEGATIVE_INFINITY;
-    const effectiveShift = window.shift + extraShift;
     const viewport = this._getViewportMetrics();
 
     for (const { idx, offset, height } of window.drawList) {
       minIndex = Math.min(minIndex, idx);
       maxIndex = Math.max(maxIndex, idx);
-      const y = offset + effectiveShift + viewport.contentTop;
+      const y = offset + window.shift + viewport.contentTop;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
     }
@@ -403,11 +381,10 @@ export abstract class VirtualizedRenderer<
   protected _hittestVisibleWindow(
     window: VisibleWindow<VirtualizedResolvedItem>,
     test: HitTest,
-    extraShift = 0,
   ): boolean {
     const viewport = this._getViewportMetrics();
     for (const { value: item, offset, height } of window.drawList) {
-      const y = offset + window.shift + extraShift + viewport.contentTop;
+      const y = offset + window.shift + viewport.contentTop;
       if (test.y < y || test.y >= y + height) {
         continue;
       }
@@ -418,7 +395,6 @@ export abstract class VirtualizedRenderer<
 
   protected _captureVisibleItemSnapshot(
     solution: VisibleWindowResult<unknown>,
-    extraShift = 0,
   ): void {
     const normalizedState = this._normalizeListState(this._readListState());
     const viewport = this._getViewportMetrics();
@@ -428,7 +404,6 @@ export abstract class VirtualizedRenderer<
       this.items,
       viewport,
       normalizedState,
-      extraShift,
       this._readVisibleRange.bind(this),
       this._readOuterVisibleRange.bind(this),
     );
@@ -580,7 +555,7 @@ export abstract class VirtualizedRenderer<
   #getTransitionPlanningAdapter(): TransitionPlanningAdapter<C, T> {
     return {
       ...this.#getVirtualizedRuntime(),
-      underflowAlign: this._getLayoutOptions().underflowAlign,
+      anchorMode: this._getLayoutOptions().anchorMode,
     };
   }
 

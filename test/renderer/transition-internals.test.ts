@@ -6,7 +6,6 @@ import {
   VisibilitySnapshot,
   canAnimateExistingItem,
   remapAnchorAfterDeletes,
-  resolveBoundaryInsertStrategy,
   sampleActiveTransition,
   type ActiveItemTransition,
   type LayerAnimation,
@@ -130,7 +129,6 @@ describe("transition eligibility", () => {
       [item],
       viewport100,
       { position: 0, offset: 0 },
-      0,
       readVisibleRange,
       readVisibleRange,
     );
@@ -223,36 +221,6 @@ describe("transition eligibility", () => {
   });
 });
 
-describe("transition boundary insert strategy", () => {
-  test("strategy matrix depends only on direction, underflow alignment, and short-list snapshot", () => {
-    expect(resolveBoundaryInsertStrategy("push", "top", false)).toBe(
-      "hard-cut",
-    );
-    expect(resolveBoundaryInsertStrategy("push", "bottom", false)).toBe(
-      "hard-cut",
-    );
-    expect(resolveBoundaryInsertStrategy("unshift", "top", false)).toBe(
-      "hard-cut",
-    );
-    expect(resolveBoundaryInsertStrategy("unshift", "bottom", false)).toBe(
-      "hard-cut",
-    );
-
-    expect(resolveBoundaryInsertStrategy("push", "top", true)).toBe(
-      "item-enter",
-    );
-    expect(resolveBoundaryInsertStrategy("push", "bottom", true)).toBe(
-      "viewport-slide",
-    );
-    expect(resolveBoundaryInsertStrategy("unshift", "top", true)).toBe(
-      "viewport-slide",
-    );
-    expect(resolveBoundaryInsertStrategy("unshift", "bottom", true)).toBe(
-      "item-enter",
-    );
-  });
-});
-
 describe("transition sampling", () => {
   test("update, delete, and insert share the same sampling model", () => {
     const sampledUpdate = sampleActiveTransition(
@@ -280,16 +248,16 @@ describe("transition sampling", () => {
 
     const sampledInsert = sampleActiveTransition(
       transition("insert", {
-        layers: [layer(0, 1, 24, 0)],
-        height: scalar(30, 30),
+        layers: [layer(0, 1)],
+        height: scalar(0, 30),
         retention: "drawn",
       }),
       50,
     );
-    expect(sampledInsert.slotHeight).toBeCloseTo(30);
+    expect(sampledInsert.slotHeight).toBeCloseTo(15);
     expect(sampledInsert.layers).toHaveLength(1);
     expect(sampledInsert.layers[0]?.alpha).toBeCloseTo(0.5);
-    expect(sampledInsert.layers[0]?.translateY).toBeCloseTo(12);
+    expect(sampledInsert.layers[0]?.translateY).toBeCloseTo(0);
   });
 });
 
@@ -333,14 +301,11 @@ describe("visibility snapshot", () => {
       [a, b],
       viewport80,
       { position: 1, offset: 5 },
-      0,
       readVisibleRange,
       readVisibleRange,
     );
 
     expect(snapshot.coversShortList).toBe(true);
-    expect(snapshot.topGap).toBe(10);
-    expect(snapshot.bottomGap).toBe(30);
     expect(snapshot.matchesBoundaryInsertState("push", 2, 1, 5)).toBe(true);
     expect(snapshot.matchesBoundaryInsertState("unshift", 2, 3, 5)).toBe(true);
     expect(snapshot.matchesBoundaryInsertState("unshift", 2, 1, 5)).toBe(false);
@@ -362,7 +327,6 @@ describe("visibility snapshot", () => {
       [],
       viewport80,
       { position: 0, offset: 0 },
-      0,
       readVisibleRange,
       readVisibleRange,
     );
@@ -426,7 +390,7 @@ describe("transition store lifecycle", () => {
       prunedStore
         .findInvisible(new VisibilitySnapshot<Item>())
         .map(({ item }) => item),
-    ).toEqual([deleteItem, insertItem]);
+    ).toEqual([deleteItem]);
     expect(prunedStore.size).toBe(2);
 
     const manualStore = new TransitionStore<C, Item>();
@@ -462,7 +426,6 @@ describe("transition store lifecycle", () => {
       [item],
       viewport100,
       { position: 0, offset: 0 },
-      0,
       readVisibleRange,
       readVisibleRange,
     );

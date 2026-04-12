@@ -1,5 +1,5 @@
 import type { ListStateChange } from "../list-state";
-import { getNow, getProgress } from "./base-animation";
+import { getNow } from "./base-animation";
 import type { ControlledState, VirtualizedResolvedItem } from "./base-types";
 import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import {
@@ -12,10 +12,8 @@ import {
   TransitionStore,
   type StoredTransitionEntry,
 } from "./transition-store";
-import { sampleScalarAnimation } from "./transition-planner";
 import type {
   BoundaryInsertDirection,
-  ScalarAnimation,
   TransitionLifecycleAdapter,
   TransitionPlanningAdapter,
   TransitionRenderAdapter,
@@ -24,7 +22,6 @@ import type {
 export {
   canAnimateExistingItem,
   drawSampledLayers,
-  resolveBoundaryInsertStrategy,
   sampleActiveTransition,
   sampleLayerAnimation,
   sampleScalarAnimation,
@@ -34,7 +31,6 @@ export { TransitionStore } from "./transition-store";
 export type {
   ActiveItemTransition,
   BoundaryInsertDirection,
-  BoundaryInsertStrategy,
   LayerAnimation,
   SampledItemTransition,
   SampledLayer,
@@ -83,7 +79,6 @@ export class TransitionController<
 > {
   #store = new TransitionStore<C, T>();
   #snapshot = new VisibilitySnapshot<T>();
-  #viewportTranslateAnimation: ScalarAnimation | undefined;
 
   captureVisibilitySnapshot(
     window: VisibleWindow<unknown>,
@@ -91,7 +86,6 @@ export class TransitionController<
     items: readonly T[],
     viewport: ListViewportMetrics,
     snapshotState: ControlledState,
-    extraShift: number,
     readVisibleRange: TransitionPlanningAdapter<C, T>["readVisibleRange"],
     readOuterVisibleRange: TransitionPlanningAdapter<
       C,
@@ -104,7 +98,6 @@ export class TransitionController<
       items,
       viewport,
       snapshotState,
-      extraShift,
       readVisibleRange,
       readOuterVisibleRange,
     );
@@ -119,16 +112,7 @@ export class TransitionController<
 
   prepare(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
     this.settle(now, lifecycle);
-    this.#cleanupViewportTranslateAnimation(now);
-    const keepViewportAnimating = this.#viewportTranslateAnimation != null;
-    return this.#store.prepare(now) || keepViewportAnimating;
-  }
-
-  getViewportTranslateY(now: number): number {
-    this.#cleanupViewportTranslateAnimation(now);
-    return this.#viewportTranslateAnimation == null
-      ? 0
-      : sampleScalarAnimation(this.#viewportTranslateAnimation, now);
+    return this.#store.prepare(now);
   }
 
   canAutoFollowBoundaryInsert(
@@ -169,31 +153,21 @@ export class TransitionController<
   ): void {
     const now = getNow();
     this.settle(now, lifecycle);
-    const result = handleTransitionStateChange(
+    handleTransitionStateChange(
       this.#store,
       this.#snapshot,
-      this.getViewportTranslateY(now),
       change,
       ctx,
       lifecycle,
     );
-    if (change.type === "reset" || change.type === "set") {
-      this.#viewportTranslateAnimation = undefined;
-      return;
-    }
-    if (result.viewportAnimation != null) {
-      this.#viewportTranslateAnimation = result.viewportAnimation;
-    }
   }
 
   settle(now: number, lifecycle: TransitionLifecycleAdapter<T>): boolean {
-    const changed = this.#settleTransitions(
+    return this.#settleTransitions(
       this.#store.findCompleted(now),
       now,
       lifecycle,
     );
-    this.#cleanupViewportTranslateAnimation(now);
-    return changed;
   }
 
   pruneInvisibleAt(
@@ -213,17 +187,6 @@ export class TransitionController<
   reset(): void {
     this.#store.reset();
     this.#snapshot.reset();
-    this.#viewportTranslateAnimation = undefined;
-  }
-
-  #cleanupViewportTranslateAnimation(now: number): void {
-    const animation = this.#viewportTranslateAnimation;
-    if (animation == null) {
-      return;
-    }
-    if (getProgress(animation.startTime, animation.duration, now) >= 1) {
-      this.#viewportTranslateAnimation = undefined;
-    }
   }
 
   #settleTransitions(
@@ -286,15 +249,7 @@ export class TransitionController<
       if (index < 0 || !this.#snapshot.wasVisible(item)) {
         return undefined;
       }
-      if (
-        this.#isTransitionVisibleInState(
-          index,
-          previousState,
-          now,
-          this.#snapshot.currentExtraShift,
-          ctx,
-        )
-      ) {
+      if (this.#isTransitionVisibleInState(index, previousState, now, ctx)) {
         return undefined;
       }
       naturalIndices.push(index);
@@ -327,7 +282,6 @@ export class TransitionController<
     index: number,
     state: ControlledState,
     now: number,
-    extraShift: number,
     ctx: TransitionPlanningAdapter<C, T>,
   ): boolean {
     const solution = ctx.resolveVisibleWindowForState(state, now);
@@ -337,7 +291,7 @@ export class TransitionController<
       }
       return (
         ctx.readOuterVisibleRange(
-          entry.offset + solution.window.shift + extraShift,
+          entry.offset + solution.window.shift,
           entry.height,
         ) != null
       );

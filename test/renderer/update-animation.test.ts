@@ -678,7 +678,7 @@ describe("update animation", () => {
     }
   });
 
-  test("top-anchor animates pushAll on short lists", () => {
+  test("top-underflow pushAll still animates when the list remains short", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -696,31 +696,30 @@ describe("update animation", () => {
       draws.length = 0;
       list.pushAll([{ id: "new", height: 30 }], {
         duration: 100,
-        distance: 24,
       });
 
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
+      expect(readDrawY(draws, "head")).toBeCloseTo(0);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(20);
       expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
 
       now.current = 50;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(52);
+      expect(readDrawY(draws, "new")).toBeCloseTo(40);
       expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
 
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(40);
+      expect(readDrawY(draws, "new")).toBeCloseTo(40);
       expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
     } finally {
       restoreNow();
     }
   });
 
-  test("top-anchor unshiftAll keeps whole-window slide semantics even when distance is provided", () => {
+  test("top-underflow unshiftAll reflows existing content without a first-frame jump", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -728,7 +727,7 @@ describe("update animation", () => {
       const { list, renderer } = createTopRenderer(
         [
           { id: "head", height: 20 },
-          { id: "tail", height: 30 },
+          { id: "tail", height: 20 },
         ],
         draws,
       );
@@ -738,269 +737,35 @@ describe("update animation", () => {
       draws.length = 0;
       list.unshiftAll([{ id: "new", height: 10 }], {
         duration: 100,
-        distance: 24,
       });
 
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-10);
-
-      now.current = 50;
-      draws.length = 0;
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-5);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(5);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(25);
-
-      now.current = 100;
-      draws.length = 0;
-      expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("top-anchor keeps unshiftAll item spacing fixed across mixed heights", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const draws: DrawProbe[] = [];
-      const { list, renderer } = createTopRenderer(
-        [
-          { id: "head", height: 20 },
-          { id: "middle", height: 35 },
-          { id: "tail", height: 15 },
-        ],
-        draws,
-      );
-
-      renderer.render();
-
-      list.unshiftAll(
-        [
-          { id: "new-a", height: 12 },
-          { id: "new-b", height: 18 },
-        ],
-        { duration: 100 },
-      );
-      const finalY = new Map([
-        ["new-a", 0],
-        ["new-b", 12],
-        ["head", 30],
-        ["middle", 50],
-        ["tail", 85],
-      ]);
-
-      for (const time of [0, 50, 100]) {
-        now.current = time;
-        draws.length = 0;
-        renderer.render();
-
-        const deltas = draws.map((draw) => draw.y - (finalY.get(draw.id) ?? 0));
-        expect(deltas.length).toBeGreaterThan(0);
-        for (const delta of deltas) {
-          expect(delta).toBeCloseTo(deltas[0]!);
-        }
-      }
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("top-anchor keeps existing content pinned on the first unshiftAll frame when the insert exceeds the trailing gap", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const draws: DrawProbe[] = [];
-      const { list, renderer } = createTopRenderer(
-        [
-          { id: "head", height: 20 },
-          { id: "tail", height: 60 },
-        ],
-        draws,
-        [],
-        100,
-      );
-
-      renderer.render();
-
-      draws.length = 0;
-      list.unshiftAll([{ id: "new", height: 50 }], {
-        duration: 100,
-      });
-
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-50);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
-
-      now.current = 50;
-      draws.length = 0;
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-40);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
-
-      now.current = 100;
-      draws.length = 0;
-      expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-30);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("bottom-underflow unshiftAll animates inserted items from above while keeping existing content pinned", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const draws: DrawProbe[] = [];
-      const { list, renderer } = createBottomRenderer(
-        [
-          { id: "head", height: 20 },
-          { id: "tail", height: 20 },
-        ],
-        draws,
-        [],
-        120,
-        "bottom",
-      );
-
-      renderer.render();
-
-      draws.length = 0;
-      list.unshiftAll([{ id: "new", height: 10 }], {
-        duration: 100,
-        distance: 24,
-      });
-
-      expect(renderer.render()).toBe(true);
+      expect(readDrawY(draws, "head")).toBeCloseTo(0);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(20);
       expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
 
       now.current = 50;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(58);
+      expect(readDrawY(draws, "new")).toBeCloseTo(0);
       expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
+      expect(readDrawY(draws, "head")!).toBeGreaterThan(0);
+      expect(readDrawY(draws, "head")!).toBeLessThan(10);
+      expect(readDrawY(draws, "tail")!).toBeGreaterThan(20);
+      expect(readDrawY(draws, "tail")!).toBeLessThan(30);
 
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(70);
-      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
+      expect(readDrawY(draws, "new")).toBeCloseTo(0);
+      expect(readDrawY(draws, "head")).toBeCloseTo(10);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(30);
     } finally {
       restoreNow();
     }
   });
 
-  test("bottom-underflow unshiftAll still keeps existing content pinned when the insert exceeds the available top gap", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const draws: DrawProbe[] = [];
-      const { list, renderer } = createBottomRenderer(
-        [
-          { id: "head", height: 20 },
-          { id: "tail", height: 60 },
-        ],
-        draws,
-        [],
-        100,
-        "bottom",
-      );
-
-      renderer.render();
-
-      draws.length = 0;
-      list.unshiftAll([{ id: "new", height: 50 }], {
-        duration: 100,
-      });
-
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
-
-      now.current = 50;
-      draws.length = 0;
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-42);
-      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
-
-      now.current = 100;
-      draws.length = 0;
-      expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(-30);
-      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("bottom-underflow pushAll animates a whole-window upward slide while ignoring distance", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const draws: DrawProbe[] = [];
-      const { list, renderer } = createBottomRenderer(
-        [
-          { id: "head", height: 20 },
-          { id: "tail", height: 20 },
-        ],
-        draws,
-        [],
-        120,
-        "bottom",
-      );
-
-      renderer.render();
-
-      draws.length = 0;
-      list.pushAll([{ id: "new", height: 30 }], {
-        distance: 24,
-      });
-
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(80);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(100);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(120);
-      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
-
-      now.current = 110;
-      draws.length = 0;
-      expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(65);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(85);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(105);
-
-      now.current = 220;
-      draws.length = 0;
-      expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(50);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(70);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(90);
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("bottom-underflow keeps existing content pinned on the first pushAll frame when the insert exceeds the available top gap", () => {
+  test("bottom-underflow pushAll reflows continuously while crossing the fill threshold", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1024,132 +789,61 @@ describe("update animation", () => {
       });
 
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(20);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(100);
+      expect(readDrawY(draws, "head")).toBeCloseTo(20);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
 
-      now.current = 50;
+      now.current = 35;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(10);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(30);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(90);
+      const headAt35 = readDrawY(draws, "head")!;
+      const tailAt35 = readDrawY(draws, "tail")!;
+      const newAt35 = readDrawY(draws, "new")!;
+      expect(headAt35).toBeGreaterThan(0);
+      expect(headAt35).toBeLessThan(20);
+      expect(tailAt35).toBeGreaterThan(20);
+      expect(tailAt35).toBeLessThan(40);
+      expect(newAt35).toBeGreaterThan(80);
+      expect(newAt35).toBeLessThan(100);
+      const alphaAt35 = draws.find((draw) => draw.id === "new")!.alpha;
+      expect(alphaAt35).toBeGreaterThan(0);
+      expect(alphaAt35).toBeLessThan(1);
+
+      now.current = 70;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      const headAt70 = readDrawY(draws, "head")!;
+      const tailAt70 = readDrawY(draws, "tail")!;
+      const newAt70 = readDrawY(draws, "new")!;
+      expect(headAt70).toBeLessThanOrEqual(headAt35);
+      expect(tailAt70).toBeLessThanOrEqual(tailAt35);
+      expect(newAt70).toBeLessThanOrEqual(newAt35);
+      expect(draws.find((draw) => draw.id === "new")!.alpha).toBeGreaterThan(
+        alphaAt35,
+      );
 
       now.current = 100;
-      draws.length = 0;
-      expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(20);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(80);
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("insert animation disables hittest for the animated slot while neighbors stay interactive", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const draws: DrawProbe[] = [];
-      const hits: string[] = [];
-      const { list, renderer } = createTopRenderer(
-        [{ id: "head", height: 20, hit: true }],
-        draws,
-        hits,
-      );
-
       renderer.render();
-      list.pushAll([{ id: "new", height: 30, hit: true }], {
-        duration: 100,
-        distance: 24,
-      });
-      now.current = 50;
-
-      expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(true);
-      expect(renderer.hittest({ x: 10, y: 60, type: "click" })).toBe(false);
-      expect(hits).toEqual(["head"]);
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("pushAll and unshiftAll hard-cut when the previous frame already filled the viewport", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const draws: DrawProbe[] = [];
-      const { list, renderer } = createTopRenderer(
+      const expected = createBottomRenderer(
         [
-          { id: "first", height: 40 },
-          { id: "second", height: 40 },
-          { id: "third", height: 40 },
+          { id: "head", height: 20 },
+          { id: "tail", height: 60 },
+          { id: "new", height: 50 },
         ],
-        draws,
+        [],
+        [],
+        100,
+        "bottom",
       );
-
-      renderer.render();
-
-      draws.length = 0;
-      list.unshiftAll([{ id: "new-head", height: 20 }], { duration: 100 });
-      expect(renderer.render()).toBe(false);
-      expect(draws.map((draw) => draw.id)).not.toContain("new-head");
-      expect(draws.find((draw) => draw.id === "first")?.y).toBeCloseTo(0);
-
-      draws.length = 0;
-      list.pushAll([{ id: "new-tail", height: 20 }], { duration: 100 });
-      expect(renderer.render()).toBe(false);
-      expect(draws.map((draw) => draw.id)).not.toContain("new-tail");
+      expected.renderer.render();
+      expect(list.position).toBe(expected.list.position);
+      expect(list.offset).toBeCloseTo(expected.list.offset);
     } finally {
       restoreNow();
     }
   });
 
-  test("pushAll and unshiftAll hard-cut without a prior visible snapshot or with zero duration", () => {
-    const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
-      const noSnapshotDraws: DrawProbe[] = [];
-      const noSnapshot = createTopRenderer(
-        [{ id: "head", height: 20 }],
-        noSnapshotDraws,
-      );
-
-      noSnapshot.list.pushAll([{ id: "new", height: 30 }], {
-        duration: 100,
-        distance: 24,
-      });
-      expect(noSnapshot.renderer.render()).toBe(false);
-      expect(noSnapshotDraws.find((draw) => draw.id === "new")?.y).toBeCloseTo(
-        20,
-      );
-      expect(
-        noSnapshotDraws.find((draw) => draw.id === "new")?.alpha,
-      ).toBeCloseTo(1);
-
-      const zeroDurationDraws: DrawProbe[] = [];
-      const zeroDuration = createTopRenderer(
-        [{ id: "head", height: 20 }],
-        zeroDurationDraws,
-      );
-      zeroDuration.renderer.render();
-
-      zeroDurationDraws.length = 0;
-      zeroDuration.list.unshiftAll([{ id: "new-head", height: 10 }], {
-        duration: 0,
-      });
-      expect(zeroDuration.renderer.render()).toBe(false);
-      expect(
-        zeroDurationDraws.find((draw) => draw.id === "new-head")?.y,
-      ).toBeCloseTo(0);
-      expect(
-        zeroDurationDraws.find((draw) => draw.id === "head")?.y,
-      ).toBeCloseTo(10);
-    } finally {
-      restoreNow();
-    }
-  });
-
-  test("pushAll animates into bottom padding without moving filled content viewport", () => {
+  test("pushAll animates into bottom padding without moving the filled content viewport", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1171,32 +865,148 @@ describe("update animation", () => {
       draws.length = 0;
       list.pushAll([{ id: "new", height: 20 }], {
         duration: 100,
-        distance: 24,
       });
+
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
+      expect(readDrawY(draws, "head")).toBeCloseTo(0);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(40);
       expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
 
       now.current = 50;
       draws.length = 0;
       expect(renderer.render()).toBe(true);
-      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
-      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(92);
+      expect(readDrawY(draws, "head")).toBeCloseTo(0);
+      expect(readDrawY(draws, "tail")).toBeCloseTo(40);
+      expect(readDrawY(draws, "new")).toBeCloseTo(80);
       expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
 
       now.current = 100;
       draws.length = 0;
       expect(renderer.render()).toBe(false);
-      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(80);
+      expect(readDrawY(draws, "new")).toBeCloseTo(80);
       expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
     } finally {
       restoreNow();
     }
   });
 
-  test("rendered empty lists animate the first pushAll and unshiftAll from their insertion direction", () => {
+  test("auto-follow keeps the insert fade while retargeting to the boundary", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const viewportHeight = 100;
+      const heights = [40, 40, 40];
+      const items = heights.map((height, index) => ({
+        id: `item-${index}`,
+        height,
+      }));
+      const { list, renderer } = createTopRenderer(
+        items,
+        draws,
+        [],
+        viewportHeight,
+      );
+
+      renderer.jumpTo(items.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      renderer.render();
+
+      draws.length = 0;
+      list.pushAll([{ id: "new", height: 50 }], {
+        duration: 200,
+        autoFollow: true,
+      });
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+
+      now.current = 200;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+
+      const expected = createTopRenderer(
+        [...items, { id: "new", height: 50 }],
+        [],
+        [],
+        viewportHeight,
+      );
+      expected.renderer.jumpTo(expected.list.items.length - 1, {
+        animated: false,
+        block: "end",
+      });
+      expected.renderer.render();
+
+      expect(list.position).toBe(expected.list.position);
+      expect(list.offset).toBeCloseTo(expected.list.offset);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("insert animation disables hittest for the animated slot while neighbors stay interactive", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const hits: string[] = [];
+      const { list, renderer } = createTopRenderer(
+        [{ id: "head", height: 20, hit: true }],
+        draws,
+        hits,
+      );
+
+      renderer.render();
+      list.pushAll([{ id: "new", height: 30, hit: true }], {
+        duration: 100,
+      });
+      now.current = 50;
+
+      expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(true);
+      expect(renderer.hittest({ x: 10, y: 30, type: "click" })).toBe(false);
+      expect(hits).toEqual(["head"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("pushAll and unshiftAll hard-cut without a prior visible snapshot or with zero duration", () => {
+    const noSnapshotDraws: DrawProbe[] = [];
+    const noSnapshot = createTopRenderer(
+      [{ id: "head", height: 20 }],
+      noSnapshotDraws,
+    );
+
+    noSnapshot.list.pushAll([{ id: "new", height: 30 }], {
+      duration: 100,
+    });
+    expect(noSnapshot.renderer.render()).toBe(false);
+    expect(readDrawY(noSnapshotDraws, "new")).toBeCloseTo(20);
+    expect(
+      noSnapshotDraws.find((draw) => draw.id === "new")?.alpha,
+    ).toBeCloseTo(1);
+
+    const zeroDurationDraws: DrawProbe[] = [];
+    const zeroDuration = createTopRenderer(
+      [{ id: "head", height: 20 }],
+      zeroDurationDraws,
+    );
+    zeroDuration.renderer.render();
+
+    zeroDurationDraws.length = 0;
+    zeroDuration.list.unshiftAll([{ id: "new-head", height: 10 }], {
+      duration: 0,
+    });
+    expect(zeroDuration.renderer.render()).toBe(false);
+    expect(readDrawY(zeroDurationDraws, "new-head")).toBeCloseTo(0);
+    expect(readDrawY(zeroDurationDraws, "head")).toBeCloseTo(10);
+  });
+
+  test("rendered empty top-aligned lists animate the first pushAll and unshiftAll without directional slide", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -1204,10 +1014,8 @@ describe("update animation", () => {
       const pushCase = createTopRenderer([], pushDraws);
       expect(pushCase.renderer.render()).toBe(false);
 
-      pushDraws.length = 0;
       pushCase.list.pushAll([{ id: "push", height: 30 }], {
         duration: 100,
-        distance: 24,
       });
       expect(pushCase.renderer.render()).toBe(true);
       expect(pushDraws.find((draw) => draw.id === "push")).toBeUndefined();
@@ -1215,7 +1023,7 @@ describe("update animation", () => {
       now.current = 50;
       pushDraws.length = 0;
       expect(pushCase.renderer.render()).toBe(true);
-      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(12);
+      expect(readDrawY(pushDraws, "push")).toBeCloseTo(0);
       expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
         0.5,
       );
@@ -1223,20 +1031,15 @@ describe("update animation", () => {
       now.current = 100;
       pushDraws.length = 0;
       expect(pushCase.renderer.render()).toBe(false);
-      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(0);
-      expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
-        1,
-      );
+      expect(readDrawY(pushDraws, "push")).toBeCloseTo(0);
 
       now.current = 0;
       const unshiftDraws: DrawProbe[] = [];
       const unshiftCase = createTopRenderer([], unshiftDraws);
       expect(unshiftCase.renderer.render()).toBe(false);
 
-      unshiftDraws.length = 0;
       unshiftCase.list.unshiftAll([{ id: "unshift", height: 30 }], {
         duration: 100,
-        distance: 24,
       });
       expect(unshiftCase.renderer.render()).toBe(true);
       expect(
@@ -1246,9 +1049,7 @@ describe("update animation", () => {
       now.current = 50;
       unshiftDraws.length = 0;
       expect(unshiftCase.renderer.render()).toBe(true);
-      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
-        -12,
-      );
+      expect(readDrawY(unshiftDraws, "unshift")).toBeCloseTo(0);
       expect(
         unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
       ).toBeCloseTo(0.5);
@@ -1256,12 +1057,7 @@ describe("update animation", () => {
       now.current = 100;
       unshiftDraws.length = 0;
       expect(unshiftCase.renderer.render()).toBe(false);
-      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
-        0,
-      );
-      expect(
-        unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
-      ).toBeCloseTo(1);
+      expect(readDrawY(unshiftDraws, "unshift")).toBeCloseTo(0);
     } finally {
       restoreNow();
     }
@@ -1275,10 +1071,8 @@ describe("update animation", () => {
       const pushCase = createBottomRenderer([], pushDraws, [], 120, "bottom");
       expect(pushCase.renderer.render()).toBe(false);
 
-      pushDraws.length = 0;
       pushCase.list.pushAll([{ id: "push", height: 30 }], {
         duration: 100,
-        distance: 24,
       });
       expect(pushCase.renderer.render()).toBe(true);
       expect(pushDraws.find((draw) => draw.id === "push")).toBeUndefined();
@@ -1286,7 +1080,7 @@ describe("update animation", () => {
       now.current = 50;
       pushDraws.length = 0;
       expect(pushCase.renderer.render()).toBe(true);
-      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(102);
+      expect(readDrawY(pushDraws, "push")).toBeCloseTo(105);
       expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
         0.5,
       );
@@ -1294,10 +1088,7 @@ describe("update animation", () => {
       now.current = 100;
       pushDraws.length = 0;
       expect(pushCase.renderer.render()).toBe(false);
-      expect(pushDraws.find((draw) => draw.id === "push")?.y).toBeCloseTo(90);
-      expect(pushDraws.find((draw) => draw.id === "push")?.alpha).toBeCloseTo(
-        1,
-      );
+      expect(readDrawY(pushDraws, "push")).toBeCloseTo(90);
 
       now.current = 0;
       const unshiftDraws: DrawProbe[] = [];
@@ -1310,10 +1101,8 @@ describe("update animation", () => {
       );
       expect(unshiftCase.renderer.render()).toBe(false);
 
-      unshiftDraws.length = 0;
       unshiftCase.list.unshiftAll([{ id: "unshift", height: 30 }], {
         duration: 100,
-        distance: 24,
       });
       expect(unshiftCase.renderer.render()).toBe(true);
       expect(
@@ -1323,9 +1112,7 @@ describe("update animation", () => {
       now.current = 50;
       unshiftDraws.length = 0;
       expect(unshiftCase.renderer.render()).toBe(true);
-      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
-        78,
-      );
+      expect(readDrawY(unshiftDraws, "unshift")).toBeCloseTo(105);
       expect(
         unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
       ).toBeCloseTo(0.5);
@@ -1333,12 +1120,7 @@ describe("update animation", () => {
       now.current = 100;
       unshiftDraws.length = 0;
       expect(unshiftCase.renderer.render()).toBe(false);
-      expect(unshiftDraws.find((draw) => draw.id === "unshift")?.y).toBeCloseTo(
-        90,
-      );
-      expect(
-        unshiftDraws.find((draw) => draw.id === "unshift")?.alpha,
-      ).toBeCloseTo(1);
+      expect(readDrawY(unshiftDraws, "unshift")).toBeCloseTo(90);
     } finally {
       restoreNow();
     }
@@ -1350,11 +1132,10 @@ describe("update animation", () => {
 
     list.pushAll([{ id: "new", height: 30 }], {
       duration: 100,
-      distance: 24,
     });
 
     expect(renderer.render()).toBe(false);
-    expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(0);
+    expect(readDrawY(draws, "new")).toBeCloseTo(0);
     expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
   });
 });

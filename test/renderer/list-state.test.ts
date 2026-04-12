@@ -188,12 +188,10 @@ describe("ListState item identity", () => {
 
     list.pushAll([{ id: "tail" }], {
       duration: 180,
-      distance: -5,
       autoFollow: true,
     });
     list.unshiftAll([{ id: "head" }], {
       duration: 180,
-      distance: -5,
       autoFollow: true,
     });
 
@@ -203,7 +201,6 @@ describe("ListState item identity", () => {
         count: 1,
         animation: {
           duration: 180,
-          distance: 0,
           autoFollow: true,
         },
       },
@@ -212,7 +209,6 @@ describe("ListState item identity", () => {
         count: 1,
         animation: {
           duration: 180,
-          distance: 0,
           autoFollow: true,
         },
       },
@@ -266,7 +262,6 @@ describe("ListState item identity", () => {
 
     list.pushAll([{ id: "tail" }], {
       duration: 0,
-      distance: 12,
       autoFollow: true,
     });
     list.unshiftAll([{ id: "head" }], {

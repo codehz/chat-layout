@@ -221,10 +221,7 @@ export class JumpController<T extends {}> {
         },
         { kind: "auto-follow", boundary: followChange.boundary },
       );
-      return {
-        ...followChange.change,
-        animation: undefined,
-      };
+      return followChange.change;
     }
     return change;
   }

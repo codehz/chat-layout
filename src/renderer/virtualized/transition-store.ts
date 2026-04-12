@@ -66,7 +66,9 @@ export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
   ): StoredTransitionEntry<C, T>[] {
     return [...this.#transitions.entries()]
       .filter(
-        ([item, transition]) => !snapshot.tracks(item, transition.retention),
+        ([item, transition]) =>
+          !snapshot.tracks(item, transition.retention) &&
+          !(transition.kind === "insert" && !snapshot.wasVisible(item)),
       )
       .map(([item, transition]) => ({ item, transition }));
   }

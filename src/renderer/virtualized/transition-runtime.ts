@@ -45,7 +45,7 @@ export type TransitionPlanningAdapter<
   C extends CanvasRenderingContext2D,
   T extends {},
 > = VirtualizedRuntime<C, T> & {
-  underflowAlign: ResolvedListLayoutOptions["underflowAlign"];
+  anchorMode: ResolvedListLayoutOptions["anchorMode"];
 };
 
 export type TransitionRenderAdapter<
@@ -91,8 +91,3 @@ export type SampledItemTransition<C extends CanvasRenderingContext2D> = {
 };
 
 export type BoundaryInsertDirection = "push" | "unshift";
-
-export type BoundaryInsertStrategy =
-  | "item-enter"
-  | "viewport-slide"
-  | "hard-cut";

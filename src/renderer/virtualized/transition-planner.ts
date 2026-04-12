@@ -2,11 +2,10 @@ import type { Node } from "../../types";
 import type { ListStateChange } from "../list-state";
 import { clamp, getNow, interpolate } from "./base-animation";
 import { ALPHA_EPSILON, type VirtualizedResolvedItem } from "./base-types";
-import type { ResolvedListLayoutOptions, VisibleWindowResult } from "./solver";
+import type { VisibleWindowResult } from "./solver";
 import {
   type ActiveItemTransition,
   type BoundaryInsertDirection,
-  type BoundaryInsertStrategy,
   type LayerAnimation,
   type SampledItemTransition,
   type SampledLayer,
@@ -29,32 +28,22 @@ type BoundaryInsertItemPlan<
   C extends CanvasRenderingContext2D,
   T extends {},
 > = {
-  kind: "item-enter";
   entries: Array<{
     item: T;
     transition: ActiveItemTransition<C>;
   }>;
 };
 
-type BoundaryInsertViewportPlan = {
-  kind: "viewport-slide";
-  animation: ScalarAnimation;
-};
-
 export type BoundaryInsertPlan<
   C extends CanvasRenderingContext2D,
   T extends {},
-> = BoundaryInsertItemPlan<C, T> | BoundaryInsertViewportPlan;
+> = BoundaryInsertItemPlan<C, T>;
 
 type MeasuredItem<C extends CanvasRenderingContext2D, T extends {}> = {
   item: T;
   node: Node<C>;
   height: number;
 };
-
-function isFinitePositive(value: number): boolean {
-  return Number.isFinite(value) && value > 0;
-}
 
 function normalizeDuration(duration: number | undefined): number {
   return Math.max(
@@ -215,23 +204,6 @@ function hasVisibleBoundaryInsertItems<
   );
 }
 
-export function resolveBoundaryInsertStrategy(
-  direction: BoundaryInsertDirection,
-  underflowAlign: ResolvedListLayoutOptions["underflowAlign"],
-  coversShortListSnapshot: boolean,
-): BoundaryInsertStrategy {
-  if (!coversShortListSnapshot) {
-    return "hard-cut";
-  }
-  if (
-    (direction === "push" && underflowAlign === "bottom") ||
-    (direction === "unshift" && underflowAlign === "top")
-  ) {
-    return "viewport-slide";
-  }
-  return "item-enter";
-}
-
 export function sampleScalarAnimation(
   animation: ScalarAnimation,
   now: number,
@@ -360,129 +332,32 @@ function planExistingItemTransition<C extends CanvasRenderingContext2D>(
   };
 }
 
-function planViewportShift(params: {
-  currentTranslateY: number;
-  travel: number;
-  direction: "positive" | "negative";
-  now: number;
-  duration: number;
-}): ScalarAnimation | undefined {
-  if (!isFinitePositive(params.travel) || params.duration <= 0) {
-    return undefined;
-  }
-  const from =
-    params.direction === "positive"
-      ? params.currentTranslateY + params.travel
-      : params.currentTranslateY - params.travel;
-  return createScalarAnimation(from, 0, params.now, params.duration);
-}
-
-function planBoundaryInsert<
-  C extends CanvasRenderingContext2D,
-  T extends {},
->(params: {
-  direction: BoundaryInsertDirection;
-  duration: number;
-  distance: number | undefined;
-  now: number;
-  strategy: BoundaryInsertStrategy;
-  snapshot: VisibilitySnapshot<T>;
-  currentTranslateY: number;
-  measuredItems: MeasuredItem<C, T>[];
-}): BoundaryInsertPlan<C, T> | undefined {
-  switch (params.strategy) {
-    case "hard-cut":
-      return undefined;
-    case "item-enter":
-      return planBoundaryInsertItems(params);
-    case "viewport-slide":
-      return planBoundaryInsertViewportShift(params);
-  }
-}
-
 function planBoundaryInsertItems<
   C extends CanvasRenderingContext2D,
   T extends {},
 >(params: {
-  direction: BoundaryInsertDirection;
   duration: number;
-  distance: number | undefined;
   now: number;
   measuredItems: MeasuredItem<C, T>[];
 }): BoundaryInsertItemPlan<C, T> | undefined {
   const entries: BoundaryInsertItemPlan<C, T>["entries"] = [];
-  const signedDistance = params.direction === "push" ? 1 : -1;
   for (const { item, node, height } of params.measuredItems) {
     if (!Number.isFinite(height) || height < 0) {
       return undefined;
     }
-    const resolvedDistance =
-      typeof params.distance === "number" && Number.isFinite(params.distance)
-        ? Math.max(0, params.distance)
-        : Math.min(24, height);
     entries.push({
       item,
       transition: {
         kind: "insert",
         layers: [
-          createLayerAnimation(
-            node,
-            0,
-            1,
-            params.now,
-            params.duration,
-            signedDistance * resolvedDistance,
-            0,
-          ),
+          createLayerAnimation(node, 0, 1, params.now, params.duration, 0, 0),
         ],
-        height: createScalarAnimation(
-          height,
-          height,
-          params.now,
-          params.duration,
-        ),
+        height: createScalarAnimation(0, height, params.now, params.duration),
         retention: "drawn",
       },
     });
   }
-  return entries.length === 0 ? undefined : { kind: "item-enter", entries };
-}
-
-function planBoundaryInsertViewportShift<
-  C extends CanvasRenderingContext2D,
-  T extends {},
->(params: {
-  direction: BoundaryInsertDirection;
-  duration: number;
-  now: number;
-  snapshot: VisibilitySnapshot<T>;
-  currentTranslateY: number;
-  measuredItems: MeasuredItem<C, T>[];
-}): BoundaryInsertViewportPlan | undefined {
-  let insertedHeight = 0;
-  for (const { height } of params.measuredItems) {
-    if (!Number.isFinite(height) || height <= 0) {
-      return undefined;
-    }
-    insertedHeight += height;
-  }
-  if (!isFinitePositive(insertedHeight)) {
-    return undefined;
-  }
-
-  const gap =
-    params.direction === "push"
-      ? params.snapshot.topGap
-      : params.snapshot.bottomGap;
-  const travel = Math.min(insertedHeight, gap);
-  const animation = planViewportShift({
-    currentTranslateY: params.currentTranslateY,
-    travel,
-    direction: params.direction === "push" ? "positive" : "negative",
-    now: params.now,
-    duration: params.duration,
-  });
-  return animation == null ? undefined : { kind: "viewport-slide", animation };
+  return entries.length === 0 ? undefined : { entries };
 }
 
 function measureBoundaryInsertItems<
@@ -533,6 +408,16 @@ export function drawSampledLayers<
     }
     adapter.graphics.save();
     try {
+      if (sampled.kind === "insert") {
+        adapter.graphics.beginPath();
+        adapter.graphics.rect(
+          0,
+          y,
+          adapter.graphics.canvas.clientWidth,
+          sampled.slotHeight,
+        );
+        adapter.graphics.clip();
+      }
       if (typeof adapter.graphics.globalAlpha === "number") {
         adapter.graphics.globalAlpha *= alpha;
       }
@@ -620,9 +505,7 @@ export function planBoundaryInsertTransition<
   direction: BoundaryInsertDirection,
   count: number,
   duration: number | undefined,
-  distance: number | undefined,
   now: number,
-  currentTranslateY: number,
   ctx: TransitionPlanningAdapter<C, T>,
   snapshot: VisibilitySnapshot<T>,
 ): BoundaryInsertPlan<C, T> | undefined {
@@ -630,40 +513,37 @@ export function planBoundaryInsertTransition<
   if (count <= 0 || normalizedDuration <= 0) {
     return undefined;
   }
-  const hasShortListSnapshot = snapshot.matchesBoundaryInsertState(
-    direction,
-    count,
-    ctx.position,
-    ctx.offset,
-  );
-  const strategy = hasShortListSnapshot
-    ? resolveBoundaryInsertStrategy(direction, ctx.underflowAlign, true)
-    : snapshot.matchesEmptyBoundaryInsertState(
-          direction,
-          count,
-          ctx.position,
-          ctx.offset,
-        )
-      ? "item-enter"
-      : snapshot.hasSnapshot &&
-          hasVisibleBoundaryInsertItems(direction, count, ctx)
-        ? "item-enter"
-        : "hard-cut";
-  if (strategy === "hard-cut") {
+  const canAnimate =
+    snapshot.matchesBoundaryInsertState(
+      direction,
+      count,
+      ctx.position,
+      ctx.offset,
+    ) ||
+    snapshot.matchesFollowBoundaryInsertState(
+      direction,
+      count,
+      ctx.position,
+      ctx.offset,
+    ) ||
+    snapshot.matchesEmptyBoundaryInsertState(
+      direction,
+      count,
+      ctx.position,
+      ctx.offset,
+    ) ||
+    (snapshot.hasSnapshot &&
+      hasVisibleBoundaryInsertItems(direction, count, ctx));
+  if (!canAnimate) {
     return undefined;
   }
   const measuredItems = measureBoundaryInsertItems(direction, count, ctx);
   if (measuredItems == null) {
     return undefined;
   }
-  return planBoundaryInsert({
-    direction,
+  return planBoundaryInsertItems({
     duration: normalizedDuration,
-    distance,
     now,
-    strategy,
-    snapshot,
-    currentTranslateY,
     measuredItems,
   });
 }
@@ -753,13 +633,10 @@ export function handleTransitionStateChange<
 >(
   store: TransitionStore<C, T>,
   snapshot: VisibilitySnapshot<T>,
-  currentViewportTranslateY: number,
   change: ListStateChange<T>,
   ctx: TransitionPlanningAdapter<C, T>,
   lifecycle: TransitionLifecycleAdapter<T>,
-): {
-  viewportAnimation?: ScalarAnimation;
-} {
+): void {
   switch (change.type) {
     case "update": {
       const now = getNow();
@@ -781,10 +658,10 @@ export function handleTransitionStateChange<
       );
       if (transition == null) {
         store.delete(change.prevItem);
-        return {};
+        return;
       }
       store.replace(change.prevItem, change.nextItem, transition);
-      return {};
+      return;
     }
     case "delete": {
       const now = getNow();
@@ -806,14 +683,14 @@ export function handleTransitionStateChange<
       if (transition == null) {
         store.delete(change.item);
         lifecycle.onDeleteComplete(change.item);
-        return {};
+        return;
       }
       store.set(change.item, transition);
-      return {};
+      return;
     }
     case "delete-finalize":
       store.delete(change.item);
-      return {};
+      return;
     case "unshift":
     case "push": {
       const now = getNow();
@@ -821,29 +698,34 @@ export function handleTransitionStateChange<
         change.type,
         change.count,
         change.animation?.duration,
-        change.animation?.distance,
         now,
-        currentViewportTranslateY,
         ctx,
         snapshot,
       );
       if (plan == null) {
-        return {};
-      }
-      if (plan.kind === "viewport-slide") {
-        return {
-          viewportAnimation: plan.animation,
-        };
+        return;
       }
       for (const entry of plan.entries) {
         store.set(entry.item, entry.transition);
       }
-      return {};
+      if (
+        ctx.position == null &&
+        snapshot.coversShortList &&
+        ((change.type === "push" && ctx.anchorMode === "bottom") ||
+          (change.type === "unshift" && ctx.anchorMode === "top"))
+      ) {
+        const boundary = change.type === "push" ? "bottom" : "top";
+        const boundaryItem = snapshot.readBoundaryItem(boundary);
+        if (boundaryItem != null) {
+          lifecycle.snapItemToViewportBoundary(boundaryItem, boundary);
+        }
+      }
+      return;
     }
     case "reset":
     case "set":
       store.reset();
       snapshot.reset();
-      return {};
+      return;
   }
 }

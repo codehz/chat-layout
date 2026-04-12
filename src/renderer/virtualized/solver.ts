@@ -210,6 +210,25 @@ export function resolveVisibleWindow<T, V>(
 
     let shift = 0;
     if (y < contentHeight) {
+      const hasDeferredTrailingBoundarySlot =
+        drawList.length > 0 &&
+        drawList.at(-1)?.idx === items.length - 1 &&
+        !(drawList.at(-1)?.height! > Number.EPSILON);
+      if (hasDeferredTrailingBoundarySlot) {
+        return finalizeVisibleWindowResult(
+          items.length,
+          viewport,
+          layout,
+          { position, offset },
+          Array.from(resolutionPath),
+          extendVisibleWindowToOuterBounds(
+            items,
+            { drawList, shift },
+            viewport,
+            readResolvedItem,
+          ),
+        );
+      }
       if (position === 0 && drawLength < contentHeight) {
         shift = -offset;
         offset = 0;
@@ -295,7 +314,9 @@ export function resolveVisibleWindow<T, V>(
         const { value, height } = readResolvedItem(items[i]!, i);
         drawList.push({ idx: i, value, offset: y - shift, height });
         y = drawLength += height;
-        position = i;
+        if (height > Number.EPSILON) {
+          position = i;
+        }
         if (y >= contentHeight) {
           break;
         }
@@ -342,11 +363,24 @@ function finalizeVisibleWindowResult<T>(
   let maxIndex = Number.NEGATIVE_INFINITY;
   let minOffset = Number.POSITIVE_INFINITY;
   let maxBottom = Number.NEGATIVE_INFINITY;
+  let hasDeferredSlots = false;
   for (const entry of window.drawList) {
+    if (!(entry.height > Number.EPSILON)) {
+      hasDeferredSlots = true;
+    } else {
+      minOffset = Math.min(minOffset, entry.offset);
+      maxBottom = Math.max(maxBottom, entry.offset + entry.height);
+    }
     minIndex = Math.min(minIndex, entry.idx);
     maxIndex = Math.max(maxIndex, entry.idx);
-    minOffset = Math.min(minOffset, entry.offset);
-    maxBottom = Math.max(maxBottom, entry.offset + entry.height);
+  }
+
+  if (!Number.isFinite(minOffset) || !Number.isFinite(maxBottom)) {
+    return {
+      normalizedState,
+      resolutionPath,
+      window,
+    };
   }
 
   const contentHeight = maxBottom - minOffset;
@@ -364,8 +398,9 @@ function finalizeVisibleWindowResult<T>(
 
   const desiredTop =
     layout.underflowAlign === "bottom" ? viewportHeight - contentHeight : 0;
-  const canonicalState =
-    layout.anchorMode === "top"
+  const canonicalState = hasDeferredSlots
+    ? normalizedState
+    : layout.anchorMode === "top"
       ? { position: 0, offset: 0 }
       : { position: itemCount - 1, offset: 0 };
   return {
@@ -389,6 +424,7 @@ function extendVisibleWindowToOuterBounds<T, V>(
   }
 
   const drawList = [...window.drawList];
+  const existingIndices = new Set(drawList.map((entry) => entry.idx));
   let topEntry = drawList[0]!;
   let bottomEntry = drawList[0]!;
   for (const entry of drawList) {
@@ -404,6 +440,14 @@ function extendVisibleWindowToOuterBounds<T, V>(
   let topY = topEntry.offset + window.shift;
   while (topIdx > 0) {
     const prevIdx = topIdx - 1;
+    if (existingIndices.has(prevIdx)) {
+      const existing = drawList.find((entry) => entry.idx === prevIdx);
+      topIdx = prevIdx;
+      if (existing != null) {
+        topY = existing.offset + window.shift;
+      }
+      continue;
+    }
     const { value, height } = resolveItem(items[prevIdx]!, prevIdx);
     const prevY = topY - height;
     if (prevY + height <= viewport.outerContentTop) {
@@ -415,6 +459,7 @@ function extendVisibleWindowToOuterBounds<T, V>(
       offset: prevY - window.shift,
       height,
     });
+    existingIndices.add(prevIdx);
     topIdx = prevIdx;
     topY = prevY;
   }
@@ -423,6 +468,17 @@ function extendVisibleWindowToOuterBounds<T, V>(
   let bottomY = bottomEntry.offset + window.shift + bottomEntry.height;
   while (bottomIdx < items.length - 1) {
     const nextIdx = bottomIdx + 1;
+    if (existingIndices.has(nextIdx)) {
+      const existing = drawList.find((entry) => entry.idx === nextIdx);
+      bottomIdx = nextIdx;
+      if (existing != null) {
+        bottomY = Math.max(
+          bottomY,
+          existing.offset + window.shift + existing.height,
+        );
+      }
+      continue;
+    }
     const { value, height } = resolveItem(items[nextIdx]!, nextIdx);
     if (bottomY >= viewport.outerContentBottom) {
       break;
@@ -433,6 +489,7 @@ function extendVisibleWindowToOuterBounds<T, V>(
       offset: bottomY - window.shift,
       height,
     });
+    existingIndices.add(nextIdx);
     bottomIdx = nextIdx;
     bottomY += height;
   }

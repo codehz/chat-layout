@@ -971,7 +971,6 @@ describe("jumpTo", () => {
 
       list.pushAll([50], {
         duration: 200,
-        distance: 999,
         autoFollow: true,
       });
 
@@ -1023,7 +1022,6 @@ describe("jumpTo", () => {
 
       list.unshiftAll([30], {
         duration: 200,
-        distance: 999,
         autoFollow: true,
       });
 

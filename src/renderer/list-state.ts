@@ -20,8 +20,6 @@ export interface DeleteListItemAnimationOptions {
 export interface InsertListItemsAnimationOptions {
   /** Animation duration in milliseconds. */
   duration?: number;
-  /** Enter offset in pixels measured from the final resting position. */
-  distance?: number;
   /** Auto-follow the insertion edge when the viewport was already pinned there. */
   autoFollow?: boolean;
 }
@@ -232,12 +230,6 @@ function normalizeInsertAnimation(
   }
 
   const normalizedAnimation: InsertListItemsAnimationOptions = { duration };
-  if (
-    typeof animation?.distance === "number" &&
-    Number.isFinite(animation.distance)
-  ) {
-    normalizedAnimation.distance = Math.max(0, animation.distance);
-  }
   if (animation?.autoFollow === true) {
     normalizedAnimation.autoFollow = true;
   }

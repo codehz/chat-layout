@@ -89,10 +89,9 @@ class PipelineProbeRenderer extends VirtualizedRenderer<C, number> {
 
   protected _captureVisibleItemSnapshot(
     solution: VisibleWindowResult<unknown>,
-    extraShift = 0,
   ): void {
     this.calls.capture += 1;
-    super._captureVisibleItemSnapshot(solution, extraShift);
+    super._captureVisibleItemSnapshot(solution);
   }
 
   protected _pruneTransitionAnimations(

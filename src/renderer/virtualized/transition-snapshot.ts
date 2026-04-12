@@ -15,11 +15,8 @@ export class VisibilitySnapshot<T extends {}> {
   #previousSnapshotState: ControlledState | undefined;
   #emptyState: ControlledState | undefined;
   #coversShortList = false;
-  #topGap = 0;
-  #bottomGap = 0;
   #atStartBoundary = false;
   #atEndBoundary = false;
-  #currentExtraShift = 0;
   #minDrawnIndex = Number.POSITIVE_INFINITY;
   #maxDrawnIndex = Number.NEGATIVE_INFINITY;
   #topBoundaryItem: T | undefined;
@@ -35,20 +32,8 @@ export class VisibilitySnapshot<T extends {}> {
     return this.#hasSnapshot;
   }
 
-  get topGap(): number {
-    return this.#topGap;
-  }
-
-  get bottomGap(): number {
-    return this.#bottomGap;
-  }
-
   get previousState(): ControlledState | undefined {
     return this.#previousSnapshotState;
-  }
-
-  get currentExtraShift(): number {
-    return this.#currentExtraShift;
   }
 
   readDrawnIndexRange():
@@ -81,7 +66,6 @@ export class VisibilitySnapshot<T extends {}> {
     items: readonly T[],
     viewport: ListViewportMetrics,
     snapshotState: ControlledState,
-    extraShift: number,
     readVisibleRange: (top: number, height: number) => VisibleRange | undefined,
     readOuterVisibleRange: (
       top: number,
@@ -102,7 +86,7 @@ export class VisibilitySnapshot<T extends {}> {
     let nextBottomBoundaryItem: T | undefined;
     let nextTopBoundaryY = Number.POSITIVE_INFINITY;
     let nextBottomBoundaryY = Number.NEGATIVE_INFINITY;
-    const effectiveShift = window.shift + extraShift;
+    const effectiveShift = window.shift;
 
     for (const { idx, offset, height } of window.drawList) {
       const y = offset + effectiveShift;
@@ -139,7 +123,6 @@ export class VisibilitySnapshot<T extends {}> {
     this.#visibleItems = nextVisibleItems;
     this.#hasSnapshot = true;
     this.#snapshotState = snapshotState;
-    this.#currentExtraShift = extraShift;
     this.#minDrawnIndex = nextMinDrawnIndex;
     this.#maxDrawnIndex = nextMaxDrawnIndex;
     this.#topBoundaryItem = nextTopBoundaryItem;
@@ -159,12 +142,6 @@ export class VisibilitySnapshot<T extends {}> {
       topMostY >= viewport.contentTop - Number.EPSILON &&
       bottomMostY <= viewport.contentBottom + Number.EPSILON &&
       contentHeight < viewport.contentHeight - Number.EPSILON;
-    this.#topGap = this.#coversShortList
-      ? Math.max(0, topMostY - viewport.contentTop)
-      : 0;
-    this.#bottomGap = this.#coversShortList
-      ? Math.max(0, viewport.contentBottom - bottomMostY)
-      : 0;
     this.#atStartBoundary =
       window.drawList.length > 0 &&
       items.length > 0 &&
@@ -269,11 +246,8 @@ export class VisibilitySnapshot<T extends {}> {
     this.#previousSnapshotState = undefined;
     this.#emptyState = undefined;
     this.#coversShortList = false;
-    this.#topGap = 0;
-    this.#bottomGap = 0;
     this.#atStartBoundary = false;
     this.#atEndBoundary = false;
-    this.#currentExtraShift = 0;
     this.#minDrawnIndex = Number.POSITIVE_INFINITY;
     this.#maxDrawnIndex = Number.NEGATIVE_INFINITY;
     this.#topBoundaryItem = undefined;

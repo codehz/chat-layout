@@ -82,7 +82,7 @@ function createController(params?: {
 }
 
 describe("jump controller", () => {
-  test("strips boundary-insert animation when the bottom capability allows auto-follow", () => {
+  test("keeps boundary-insert animation when the bottom capability allows auto-follow", () => {
     const harness = createController({
       heights: [20, 20, 20, 20],
       state: { position: 2, offset: 0 },
@@ -102,7 +102,10 @@ describe("jump controller", () => {
     expect(nextChange).toEqual({
       type: "push",
       count: 1,
-      animation: undefined,
+      animation: {
+        duration: 220,
+        autoFollow: true,
+      },
     });
   });
 
@@ -136,7 +139,10 @@ describe("jump controller", () => {
     expect(chainedChange).toMatchObject({
       type: "push",
       count: 1,
-      animation: undefined,
+      animation: {
+        duration: 220,
+        autoFollow: true,
+      },
     });
 
     harness.setState({ position: 1, offset: 0 });
@@ -195,7 +201,10 @@ describe("jump controller", () => {
       expect(nextChange).toMatchObject({
         type: "push",
         count: 1,
-        animation: undefined,
+        animation: {
+          duration: 100,
+          autoFollow: true,
+        },
       });
       expect(
         readAnchorFromState(
