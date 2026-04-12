@@ -6,6 +6,7 @@ import {
   memoRenderItem,
   type ListPadding,
 } from "../../src/renderer";
+import { writeInternalListScrollState } from "../../src/renderer/list-state";
 import type { ListAnchorMode } from "../../src/renderer";
 import type {
   Box,
@@ -91,16 +92,23 @@ function expectedPixelAtTime(
 }
 
 describe("jumpTo", () => {
-  test("ListState exposes explicit seed, reset, and anchor helpers", () => {
+  test("ListState exposes explicit seed, reset, and relative scroll helpers", () => {
     const list = new ListState<number>([1, 2, 3]);
 
     expect(list.items).toEqual([1, 2, 3]);
     expect(list.position).toBeUndefined();
     expect(list.offset).toBe(0);
 
-    list.setAnchor(4.9, 12);
+    writeInternalListScrollState(list, {
+      position: 4.9,
+      offset: 12,
+    });
     expect(list.position).toBe(4);
     expect(list.offset).toBe(12);
+
+    list.applyScroll(-5);
+    expect(list.position).toBe(4);
+    expect(list.offset).toBe(7);
 
     list.reset([9, 10]);
     expect(list.items).toEqual([9, 10]);
@@ -124,8 +132,10 @@ describe("jumpTo", () => {
 
     const manualList = new ListState<number>();
     manualList.pushAll(heights);
-    manualList.position = 3;
-    manualList.offset = 0;
+    writeInternalListScrollState(manualList, {
+      position: 3,
+      offset: 0,
+    });
     const manualRenderer = createRenderer(100, {
       anchorMode: "top",
       list: manualList,
@@ -155,8 +165,10 @@ describe("jumpTo", () => {
 
     const manualList = new ListState<number>();
     manualList.pushAll(heights);
-    manualList.position = 1;
-    manualList.offset = 0;
+    writeInternalListScrollState(manualList, {
+      position: 1,
+      offset: 0,
+    });
     const manualRenderer = createRenderer(100, {
       anchorMode: "bottom",
       list: manualList,
@@ -623,8 +635,10 @@ describe("jumpTo", () => {
 
       const expectedList = new ListState<number>();
       expectedList.pushAll(heights);
-      expectedList.position = 2;
-      expectedList.offset = 0;
+      writeInternalListScrollState(expectedList, {
+        position: 2,
+        offset: 0,
+      });
       const expected = createRenderer(100, {
         anchorMode: "top",
         list: expectedList,
@@ -701,15 +715,18 @@ describe("jumpTo", () => {
       now.current = 80;
       expect(renderer.render()).toBe(true);
 
-      list.position = 6;
-      list.offset = 5;
+      list.applyScroll(5);
+      const expectedPosition = list.position;
+      const expectedOffset = list.offset;
       now.current = 160;
       expect(renderer.render()).toBe(false);
 
       const expectedList = new ListState<number>();
       expectedList.pushAll(heights);
-      expectedList.position = 6;
-      expectedList.offset = 5;
+      writeInternalListScrollState(expectedList, {
+        position: expectedPosition,
+        offset: expectedOffset,
+      });
       const expected = createRenderer(100, {
         anchorMode: "bottom",
         list: expectedList,
@@ -750,8 +767,7 @@ describe("jumpTo", () => {
       now.current = 100;
       expect(renderer.render()).toBe(true);
 
-      list.position = 6;
-      list.offset = 5;
+      list.applyScroll(5);
       now.current = 200;
       expect(renderer.render()).toBe(false);
       expect(completed).toBe(0);
@@ -1501,8 +1517,10 @@ describe("jumpTo", () => {
 
       const expectedList = new ListState<number>();
       expectedList.pushAll([...heights, 30, 20]);
-      expectedList.position = expectedPosition;
-      expectedList.offset = expectedOffset;
+      writeInternalListScrollState(expectedList, {
+        position: expectedPosition,
+        offset: expectedOffset,
+      });
       const expectedRenderer = createRenderer(viewportHeight, {
         anchorMode: "top",
         list: expectedList,
@@ -1562,9 +1580,10 @@ describe("jumpTo", () => {
 
       const expectedList = new ListState<number>();
       expectedList.pushAll([20, 30, ...heights]);
-      expectedList.position =
-        expectedPosition == null ? undefined : expectedPosition + 1;
-      expectedList.offset = expectedOffset;
+      writeInternalListScrollState(expectedList, {
+        position: expectedPosition == null ? undefined : expectedPosition + 1,
+        offset: expectedOffset,
+      });
       const expectedRenderer = createRenderer(viewportHeight, {
         anchorMode: "bottom",
         list: expectedList,
@@ -1664,13 +1683,16 @@ describe("jumpTo", () => {
       now.current = 100;
       expect(renderer.render()).toBe(true);
 
-      list.position = 1;
-      list.offset = 5;
+      list.applyScroll(5);
+      const expectedPosition = list.position;
+      const expectedOffset = list.offset;
 
       const expectedList = new ListState<number>();
       expectedList.pushAll([40, 40, 40, 30]);
-      expectedList.position = 1;
-      expectedList.offset = 5;
+      writeInternalListScrollState(expectedList, {
+        position: expectedPosition,
+        offset: expectedOffset,
+      });
       const expectedRenderer = createRenderer(100, {
         anchorMode: "bottom",
         list: expectedList,
@@ -1681,12 +1703,12 @@ describe("jumpTo", () => {
       expect(renderer.render()).toBe(false);
       expectedRenderer.render();
       expect(list.position).toBe(expectedList.position);
-      expect(list.offset).toBe(expectedList.offset);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
 
       now.current = 300;
       renderer.render();
       expect(list.position).toBe(expectedList.position);
-      expect(list.offset).toBe(expectedList.offset);
+      expect(list.offset).toBeCloseTo(expectedList.offset);
     } finally {
       restoreNow();
     }

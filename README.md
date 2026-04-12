@@ -178,7 +178,7 @@ Notes:
 - `FlexItem` exposes `grow`, `shrink`, and `alignSelf`; `basis` is no longer public.
 - `MultilineText` now uses `align` / `physicalAlign` instead of `alignment`.
 - `ListState.position` uses `undefined` for the renderer default anchor.
-- Use `list.resetScroll()` or `list.setAnchor(index, offset)` instead of assigning `Number.NaN`.
+- Use `list.applyScroll(delta)` for relative scrolling, or renderer `jumpTo()` / `jumpToTop()` / `jumpToBottom()` for absolute navigation.
 
 ## Development
 

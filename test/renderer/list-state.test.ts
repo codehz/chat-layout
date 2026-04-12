@@ -150,6 +150,25 @@ describe("ListState item identity", () => {
     expect(() => list.unshift(item)).toThrow("unique object references");
   });
 
+  test("scroll position and offset are read-only to external callers", () => {
+    const list = new ListState<Item>([{ id: "existing" }]);
+
+    expect(() => {
+      (
+        list as ListState<Item> & {
+          position: number | undefined;
+        }
+      ).position = 1;
+    }).toThrow(TypeError);
+    expect(() => {
+      (
+        list as ListState<Item> & {
+          offset: number;
+        }
+      ).offset = 10;
+    }).toThrow(TypeError);
+  });
+
   test("pushAll and unshiftAll keep hard-cut behavior by default", () => {
     const existing = { id: "existing" };
     const list = new ListState<Item>([existing]);

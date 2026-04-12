@@ -101,19 +101,9 @@ export abstract class VirtualizedRenderer<
     return this.options.list.position;
   }
 
-  /** Updates the current anchor item index. */
-  set position(value: number | undefined) {
-    this.options.list.position = value;
-  }
-
   /** Pixel offset from the anchored item edge. */
   get offset(): number {
     return this.options.list.offset;
-  }
-
-  /** Updates the pixel offset from the anchored item edge. */
-  set offset(value: number) {
-    this.options.list.offset = value;
   }
 
   /** Items currently available to the renderer. */

@@ -492,7 +492,10 @@ describe("update animation", () => {
         80,
       );
 
-      list.setAnchor(1, 100);
+      writeInternalListScrollState(list, {
+        position: 1,
+        offset: 100,
+      });
       renderer.render();
 
       draws.length = 0;
@@ -523,7 +526,10 @@ describe("update animation", () => {
         40,
       );
 
-      list.setAnchor(0, -45);
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -45,
+      });
       renderer.render();
 
       draws.length = 0;
@@ -563,7 +569,10 @@ describe("update animation", () => {
         40,
       );
 
-      list.setAnchor(0, -45);
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -45,
+      });
       renderer.render();
 
       draws.length = 0;
@@ -615,7 +624,10 @@ describe("update animation", () => {
         40,
       );
 
-      list.setAnchor(2, 50);
+      writeInternalListScrollState(list, {
+        position: 2,
+        offset: 50,
+      });
       renderer.render();
 
       draws.length = 0;
@@ -657,7 +669,10 @@ describe("update animation", () => {
         40,
       );
 
-      list.setAnchor(0, -50);
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -50,
+      });
       renderer.render();
 
       draws.length = 0;
@@ -1788,7 +1803,10 @@ describe("delete animation", () => {
         40,
       );
 
-      list.setAnchor(0, -50);
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -50,
+      });
       renderer.render();
 
       draws.length = 0;
@@ -1841,7 +1859,10 @@ describe("delete animation", () => {
         40,
       );
 
-      list.setAnchor(0, -35);
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -35,
+      });
       renderer.render();
 
       list.delete(item, { duration: 100 });
@@ -1888,7 +1909,10 @@ describe("delete animation", () => {
         60,
       );
 
-      list.setAnchor(0, -50);
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -50,
+      });
       renderer.render();
 
       list.delete(items[0]!, { duration: 100 });
@@ -1932,7 +1956,10 @@ describe("delete animation", () => {
       ] as const;
       const { list, renderer } = createTopRenderer([...items], draws, [], 60);
 
-      list.setAnchor(0, -90);
+      writeInternalListScrollState(list, {
+        position: 0,
+        offset: -90,
+      });
       renderer.render();
 
       list.delete(items[1]!, { duration: 100 });
@@ -1977,7 +2004,10 @@ describe("delete animation", () => {
         40,
       );
 
-      list.setAnchor(2, 50);
+      writeInternalListScrollState(list, {
+        position: 2,
+        offset: 50,
+      });
       renderer.render();
 
       draws.length = 0;

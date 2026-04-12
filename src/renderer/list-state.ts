@@ -334,27 +334,9 @@ export class ListState<T extends {}> {
     return this.#offset;
   }
 
-  set offset(value: number) {
-    this.#writeScrollState(
-      {
-        offset: normalizeOffset(value),
-      },
-      "external",
-    );
-  }
-
   /** Anchor item index, or `undefined` to use the renderer default. */
   get position(): number | undefined {
     return this.#position;
-  }
-
-  set position(value: number | undefined) {
-    this.#writeScrollState(
-      {
-        position: normalizePosition(value),
-      },
-      "external",
-    );
   }
 
   /** Items currently managed by the renderer. */
@@ -541,19 +523,6 @@ export class ListState<T extends {}> {
   }
 
   /**
-   * Sets the current anchor item and pixel offset.
-   */
-  setAnchor(position: number, offset = 0): void {
-    this.#writeScrollState(
-      {
-        position: normalizePosition(position),
-        offset: normalizeOffset(offset),
-      },
-      "external",
-    );
-  }
-
-  /**
    * Replaces all items and clears scroll state.
    */
   reset(items: T[] = []): void {
@@ -569,17 +538,6 @@ export class ListState<T extends {}> {
       "internal",
     );
     emitListStateChange(this, { type: "reset" });
-  }
-
-  /** Clears the current scroll anchor while keeping the items. */
-  resetScroll(): void {
-    this.#writeScrollState(
-      {
-        position: undefined,
-        offset: 0,
-      },
-      "external",
-    );
   }
 
   /** Applies a relative pixel scroll delta. */
