@@ -12,6 +12,7 @@ import {
   type LayerAnimation,
   type ScalarAnimation,
 } from "../../src/renderer/virtualized/base-transition";
+import { resolveListViewport } from "../../src/renderer/virtualized/solver";
 
 type C = CanvasRenderingContext2D;
 type Item = { id: string };
@@ -113,6 +114,9 @@ function resolveVisibleWindow(
   });
 }
 
+const viewport100 = resolveListViewport(100, undefined);
+const viewport80 = resolveListViewport(80, undefined);
+
 describe("transition eligibility", () => {
   test("uses the matching snapshot when available and otherwise falls back to the live solved window", () => {
     const item = { id: "item" };
@@ -124,9 +128,10 @@ describe("transition eligibility", () => {
       },
       [0],
       [item],
-      100,
+      viewport100,
       { position: 0, offset: 0 },
       0,
+      readVisibleRange,
       readVisibleRange,
     );
 
@@ -139,7 +144,7 @@ describe("transition eligibility", () => {
         snapshot,
         hasActiveTransition: false,
         resolveVisibleWindow: resolveVisibleWindow([]),
-        readVisibleRange,
+        readOuterVisibleRange: readVisibleRange,
       }),
     ).toBe(true);
 
@@ -154,7 +159,7 @@ describe("transition eligibility", () => {
         resolveVisibleWindow: resolveVisibleWindow([
           { idx: 0, offset: 10, height: 20 },
         ]),
-        readVisibleRange,
+        readOuterVisibleRange: readVisibleRange,
       }),
     ).toBe(false);
 
@@ -167,7 +172,7 @@ describe("transition eligibility", () => {
         snapshot,
         hasActiveTransition: true,
         resolveVisibleWindow: resolveVisibleWindow([]),
-        readVisibleRange,
+        readOuterVisibleRange: readVisibleRange,
       }),
     ).toBe(false);
 
@@ -182,7 +187,7 @@ describe("transition eligibility", () => {
         resolveVisibleWindow: resolveVisibleWindow([
           { idx: 1, offset: 15, height: 25 },
         ]),
-        readVisibleRange,
+        readOuterVisibleRange: readVisibleRange,
       }),
     ).toBe(true);
 
@@ -197,7 +202,7 @@ describe("transition eligibility", () => {
         resolveVisibleWindow: resolveVisibleWindow([
           { idx: 1, offset: 140, height: 25 },
         ]),
-        readVisibleRange,
+        readOuterVisibleRange: readVisibleRange,
       }),
     ).toBe(false);
 
@@ -212,7 +217,7 @@ describe("transition eligibility", () => {
         resolveVisibleWindow: resolveVisibleWindow([
           { idx: 0, offset: 10, height: 20 },
         ]),
-        readVisibleRange,
+        readOuterVisibleRange: readVisibleRange,
       }),
     ).toBe(false);
   });
@@ -326,9 +331,10 @@ describe("visibility snapshot", () => {
       },
       [0, 1],
       [a, b],
-      80,
+      viewport80,
       { position: 1, offset: 5 },
       0,
+      readVisibleRange,
       readVisibleRange,
     );
 
@@ -354,9 +360,10 @@ describe("visibility snapshot", () => {
       },
       [],
       [],
-      80,
+      viewport80,
       { position: 0, offset: 0 },
       0,
+      readVisibleRange,
       readVisibleRange,
     );
 
@@ -453,9 +460,10 @@ describe("transition store lifecycle", () => {
       },
       [0],
       [item],
-      100,
+      viewport100,
       { position: 0, offset: 0 },
       0,
+      readVisibleRange,
       readVisibleRange,
     );
 

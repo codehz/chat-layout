@@ -9,9 +9,12 @@ import {
 } from "./anchor-model";
 import {
   normalizeVisibleState,
+  normalizeListPadding,
   resolveListLayoutOptions,
+  resolveListViewport,
   resolveVisibleWindow,
   type ListLayoutOptions,
+  type ListPadding,
   type NormalizedListState,
   type ResolvedListLayoutOptions,
   type VisibleListState,
@@ -32,11 +35,34 @@ export class ListRenderer<
   C extends CanvasRenderingContext2D,
   T extends {},
 > extends VirtualizedRenderer<C, T> {
-  readonly #layout: ResolvedListLayoutOptions;
+  #layout: ResolvedListLayoutOptions;
 
   constructor(graphics: C, options: ListRendererOptions<C, T>) {
     super(graphics, options);
     this.#layout = resolveListLayoutOptions(options);
+  }
+
+  get padding(): ListPadding {
+    return { ...this.#layout.padding };
+  }
+
+  set padding(value: ListPadding) {
+    const nextPadding = normalizeListPadding(value);
+    if (
+      nextPadding.top === this.#layout.padding.top &&
+      nextPadding.bottom === this.#layout.padding.bottom
+    ) {
+      return;
+    }
+
+    const anchor = this._readAnchorAt(performance.now());
+    this.#layout = {
+      ...this.#layout,
+      padding: nextPadding,
+    };
+    if (anchor != null) {
+      this._restoreAnchor(anchor);
+    }
   }
 
   protected _getLayoutOptions(): ResolvedListLayoutOptions {
@@ -50,7 +76,10 @@ export class ListRenderer<
     return resolveVisibleWindow(
       this.items,
       state,
-      this.graphics.canvas.clientHeight,
+      resolveListViewport(
+        this.graphics.canvas.clientHeight,
+        this.#layout.padding,
+      ),
       (item, idx) => this._resolveItem(item, idx, now),
       this.#layout,
     );
@@ -98,7 +127,10 @@ export class ListRenderer<
       index,
       block,
       this.#layout.anchorMode,
-      this.graphics.canvas.clientHeight,
+      resolveListViewport(
+        this.graphics.canvas.clientHeight,
+        this.#layout.padding,
+      ).contentHeight,
       this._getItemHeight.bind(this),
     );
   }

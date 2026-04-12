@@ -1,6 +1,10 @@
 import type { Box, Context, Node } from "../../types";
 import type { ControlledState } from "./base-types";
-import type { ResolvedListLayoutOptions, VisibleWindowResult } from "./solver";
+import type {
+  ListViewportMetrics,
+  ResolvedListLayoutOptions,
+  VisibleWindowResult,
+} from "./solver";
 
 export type VisibleRange = {
   top: number;
@@ -24,7 +28,12 @@ export type VirtualizedRuntime<
   offset: number;
   renderItem: (item: T) => Node<C>;
   measureNode: (node: Node<C>) => Box;
+  viewport: ListViewportMetrics;
   readVisibleRange: (top: number, height: number) => VisibleRange | undefined;
+  readOuterVisibleRange: (
+    top: number,
+    height: number,
+  ) => VisibleRange | undefined;
   resolveVisibleWindow: () => VisibleWindowResult<unknown>;
   resolveVisibleWindowForState: (
     state: ControlledState,

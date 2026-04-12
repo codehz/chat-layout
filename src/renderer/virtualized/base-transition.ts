@@ -1,7 +1,7 @@
 import type { ListStateChange } from "../list-state";
 import { getNow, getProgress } from "./base-animation";
 import type { ControlledState, VirtualizedResolvedItem } from "./base-types";
-import type { VisibleWindow } from "./solver";
+import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import {
   getTransitionedItemHeight,
   handleTransitionStateChange,
@@ -89,19 +89,24 @@ export class TransitionController<
     window: VisibleWindow<unknown>,
     resolutionPath: readonly number[],
     items: readonly T[],
-    viewportHeight: number,
+    viewport: ListViewportMetrics,
     snapshotState: ControlledState,
     extraShift: number,
     readVisibleRange: TransitionPlanningAdapter<C, T>["readVisibleRange"],
+    readOuterVisibleRange: TransitionPlanningAdapter<
+      C,
+      T
+    >["readOuterVisibleRange"],
   ): void {
     this.#snapshot.capture(
       window,
       resolutionPath,
       items,
-      viewportHeight,
+      viewport,
       snapshotState,
       extraShift,
       readVisibleRange,
+      readOuterVisibleRange,
     );
   }
 
@@ -331,7 +336,7 @@ export class TransitionController<
         continue;
       }
       return (
-        ctx.readVisibleRange(
+        ctx.readOuterVisibleRange(
           entry.offset + solution.window.shift + extraShift,
           entry.height,
         ) != null

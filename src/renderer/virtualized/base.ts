@@ -21,12 +21,14 @@ import {
   type VirtualizedRuntime,
 } from "./base-transition";
 import type {
+  ListViewportMetrics,
   NormalizedListState,
   ResolvedListLayoutOptions,
   VisibleListState,
   VisibleWindow,
   VisibleWindowResult,
 } from "./solver";
+import { resolveListViewport } from "./solver";
 
 /**
  * Options for programmatic scrolling to a target item.
@@ -280,14 +282,14 @@ export abstract class VirtualizedRenderer<
     feedback?: RenderFeedback,
   ): boolean {
     let result = false;
-    const viewportHeight = this.graphics.canvas.clientHeight;
+    const viewport = this._getViewportMetrics();
 
     for (const { idx, value: item, offset, height } of list) {
-      const y = offset + shift;
+      const y = offset + shift + viewport.contentTop;
       if (feedback != null) {
         this._accumulateRenderFeedback(feedback, idx, y, height);
       }
-      if (y + height < 0 || y > viewportHeight) {
+      if (y + height < 0 || y > viewport.outerHeight) {
         continue;
       }
       if (item.draw(y)) {
@@ -327,25 +329,46 @@ export abstract class VirtualizedRenderer<
     let topMostY = Number.POSITIVE_INFINITY;
     let bottomMostY = Number.NEGATIVE_INFINITY;
     const effectiveShift = window.shift + extraShift;
+    const viewport = this._getViewportMetrics();
 
     for (const { idx, offset, height } of window.drawList) {
       minIndex = Math.min(minIndex, idx);
       maxIndex = Math.max(maxIndex, idx);
-      const y = offset + effectiveShift;
+      const y = offset + effectiveShift + viewport.contentTop;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
     }
 
-    const viewportHeight = this.graphics.canvas.clientHeight;
     return {
-      top: minIndex === 0 && topMostY >= -Number.EPSILON,
+      top: minIndex === 0 && topMostY >= viewport.contentTop - Number.EPSILON,
       bottom:
         maxIndex === this.items.length - 1 &&
-        bottomMostY <= viewportHeight + Number.EPSILON,
+        bottomMostY <= viewport.contentBottom + Number.EPSILON,
     };
   }
 
   protected _readVisibleRange(
+    top: number,
+    height: number,
+  ): { top: number; bottom: number } | undefined {
+    if (!Number.isFinite(top) || !Number.isFinite(height) || height <= 0) {
+      return undefined;
+    }
+
+    const viewport = this._getViewportMetrics();
+    const visibleTop = clamp(viewport.contentTop - top, 0, height);
+    const visibleBottom = clamp(viewport.contentBottom - top, 0, height);
+    if (visibleBottom <= visibleTop) {
+      return undefined;
+    }
+
+    return {
+      top: visibleTop,
+      bottom: visibleBottom,
+    };
+  }
+
+  protected _readOuterVisibleRange(
     top: number,
     height: number,
   ): { top: number; bottom: number } | undefined {
@@ -382,8 +405,9 @@ export abstract class VirtualizedRenderer<
     test: HitTest,
     extraShift = 0,
   ): boolean {
+    const viewport = this._getViewportMetrics();
     for (const { value: item, offset, height } of window.drawList) {
-      const y = offset + window.shift + extraShift;
+      const y = offset + window.shift + extraShift + viewport.contentTop;
       if (test.y < y || test.y >= y + height) {
         continue;
       }
@@ -397,14 +421,16 @@ export abstract class VirtualizedRenderer<
     extraShift = 0,
   ): void {
     const normalizedState = this._normalizeListState(this._readListState());
+    const viewport = this._getViewportMetrics();
     this.#transitionController.captureVisibilitySnapshot(
       solution.window,
       solution.resolutionPath,
       this.items,
-      this.graphics.canvas.clientHeight,
+      viewport,
       normalizedState,
       extraShift,
       this._readVisibleRange.bind(this),
+      this._readOuterVisibleRange.bind(this),
     );
   }
 
@@ -502,6 +528,13 @@ export abstract class VirtualizedRenderer<
     block: NonNullable<JumpToOptions["block"]>,
   ): number;
 
+  protected _getViewportMetrics(): ListViewportMetrics {
+    return resolveListViewport(
+      this.graphics.canvas.clientHeight,
+      this._getLayoutOptions().padding,
+    );
+  }
+
   #handleDeleteComplete(item: T): void {
     this.options.list.finalizeDelete(item);
   }
@@ -517,13 +550,16 @@ export abstract class VirtualizedRenderer<
   }
 
   #getVirtualizedRuntime(): VirtualizedRuntime<C, T> {
+    const viewport = this._getViewportMetrics();
     return {
       items: this.items,
       position: this.position,
       offset: this.offset,
       renderItem: this.options.renderItem,
       measureNode: this.measureRootNode.bind(this),
+      viewport,
       readVisibleRange: this._readVisibleRange.bind(this),
+      readOuterVisibleRange: this._readOuterVisibleRange.bind(this),
       resolveVisibleWindow: () => this._resolveVisibleWindow(getNow()),
       resolveVisibleWindowForState: (state, now) =>
         this._resolveVisibleWindowForState(state, now),

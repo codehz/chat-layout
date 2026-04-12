@@ -25,6 +25,7 @@ class PipelineProbeRenderer extends VirtualizedRenderer<C, number> {
   readonly #layout: ResolvedListLayoutOptions = {
     anchorMode: "top",
     underflowAlign: "top",
+    padding: { top: 0, bottom: 0 },
   };
 
   protected _getLayoutOptions(): ResolvedListLayoutOptions {

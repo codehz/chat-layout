@@ -4,6 +4,7 @@ import {
   ListRenderer,
   ListState,
   memoRenderItem,
+  type ListPadding,
   type ListUnderflowAlign,
 } from "../../src/renderer";
 import type { Box, Context, HitTest, Node } from "../../src/types";
@@ -65,6 +66,7 @@ function createTopRenderer(
   hits: string[] = [],
   viewportHeight = 120,
   underflowAlign: ListUnderflowAlign = "top",
+  padding?: ListPadding,
 ): { list: ListState<Item>; renderer: ListRenderer<C, Item> } {
   const list = new ListState<Item>(items);
   const renderItem = memoRenderItem<C, Item>((item) =>
@@ -73,6 +75,7 @@ function createTopRenderer(
   const renderer = new ListRenderer(createGraphics(viewportHeight), {
     anchorMode: "top",
     underflowAlign,
+    padding,
     list,
     renderItem,
   });
@@ -85,6 +88,7 @@ function createBottomRenderer(
   hits: string[] = [],
   viewportHeight = 120,
   underflowAlign: ListUnderflowAlign = "top",
+  padding?: ListPadding,
 ): { list: ListState<Item>; renderer: ListRenderer<C, Item> } {
   const list = new ListState<Item>(items);
   const renderItem = memoRenderItem<C, Item>((item) =>
@@ -93,6 +97,7 @@ function createBottomRenderer(
   const renderer = new ListRenderer(createGraphics(viewportHeight), {
     anchorMode: "bottom",
     underflowAlign,
+    padding,
     list,
     renderItem,
   });
@@ -390,6 +395,38 @@ describe("update animation", () => {
       expect(draws.find((draw) => draw.id === "middle-new")?.y).toBeCloseTo(
         -10,
       );
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("updates keep animating when the slot is only visible in bottom padding", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const oldItem = { id: "old", height: 20 };
+      const { list, renderer } = createTopRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, oldItem],
+        draws,
+        [],
+        100,
+        "top",
+        { bottom: 20 },
+      );
+
+      renderer.render();
+      list.update(oldItem, { id: "new", height: 20 }, { duration: 100 });
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.map((draw) => draw.id)).toContain("old");
+      expect(draws.map((draw) => draw.id)).toContain("new");
+      expect(draws.find((draw) => draw.id === "old")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "old")?.alpha).toBeCloseTo(0.5);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
     } finally {
       restoreNow();
     }
@@ -1112,6 +1149,53 @@ describe("update animation", () => {
     }
   });
 
+  test("pushAll animates into bottom padding without moving filled content viewport", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const { list, renderer } = createTopRenderer(
+        [
+          { id: "head", height: 40 },
+          { id: "tail", height: 40 },
+        ],
+        draws,
+        [],
+        100,
+        "top",
+        { bottom: 20 },
+      );
+
+      renderer.render();
+
+      draws.length = 0;
+      list.pushAll([{ id: "new", height: 20 }], {
+        duration: 100,
+        distance: 24,
+      });
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "new")).toBeUndefined();
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "head")?.y).toBeCloseTo(0);
+      expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(40);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(92);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(0.5);
+
+      now.current = 100;
+      draws.length = 0;
+      expect(renderer.render()).toBe(false);
+      expect(draws.find((draw) => draw.id === "new")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "new")?.alpha).toBeCloseTo(1);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("rendered empty lists animate the first pushAll and unshiftAll from their insertion direction", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -1480,6 +1564,34 @@ describe("delete animation", () => {
       expect(renderer.render()).toBe(false);
       expect(draws.map((draw) => draw.id)).toEqual(["tail"]);
       expect(draws.find((draw) => draw.id === "tail")?.y).toBeCloseTo(0);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("delete ghosts stay visible while fading inside bottom padding", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "ghost", height: 20 };
+      const { list, renderer } = createTopRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, item],
+        draws,
+        [],
+        100,
+        "top",
+        { bottom: 20 },
+      );
+
+      renderer.render();
+      list.delete(item, { duration: 100 });
+
+      now.current = 50;
+      draws.length = 0;
+      expect(renderer.render()).toBe(true);
+      expect(draws.find((draw) => draw.id === "ghost")?.y).toBeCloseTo(80);
+      expect(draws.find((draw) => draw.id === "ghost")?.alpha).toBeCloseTo(0.5);
     } finally {
       restoreNow();
     }

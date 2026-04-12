@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   ListRenderer,
   ListState,
+  type ListPadding,
   type ListUnderflowAlign,
 } from "../../src/renderer";
 import type { ListAnchorMode } from "../../src/renderer";
@@ -30,6 +31,7 @@ function createRenderer<T extends {}>(
   options: {
     anchorMode: ListAnchorMode;
     underflowAlign?: ListUnderflowAlign;
+    padding?: ListPadding;
     list: ListState<T>;
     renderItem: (item: T) => Node<C>;
   },
@@ -403,5 +405,48 @@ describe("virtualized visible window", () => {
 
     expect(feedback.canAutoFollowTop).toBe(true);
     expect(feedback.canAutoFollowBottom).toBe(true);
+  });
+
+  test("padding areas still draw content and allow hittest while feedback only counts the content viewport", () => {
+    const hits: ProbeHit[] = [];
+    const list = new ListState<number>();
+    list.push(50, 50);
+
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      padding: { top: 10, bottom: 10 },
+      list,
+      renderItem: (height) => createHitNode(height, hits),
+    });
+
+    const feedback = createFeedback();
+    renderer.render(feedback);
+
+    expect(renderer.hittest({ x: 10, y: 95, type: "click" })).toBe(true);
+    expect(hits.at(-1)).toEqual({ x: 10, y: 35 });
+    expect(feedback.minIdx).toBe(0);
+    expect(feedback.maxIdx).toBe(1);
+    expect(feedback.min).toBeCloseTo(0);
+    expect(feedback.max).toBeCloseTo(1.6);
+  });
+
+  test("collapsed content viewport still allows draw and hittest through padding while feedback stays empty", () => {
+    const hits: ProbeHit[] = [];
+    const list = new ListState<number>();
+    list.push(30);
+
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      padding: { top: 60, bottom: 50 },
+      list,
+      renderItem: (height) => createHitNode(height, hits),
+    });
+
+    const feedback = createFeedback();
+    renderer.render(feedback);
+
+    expect(renderer.hittest({ x: 10, y: 70, type: "click" })).toBe(true);
+    expect(hits.at(-1)).toEqual({ x: 10, y: 10 });
+    expectNaNFeedback(feedback);
   });
 });

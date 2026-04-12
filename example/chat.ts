@@ -505,6 +505,7 @@ const renderer = new ListRenderer(ctx, {
   renderItem,
   list,
 });
+renderer.padding = { top: 32, bottom: 32 };
 let nextMessageId = list.items.length + 1;
 
 function drawFrame(): void {
@@ -519,6 +520,11 @@ function drawFrame(): void {
   renderer.render(feedback);
 
   ctx.save();
+
+  ctx.fillStyle = "rgba(255, 0, 255, 0.5)";
+  ctx.fillRect(0, 0, canvas.clientWidth, 32);
+  ctx.fillRect(0, canvas.clientHeight - 32, canvas.clientWidth, 32);
+
   ctx.textBaseline = "top";
   ctx.font = "12px system-ui";
   ctx.fillStyle = "black";

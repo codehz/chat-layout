@@ -1,6 +1,6 @@
 import type { ControlledState } from "./base-types";
 import { sameState } from "./base-animation";
-import type { VisibleWindow } from "./solver";
+import type { ListViewportMetrics, VisibleWindow } from "./solver";
 import type {
   BoundaryInsertDirection,
   VisibleRange,
@@ -29,6 +29,10 @@ export class VisibilitySnapshot<T extends {}> {
     return (
       this.#hasSnapshot && this.#snapshotState != null && this.#coversShortList
     );
+  }
+
+  get hasSnapshot(): boolean {
+    return this.#hasSnapshot;
   }
 
   get topGap(): number {
@@ -75,10 +79,14 @@ export class VisibilitySnapshot<T extends {}> {
     window: VisibleWindow<unknown>,
     _resolutionPath: readonly number[],
     items: readonly T[],
-    viewportHeight: number,
+    viewport: ListViewportMetrics,
     snapshotState: ControlledState,
     extraShift: number,
     readVisibleRange: (top: number, height: number) => VisibleRange | undefined,
+    readOuterVisibleRange: (
+      top: number,
+      height: number,
+    ) => VisibleRange | undefined,
   ): void {
     this.#previousVisibleItems = this.#visibleItems;
     this.#previousSnapshotState = this.#snapshotState;
@@ -97,17 +105,25 @@ export class VisibilitySnapshot<T extends {}> {
     const effectiveShift = window.shift + extraShift;
 
     for (const { idx, offset, height } of window.drawList) {
-      minVisibleIndex = Math.min(minVisibleIndex, idx);
-      maxVisibleIndex = Math.max(maxVisibleIndex, idx);
-      nextMinDrawnIndex = Math.min(nextMinDrawnIndex, idx);
-      nextMaxDrawnIndex = Math.max(nextMaxDrawnIndex, idx);
       const y = offset + effectiveShift;
       topMostY = Math.min(topMostY, y);
       bottomMostY = Math.max(bottomMostY, y + height);
 
       const item = items[idx];
-      if (item != null) {
+      if (item != null && readOuterVisibleRange(y, height) != null) {
         nextDrawnItems.add(item);
+        nextMinDrawnIndex = Math.min(nextMinDrawnIndex, idx);
+        nextMaxDrawnIndex = Math.max(nextMaxDrawnIndex, idx);
+      }
+      if (item == null) {
+        continue;
+      }
+
+      const visibleRange = readVisibleRange(y, height);
+      if (visibleRange != null) {
+        minVisibleIndex = Math.min(minVisibleIndex, idx);
+        maxVisibleIndex = Math.max(maxVisibleIndex, idx);
+        nextVisibleItems.add(item);
         if (y < nextTopBoundaryY) {
           nextTopBoundaryY = y;
           nextTopBoundaryItem = item;
@@ -117,10 +133,6 @@ export class VisibilitySnapshot<T extends {}> {
           nextBottomBoundaryItem = item;
         }
       }
-      if (item == null || readVisibleRange(y, height) == null) {
-        continue;
-      }
-      nextVisibleItems.add(item);
     }
 
     this.#drawnItems = nextDrawnItems;
@@ -144,23 +156,25 @@ export class VisibilitySnapshot<T extends {}> {
       window.drawList.length === items.length &&
       minVisibleIndex === 0 &&
       maxVisibleIndex === items.length - 1 &&
-      topMostY >= -Number.EPSILON &&
-      bottomMostY <= viewportHeight + Number.EPSILON &&
-      contentHeight < viewportHeight - Number.EPSILON;
-    this.#topGap = this.#coversShortList ? Math.max(0, topMostY) : 0;
+      topMostY >= viewport.contentTop - Number.EPSILON &&
+      bottomMostY <= viewport.contentBottom + Number.EPSILON &&
+      contentHeight < viewport.contentHeight - Number.EPSILON;
+    this.#topGap = this.#coversShortList
+      ? Math.max(0, topMostY - viewport.contentTop)
+      : 0;
     this.#bottomGap = this.#coversShortList
-      ? Math.max(0, viewportHeight - bottomMostY)
+      ? Math.max(0, viewport.contentBottom - bottomMostY)
       : 0;
     this.#atStartBoundary =
       window.drawList.length > 0 &&
       items.length > 0 &&
       minVisibleIndex === 0 &&
-      topMostY >= -Number.EPSILON;
+      topMostY >= viewport.contentTop - Number.EPSILON;
     this.#atEndBoundary =
       window.drawList.length > 0 &&
       items.length > 0 &&
       maxVisibleIndex === items.length - 1 &&
-      bottomMostY <= viewportHeight + Number.EPSILON;
+      bottomMostY <= viewport.contentBottom + Number.EPSILON;
   }
 
   matchesCurrentState(position: number | undefined, offset: number): boolean {

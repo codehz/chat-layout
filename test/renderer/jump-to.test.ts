@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { ListRenderer, ListState, memoRenderItem } from "../../src/renderer";
+import {
+  ListRenderer,
+  ListState,
+  memoRenderItem,
+  type ListPadding,
+} from "../../src/renderer";
 import type { ListAnchorMode } from "../../src/renderer";
 import type {
   Box,
@@ -18,16 +23,37 @@ import {
 } from "../helpers/renderer-fixtures";
 
 type C = CanvasRenderingContext2D;
+type DrawProbe = { id: string; y: number };
 
 function createRenderer<T extends {}>(
   viewportHeight: number,
   options: {
     anchorMode: ListAnchorMode;
+    padding?: ListPadding;
     list: ListState<T>;
     renderItem: (item: T) => Node<C>;
   },
 ): ListRenderer<C, T> {
   return new ListRenderer(createGraphics(viewportHeight), options);
+}
+
+function createProbeNode(
+  id: string,
+  height: number,
+  draws: DrawProbe[],
+): Node<C> {
+  return {
+    measure(_ctx: Context<C>): Box {
+      return { width: 320, height };
+    },
+    draw(_ctx: Context<C>, _x: number, y: number): boolean {
+      draws.push({ id, y });
+      return false;
+    },
+    hittest(_ctx: Context<C>, _test: HitTest): boolean {
+      return false;
+    },
+  };
 }
 
 function smoothstep(value: number): number {
@@ -375,6 +401,60 @@ describe("jumpTo", () => {
     );
     expect(Number.isFinite(chatList.position)).toBe(true);
     expect(Number.isFinite(chatList.offset)).toBe(true);
+  });
+
+  test("jump blocks align against the padded content viewport", () => {
+    const draws: DrawProbe[] = [];
+    const list = new ListState([
+      { id: "a", height: 30 },
+      { id: "b", height: 30 },
+      { id: "c", height: 30 },
+      { id: "d", height: 30 },
+      { id: "e", height: 30 },
+    ]);
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      padding: { top: 20, bottom: 10 },
+      list,
+      renderItem: (item) => createProbeNode(item.id, item.height, draws),
+    });
+
+    renderer.jumpTo(1, { animated: false, block: "start" });
+    renderer.render();
+    expect(draws.find((draw) => draw.id === "b")?.y).toBeCloseTo(20);
+
+    draws.length = 0;
+    renderer.jumpTo(2, { animated: false, block: "end" });
+    renderer.render();
+    expect(draws.find((draw) => draw.id === "c")?.y).toBeCloseTo(60);
+  });
+
+  test("changing padding keeps the visual anchor inside the content viewport", () => {
+    const draws: DrawProbe[] = [];
+    const list = new ListState([
+      { id: "a", height: 40 },
+      { id: "b", height: 40 },
+      { id: "c", height: 40 },
+    ]);
+    list.applyScroll(-10);
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      list,
+      renderItem: (item) => createProbeNode(item.id, item.height, draws),
+    });
+
+    renderer.render();
+    const before = draws.find((draw) => draw.id === "a")?.y;
+
+    draws.length = 0;
+    renderer.padding = { top: 15, bottom: 5 };
+    renderer.render();
+    const after = draws.find((draw) => draw.id === "a")?.y;
+
+    expect(before).toBeCloseTo(-10);
+    expect(after).toBeCloseTo(5);
+    expect(list.position).toBe(0);
+    expect(list.offset).toBeCloseTo(-10);
   });
 
   test("jumpTo onComplete runs immediately for non-animated success", () => {

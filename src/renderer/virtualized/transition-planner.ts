@@ -151,21 +151,21 @@ function resolveAnimationEligibility<T extends {}>(params: {
   snapshot: VisibilitySnapshot<T>;
   hasActiveTransition: boolean;
   resolveVisibleWindow: () => VisibleWindowResult<unknown>;
-  readVisibleRange: TransitionPlanningAdapter<
+  readOuterVisibleRange: TransitionPlanningAdapter<
     CanvasRenderingContext2D,
     {}
-  >["readVisibleRange"];
+  >["readOuterVisibleRange"];
 }): boolean {
   if (params.index < 0) {
     return false;
   }
   if (params.snapshot.matchesCurrentState(params.position, params.offset)) {
-    return params.snapshot.isVisible(params.item);
+    return params.snapshot.tracks(params.item, "drawn");
   }
   return isIndexVisible(
     params.index,
     params.resolveVisibleWindow,
-    params.readVisibleRange,
+    params.readOuterVisibleRange,
   );
 }
 
@@ -177,12 +177,42 @@ export function canAnimateExistingItem<T extends {}>(params: {
   snapshot: VisibilitySnapshot<T>;
   hasActiveTransition: boolean;
   resolveVisibleWindow: () => VisibleWindowResult<unknown>;
-  readVisibleRange: TransitionPlanningAdapter<
+  readOuterVisibleRange: TransitionPlanningAdapter<
     CanvasRenderingContext2D,
     {}
-  >["readVisibleRange"];
+  >["readOuterVisibleRange"];
 }): boolean {
   return resolveAnimationEligibility(params);
+}
+
+function hasVisibleBoundaryInsertItems<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  direction: BoundaryInsertDirection,
+  count: number,
+  ctx: TransitionPlanningAdapter<C, T>,
+): boolean {
+  if (count <= 0) {
+    return false;
+  }
+  const start = direction === "push" ? ctx.items.length - count : 0;
+  const end =
+    direction === "push" ? ctx.items.length : Math.min(count, ctx.items.length);
+  if (start < 0 || end <= start) {
+    return false;
+  }
+
+  const solution = ctx.resolveVisibleWindow();
+  return solution.window.drawList.some(
+    (entry) =>
+      entry.idx >= start &&
+      entry.idx < end &&
+      ctx.readOuterVisibleRange(
+        entry.offset + solution.window.shift,
+        entry.height,
+      ) != null,
+  );
 }
 
 export function resolveBoundaryInsertStrategy(
@@ -313,7 +343,7 @@ function planExistingItemTransition<C extends CanvasRenderingContext2D>(
         params.now,
         params.duration,
       ),
-      retention: "visible",
+      retention: "drawn",
     };
   }
 
@@ -326,7 +356,7 @@ function planExistingItemTransition<C extends CanvasRenderingContext2D>(
       params.now,
       params.duration,
     ),
-    retention: "visible",
+    retention: "drawn",
   };
 }
 
@@ -543,7 +573,7 @@ export function planUpdateTransition<
       snapshot,
       hasActiveTransition: store.has(prevItem),
       resolveVisibleWindow: ctx.resolveVisibleWindow,
-      readVisibleRange: ctx.readVisibleRange,
+      readOuterVisibleRange: ctx.readOuterVisibleRange,
     }),
     now,
     currentVisualState,
@@ -576,7 +606,7 @@ export function planDeleteTransition<
       snapshot,
       hasActiveTransition: store.has(item),
       resolveVisibleWindow: ctx.resolveVisibleWindow,
-      readVisibleRange: ctx.readVisibleRange,
+      readOuterVisibleRange: ctx.readOuterVisibleRange,
     }),
     now,
     currentVisualState,
@@ -615,7 +645,10 @@ export function planBoundaryInsertTransition<
           ctx.offset,
         )
       ? "item-enter"
-      : "hard-cut";
+      : snapshot.hasSnapshot &&
+          hasVisibleBoundaryInsertItems(direction, count, ctx)
+        ? "item-enter"
+        : "hard-cut";
   if (strategy === "hard-cut") {
     return undefined;
   }

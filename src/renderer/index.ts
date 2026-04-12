@@ -15,5 +15,6 @@ export type { ListRendererOptions } from "./virtualized/list";
 export type {
   ListAnchorMode,
   ListLayoutOptions,
+  ListPadding,
   ListUnderflowAlign,
 } from "./virtualized/solver";
