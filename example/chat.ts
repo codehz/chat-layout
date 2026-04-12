@@ -531,9 +531,15 @@ function drawFrame(): void {
   ctx.strokeStyle = "white";
   ctx.lineWidth = 4;
   ctx.lineJoin = "round";
-  const text = JSON.stringify(feedback);
-  ctx.strokeText(text, 10, 10);
-  ctx.fillText(text, 10, 10);
+  const lines = Object.entries(feedback).map(
+    ([key, value]) => `${key}: ${String(value)}`,
+  );
+  const lineHeight = 14;
+  for (const [index, line] of lines.entries()) {
+    const y = 10 + index * lineHeight;
+    ctx.strokeText(line, 10, y);
+    ctx.fillText(line, 10, y);
+  }
   ctx.restore();
 
   requestAnimationFrame(drawFrame);
