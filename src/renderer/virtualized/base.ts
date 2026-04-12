@@ -2,8 +2,10 @@ import type { HitTest, Node, RenderFeedback } from "../../types";
 import { BaseRenderer } from "../base";
 import {
   ListState,
+  readListScrollMutation,
   subscribeListState,
   type ListStateChange,
+  writeInternalListScrollState,
 } from "../list-state";
 import { clamp, getNow } from "./base-animation";
 import type {
@@ -79,6 +81,7 @@ export abstract class VirtualizedRenderer<
       jumpDurationPerPixel: VirtualizedRenderer.JUMP_DURATION_PER_PIXEL,
       getItemCount: () => this.items.length,
       readListState: this._readListState.bind(this),
+      readScrollMutation: () => readListScrollMutation(this.options.list),
       normalizeListState: this._normalizeListState.bind(this),
       readAnchor: (state) =>
         this._readAnchor(state, this._getItemHeight.bind(this)),
@@ -199,8 +202,7 @@ export abstract class VirtualizedRenderer<
   }
 
   protected _commitListState(state: NormalizedListState): void {
-    this.position = state.position;
-    this.offset = state.offset;
+    writeInternalListScrollState(this.options.list, state);
     this.#jumpController.commit(state);
   }
 

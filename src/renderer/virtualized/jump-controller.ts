@@ -1,5 +1,6 @@
 import type {
   InsertListItemsAnimationOptions,
+  ListScrollMutation,
   ListStateChange,
 } from "../list-state";
 import {
@@ -8,7 +9,6 @@ import {
   getAnchorAtDistance,
   getNow,
   getProgress,
-  sameState,
   smoothstep,
 } from "./base-animation";
 import type {
@@ -35,12 +35,27 @@ type BoundaryFollowChange<T extends {}> = {
   animation: InsertListItemsAnimationOptions | undefined;
 };
 
+type AutoFollowRecomputeReason =
+  | "init"
+  | "manual-scroll"
+  | "viewport-width-change"
+  | "reset"
+  | "set"
+  | "transition-settle";
+
+type AutoFollowSetReason =
+  | `strict-recompute:${AutoFollowRecomputeReason}`
+  | "jump-to-boundary"
+  | "jump-to-boundary-settle"
+  | "jump-to-boundary-instant";
+
 export interface JumpControllerOptions<T extends {}> {
   minJumpDuration: number;
   maxJumpDuration: number;
   jumpDurationPerPixel: number;
   getItemCount: () => number;
   readListState: () => ControlledState;
+  readScrollMutation: () => ListScrollMutation;
   normalizeListState: (state: ControlledState) => NormalizedListState;
   readAnchor: (state: NormalizedListState) => number;
   applyAnchor: (anchor: number) => void;
@@ -55,35 +70,23 @@ export class JumpController<T extends {}> {
   #canAutoFollowBottom = false;
   #pendingAutoFollowRecomputeTop = true;
   #pendingAutoFollowRecomputeBottom = true;
+  #pendingAutoFollowRecomputeReasonTop: AutoFollowRecomputeReason = "init";
+  #pendingAutoFollowRecomputeReasonBottom: AutoFollowRecomputeReason = "init";
   #lastViewportWidth: number | undefined;
-  #controlledState: ControlledState | undefined;
+  #lastHandledScrollMutationVersion: number;
   #jumpAnimation: JumpAnimation | undefined;
-  #lastCommittedState: ControlledState | undefined;
-  #hasPendingListChange = false;
   #pendingPostJumpBoundary: AutoFollowBoundary | undefined;
   #pendingPostJumpBoundaryBlocked = false;
   readonly #options: JumpControllerOptions<T>;
 
   constructor(options: JumpControllerOptions<T>) {
     this.#options = options;
+    this.#lastHandledScrollMutationVersion =
+      this.#options.readScrollMutation().version;
   }
 
   beforeFrame(): void {
-    const currentState = this.#options.readListState();
-    if (
-      !this.#hasPendingListChange &&
-      this.#lastCommittedState != null &&
-      !sameState(
-        this.#lastCommittedState,
-        currentState.position,
-        currentState.offset,
-      )
-    ) {
-      this.#cancelJumpAnimation();
-      this.#clearPendingPostJumpBoundary();
-      this.#markAutoFollowRecompute();
-    }
-    this.#hasPendingListChange = false;
+    this.#handlePendingExternalScrollMutation();
   }
 
   noteViewportWidth(width: number): void {
@@ -99,30 +102,19 @@ export class JumpController<T extends {}> {
     }
     this.#lastViewportWidth = width;
     this.#clearPendingPostJumpBoundary();
-    this.#markAutoFollowRecompute();
+    this.#markAutoFollowRecompute(undefined, "viewport-width-change");
   }
 
   prepare(now: number): boolean {
+    if (this.#handlePendingExternalScrollMutation()) {
+      return false;
+    }
     const animation = this.#jumpAnimation;
     if (animation == null) {
       return false;
     }
     if (this.#options.getItemCount() === 0) {
       this.#cancelJumpAnimation();
-      return false;
-    }
-    const currentState = this.#options.readListState();
-    if (
-      this.#controlledState != null &&
-      !sameState(
-        this.#controlledState,
-        currentState.position,
-        currentState.offset,
-      )
-    ) {
-      this.#clearPendingPostJumpBoundary();
-      this.#cancelJumpAnimation();
-      this.#markAutoFollowRecompute();
       return false;
     }
 
@@ -139,7 +131,10 @@ export class JumpController<T extends {}> {
       this.#pendingPostJumpBoundary != null &&
       !this.#pendingPostJumpBoundaryBlocked
     ) {
-      this.#armAutoFollowBoundary(this.#pendingPostJumpBoundary);
+      this.#armAutoFollowBoundary(
+        this.#pendingPostJumpBoundary,
+        "jump-to-boundary-settle",
+      );
     }
     return animation.needsMoreFrames;
   }
@@ -151,7 +146,6 @@ export class JumpController<T extends {}> {
     }
 
     if (animation.needsMoreFrames) {
-      this.#controlledState = this.#options.readListState();
       return true;
     }
 
@@ -163,17 +157,16 @@ export class JumpController<T extends {}> {
     this.#cancelJumpAnimation();
     this.#clearPendingPostJumpBoundary();
     if (boundary != null) {
-      this.#armAutoFollowBoundary(boundary);
+      this.#armAutoFollowBoundary(boundary, "jump-to-boundary-settle");
     }
     onComplete?.();
     return requestRedraw || this.#jumpAnimation != null;
   }
 
   commit(state: ControlledState): void {
-    this.#lastCommittedState = {
-      position: state.position,
-      offset: state.offset,
-    };
+    void state;
+    this.#lastHandledScrollMutationVersion =
+      this.#options.readScrollMutation().version;
   }
 
   jumpTo(index: number, options: JumpOptions = {}): void {
@@ -190,7 +183,7 @@ export class JumpController<T extends {}> {
     options: JumpOptions = {},
   ): void {
     this.#clearPendingPostJumpBoundary();
-    this.#armAutoFollowBoundary(boundary);
+    this.#armAutoFollowBoundary(boundary, "jump-to-boundary");
     if (this.#options.getItemCount() === 0) {
       this.#cancelJumpAnimation();
       return;
@@ -208,11 +201,19 @@ export class JumpController<T extends {}> {
     capabilities: AutoFollowCapabilities,
   ): AutoFollowCapabilities {
     if (this.#pendingAutoFollowRecomputeTop) {
-      this.#canAutoFollowTop = capabilities.top;
+      this.#setAutoFollowBoundary(
+        "top",
+        capabilities.top,
+        `strict-recompute:${this.#pendingAutoFollowRecomputeReasonTop}`,
+      );
       this.#pendingAutoFollowRecomputeTop = false;
     }
     if (this.#pendingAutoFollowRecomputeBottom) {
-      this.#canAutoFollowBottom = capabilities.bottom;
+      this.#setAutoFollowBoundary(
+        "bottom",
+        capabilities.bottom,
+        `strict-recompute:${this.#pendingAutoFollowRecomputeReasonBottom}`,
+      );
       this.#pendingAutoFollowRecomputeBottom = false;
     }
     return this.getAutoFollowCapabilities();
@@ -226,18 +227,17 @@ export class JumpController<T extends {}> {
   }
 
   markAutoFollowForTransitionSettle(): void {
-    this.#clearPendingPostJumpBoundary();
-    this.#markAutoFollowRecompute();
+    this.#markAutoFollowRecompute(undefined, "transition-settle");
   }
 
   handleListStateChange(change: ListStateChange<T>): ListStateChange<T> {
-    this.#hasPendingListChange = true;
     switch (change.type) {
       case "reset":
       case "set":
         this.#cancelJumpAnimation();
         this.#clearPendingPostJumpBoundary();
-        this.#markAutoFollowRecompute();
+        this.#syncScrollMutationVersion();
+        this.#markAutoFollowRecompute(undefined, change.type);
         return change;
       case "push":
       case "unshift":
@@ -250,21 +250,13 @@ export class JumpController<T extends {}> {
   #handleBoundaryInsert(
     change: Extract<ListStateChange<T>, { type: "push" } | { type: "unshift" }>,
   ): ListStateChange<T> {
+    if (this.#handlePendingExternalScrollMutation()) {
+      return change;
+    }
     const followChange = this.#resolveAutoFollowChange(change);
     const boundary = change.type === "push" ? "bottom" : "top";
-    const matchesCommittedState =
-      this.#matchesLastCommittedStateAfterBoundaryInsert(
-        change.type,
-        change.count,
-      );
     if (this.#pendingPostJumpBoundary === boundary) {
       this.#pendingPostJumpBoundaryBlocked = true;
-    }
-    if (!matchesCommittedState) {
-      this.#cancelJumpAnimation();
-      this.#clearPendingPostJumpBoundary();
-      this.#markAutoFollowRecompute();
-      return change;
     }
     if (
       followChange == null ||
@@ -291,7 +283,6 @@ export class JumpController<T extends {}> {
 
   #cancelJumpAnimation(): void {
     this.#jumpAnimation = undefined;
-    this.#controlledState = undefined;
   }
 
   #startJumpToIndex(index: number, options: JumpOptions): void {
@@ -317,7 +308,7 @@ export class JumpController<T extends {}> {
       this.#cancelJumpAnimation();
       this.#options.applyAnchor(targetAnchor);
       if (settleBoundary != null) {
-        this.#armAutoFollowBoundary(settleBoundary);
+        this.#armAutoFollowBoundary(settleBoundary, "jump-to-boundary-instant");
       }
       options.onComplete?.();
       return;
@@ -328,7 +319,7 @@ export class JumpController<T extends {}> {
       this.#cancelJumpAnimation();
       this.#options.applyAnchor(targetAnchor);
       if (settleBoundary != null) {
-        this.#armAutoFollowBoundary(settleBoundary);
+        this.#armAutoFollowBoundary(settleBoundary, "jump-to-boundary-instant");
       }
       options.onComplete?.();
       return;
@@ -352,7 +343,7 @@ export class JumpController<T extends {}> {
       this.#cancelJumpAnimation();
       this.#options.applyAnchor(targetAnchor);
       if (settleBoundary != null) {
-        this.#armAutoFollowBoundary(settleBoundary);
+        this.#armAutoFollowBoundary(settleBoundary, "jump-to-boundary-instant");
       }
       options.onComplete?.();
       return;
@@ -370,7 +361,6 @@ export class JumpController<T extends {}> {
       needsMoreFrames: true,
       onComplete: options.onComplete,
     };
-    this.#controlledState = this.#options.readListState();
   }
 
   #resolveBoundaryLatchTarget(
@@ -416,50 +406,35 @@ export class JumpController<T extends {}> {
       : this.#canAutoFollowBottom;
   }
 
-  #armAutoFollowBoundary(boundary: AutoFollowBoundary): void {
+  #armAutoFollowBoundary(
+    boundary: AutoFollowBoundary,
+    reason: AutoFollowSetReason,
+  ): void {
+    this.#setAutoFollowBoundary(boundary, true, reason);
     if (boundary === "top") {
-      this.#canAutoFollowTop = true;
       this.#pendingAutoFollowRecomputeTop = false;
       return;
     }
-    this.#canAutoFollowBottom = true;
     this.#pendingAutoFollowRecomputeBottom = false;
   }
 
-  #markAutoFollowRecompute(boundary?: AutoFollowBoundary): void {
+  #markAutoFollowRecompute(
+    boundary: AutoFollowBoundary | undefined,
+    reason: AutoFollowRecomputeReason,
+  ): void {
     if (boundary == null || boundary === "top") {
       this.#pendingAutoFollowRecomputeTop = true;
+      this.#pendingAutoFollowRecomputeReasonTop = reason;
     }
     if (boundary == null || boundary === "bottom") {
       this.#pendingAutoFollowRecomputeBottom = true;
+      this.#pendingAutoFollowRecomputeReasonBottom = reason;
     }
   }
 
   #clearPendingPostJumpBoundary(): void {
     this.#pendingPostJumpBoundary = undefined;
     this.#pendingPostJumpBoundaryBlocked = false;
-  }
-
-  #matchesLastCommittedStateAfterBoundaryInsert(
-    direction: "push" | "unshift",
-    count: number,
-  ): boolean {
-    const state = this.#lastCommittedState;
-    if (state == null) {
-      return false;
-    }
-    const currentState = this.#options.readListState();
-    return sameState(
-      {
-        position:
-          direction === "unshift" && currentState.position != null
-            ? currentState.position - count
-            : currentState.position,
-        offset: currentState.offset,
-      },
-      state.position,
-      state.offset,
-    );
   }
 
   #materializeAnimatedAnchor(
@@ -482,5 +457,40 @@ export class JumpController<T extends {}> {
     }
     this.#cancelJumpAnimation();
     this.#options.applyAnchor(anchor);
+  }
+
+  #setAutoFollowBoundary(
+    boundary: AutoFollowBoundary,
+    value: boolean,
+    reason: AutoFollowSetReason,
+  ): void {
+    void reason;
+    if (boundary === "top") {
+      this.#canAutoFollowTop = value;
+    } else {
+      this.#canAutoFollowBottom = value;
+    }
+  }
+
+  #syncScrollMutationVersion(): void {
+    this.#lastHandledScrollMutationVersion =
+      this.#options.readScrollMutation().version;
+  }
+
+  #handlePendingExternalScrollMutation(): boolean {
+    const mutation = this.#options.readScrollMutation();
+    if (mutation.version === this.#lastHandledScrollMutationVersion) {
+      return false;
+    }
+
+    this.#lastHandledScrollMutationVersion = mutation.version;
+    if (mutation.source !== "external") {
+      return false;
+    }
+
+    this.#cancelJumpAnimation();
+    this.#clearPendingPostJumpBoundary();
+    this.#markAutoFollowRecompute(undefined, "manual-scroll");
+    return true;
   }
 }

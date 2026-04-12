@@ -1,5 +1,7 @@
 import type { ControlledState, JumpPath, JumpPathSegment } from "./base-types";
 
+const CONTROLLED_STATE_OFFSET_EPSILON = 1e-9;
+
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
@@ -9,7 +11,16 @@ export function sameState(
   position: number | undefined,
   offset: number,
 ): boolean {
-  return Object.is(state.position, position) && Object.is(state.offset, offset);
+  if (!Object.is(state.position, position)) {
+    return false;
+  }
+  if (Object.is(state.offset, offset)) {
+    return true;
+  }
+  if (!Number.isFinite(state.offset) || !Number.isFinite(offset)) {
+    return false;
+  }
+  return Math.abs(state.offset - offset) <= CONTROLLED_STATE_OFFSET_EPSILON;
 }
 
 function resolveJumpSegmentIndex(

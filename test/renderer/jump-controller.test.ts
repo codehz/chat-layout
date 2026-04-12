@@ -14,6 +14,8 @@ type State = {
   offset: number;
 };
 
+type ScrollMutationSource = "external" | "internal";
+
 function createController(params?: {
   heights?: number[];
   state?: State;
@@ -21,14 +23,31 @@ function createController(params?: {
 }) {
   let heights = params?.heights ?? [20, 20, 20];
   let state: State = params?.state ?? { position: 0, offset: 0 };
+  let scrollMutation = {
+    version: 0,
+    source: "internal" as ScrollMutationSource,
+  };
   const viewportHeight = params?.viewportHeight ?? 100;
   const getHeight = (index: number) => heights[index] ?? 0;
+  const writeState = (nextState: State, source: ScrollMutationSource) => {
+    const positionChanged = !Object.is(state.position, nextState.position);
+    const offsetChanged = !Object.is(state.offset, nextState.offset);
+    state = nextState;
+    if (!positionChanged && !offsetChanged) {
+      return;
+    }
+    scrollMutation = {
+      version: scrollMutation.version + 1,
+      source,
+    };
+  };
   const controller = new JumpController({
     minJumpDuration: 160,
     maxJumpDuration: 420,
     jumpDurationPerPixel: 0.7,
     getItemCount: () => heights.length,
     readListState: () => ({ ...state }),
+    readScrollMutation: () => ({ ...scrollMutation }),
     normalizeListState: (nextState) => ({
       position:
         typeof nextState.position === "number" &&
@@ -50,7 +69,7 @@ function createController(params?: {
         getHeight,
       );
       if (nextState != null) {
-        state = nextState;
+        writeState(nextState, "internal");
         controller.commit(nextState);
       }
     },
@@ -70,8 +89,8 @@ function createController(params?: {
   return {
     controller,
     getState: () => ({ ...state }),
-    setState(nextState: State) {
-      state = nextState;
+    setState(nextState: State, source: ScrollMutationSource = "external") {
+      writeState(nextState, source);
     },
     setHeights(nextHeights: number[]) {
       heights = nextHeights;
@@ -124,6 +143,44 @@ describe("jump controller", () => {
       });
 
       now.current = 100;
+      expect(harness.controller.prepare(now.current)).toBe(false);
+      expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+        top: true,
+        bottom: true,
+      });
+      expect(harness.controller.finishFrame(false)).toBe(false);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("internal scroll-state mutations do not get misclassified as manual scroll", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const harness = createController({
+        heights: [41.125, 23.5, 57.375, 28.25],
+        state: { position: 0, offset: 0 },
+        viewportHeight: 80,
+      });
+
+      harness.recompute(true, false);
+      harness.controller.jumpTo(3, { block: "end", duration: 200 });
+
+      now.current = 100;
+      expect(harness.controller.prepare(now.current)).toBe(true);
+      expect(harness.controller.finishFrame(false)).toBe(true);
+
+      const midState = harness.getState();
+      harness.setState(
+        {
+          position: midState.position,
+          offset: midState.offset + 12.5,
+        },
+        "internal",
+      );
+
+      now.current = 200;
       expect(harness.controller.prepare(now.current)).toBe(false);
       expect(harness.controller.getAutoFollowCapabilities()).toEqual({
         top: true,
@@ -190,7 +247,7 @@ describe("jump controller", () => {
       });
 
       harness.controller.jumpTo(2, { duration: 100 });
-      harness.setState({ position: 1, offset: 0 });
+      harness.setState({ position: 1, offset: 0 }, "external");
       now.current = 10;
 
       expect(harness.controller.prepare(now.current)).toBe(false);
@@ -209,7 +266,7 @@ describe("jump controller", () => {
     harness.controller.commit(harness.getState());
     harness.recompute(false, true);
 
-    harness.setState({ position: 1, offset: 0 });
+    harness.setState({ position: 1, offset: 0 }, "external");
     harness.setHeights([20, 20, 20, 20, 20]);
     harness.controller.handleListStateChange({
       type: "push",
@@ -229,5 +286,54 @@ describe("jump controller", () => {
       top: false,
       bottom: false,
     });
+  });
+
+  test("rapid follow inserts are not cancelled by internal settle writes", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const harness = createController({
+        heights: [20, 20, 20, 20],
+        state: { position: 2, offset: 0 },
+        viewportHeight: 40,
+      });
+      harness.controller.commit(harness.getState());
+      harness.recompute(false, true);
+
+      harness.setHeights([20, 20, 20, 20, 20]);
+      harness.controller.handleListStateChange({
+        type: "push",
+        count: 1,
+        animation: {
+          duration: 200,
+          autoFollow: true,
+        },
+      });
+
+      now.current = 80;
+      expect(harness.controller.prepare(now.current)).toBe(true);
+      expect(harness.controller.finishFrame(false)).toBe(true);
+
+      harness.setState({ position: 3, offset: 7.5 }, "internal");
+      harness.setHeights([20, 20, 20, 20, 20, 20]);
+      harness.controller.handleListStateChange({
+        type: "push",
+        count: 1,
+        animation: {
+          duration: 200,
+          autoFollow: true,
+        },
+      });
+
+      now.current = 200;
+      expect(harness.controller.prepare(now.current)).toBe(true);
+      expect(harness.controller.finishFrame(false)).toBe(true);
+      expect(harness.controller.getAutoFollowCapabilities()).toEqual({
+        top: false,
+        bottom: true,
+      });
+    } finally {
+      restoreNow();
+    }
   });
 });

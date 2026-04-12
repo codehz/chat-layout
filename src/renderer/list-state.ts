@@ -79,6 +79,13 @@ export type ListStateChangeListener<T extends {}> = (
   change: ListStateChange<T>,
 ) => void;
 
+export type ListScrollMutationSource = "external" | "internal";
+
+export type ListScrollMutation = {
+  version: number;
+  source: ListScrollMutationSource;
+};
+
 type WeakListStateListenerRecord = WeakListenerRecord<
   object,
   ListStateChange<{}>
@@ -101,6 +108,86 @@ const listStateListenerRegistry =
         deleteListStateListener(list, token);
       })
     : null;
+
+type MutableListScrollMutation = {
+  version: number;
+  source: ListScrollMutationSource;
+};
+
+const listScrollMutations = new WeakMap<
+  ListState<{}>,
+  MutableListScrollMutation
+>();
+
+type ListScrollStatePatch = {
+  position?: number | undefined;
+  offset?: number;
+};
+
+const WRITE_LIST_SCROLL_STATE = Symbol("writeListScrollState");
+
+type InternalListStateWriter = {
+  [WRITE_LIST_SCROLL_STATE]: (
+    patch: ListScrollStatePatch,
+    source: ListScrollMutationSource,
+  ) => void;
+};
+
+function normalizePosition(value: number | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.trunc(value)
+    : undefined;
+}
+
+function normalizeOffset(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function getListScrollMutationRecord(
+  list: ListState<{}>,
+): MutableListScrollMutation {
+  let record = listScrollMutations.get(list);
+  if (record == null) {
+    record = {
+      version: 0,
+      source: "internal",
+    };
+    listScrollMutations.set(list, record);
+  }
+  return record;
+}
+
+function markListScrollMutation(
+  list: ListState<{}>,
+  source: ListScrollMutationSource,
+): void {
+  const record = getListScrollMutationRecord(list);
+  record.version += 1;
+  record.source = source;
+}
+
+export function readListScrollMutation<T extends {}>(
+  list: ListState<T>,
+): ListScrollMutation {
+  const record = getListScrollMutationRecord(list as unknown as ListState<{}>);
+  return {
+    version: record.version,
+    source: record.source,
+  };
+}
+
+export function writeInternalListScrollState<T extends {}>(
+  list: ListState<T>,
+  state: {
+    position: number | undefined;
+    offset: number;
+  },
+): void {
+  (list as unknown as InternalListStateWriter)[WRITE_LIST_SCROLL_STATE](
+    state,
+    "internal",
+  );
+}
 
 function deleteListStateListener(list: ListState<{}>, token: symbol): void {
   const listeners = listStateListeners.get(list);
@@ -239,11 +326,36 @@ function normalizeInsertAnimation(
 export class ListState<T extends {}> {
   #items: T[];
   #pendingDeletes = new Set<T>();
+  #offset = 0;
+  #position: number | undefined;
 
   /** Pixel offset from the anchored item edge. */
-  offset = 0;
+  get offset(): number {
+    return this.#offset;
+  }
+
+  set offset(value: number) {
+    this.#writeScrollState(
+      {
+        offset: normalizeOffset(value),
+      },
+      "external",
+    );
+  }
+
   /** Anchor item index, or `undefined` to use the renderer default. */
-  position: number | undefined;
+  get position(): number | undefined {
+    return this.#position;
+  }
+
+  set position(value: number | undefined) {
+    this.#writeScrollState(
+      {
+        position: normalizePosition(value),
+      },
+      "external",
+    );
+  }
 
   /** Items currently managed by the renderer. */
   get items(): T[] {
@@ -281,7 +393,12 @@ export class ListState<T extends {}> {
     assertUniqueItemReferences(items, this.#items);
     const normalizedAnimation = normalizeInsertAnimation(animation);
     if (this.position != null) {
-      this.position += items.length;
+      this.#writeScrollState(
+        {
+          position: this.position + items.length,
+        },
+        "internal",
+      );
     }
     this.#items = items.concat(this.#items);
     emitListStateChange(this, {
@@ -393,13 +510,28 @@ export class ListState<T extends {}> {
     }
     this.#items.splice(index, 1);
     if (this.#items.length === 0) {
-      this.position = undefined;
-      this.offset = 0;
+      this.#writeScrollState(
+        {
+          position: undefined,
+          offset: 0,
+        },
+        "internal",
+      );
     } else if (this.position != null) {
       if (this.position > index) {
-        this.position -= 1;
+        this.#writeScrollState(
+          {
+            position: this.position - 1,
+          },
+          "internal",
+        );
       } else if (this.position === index) {
-        this.position = Math.min(index, this.#items.length - 1);
+        this.#writeScrollState(
+          {
+            position: Math.min(index, this.#items.length - 1),
+          },
+          "internal",
+        );
       }
     }
     emitListStateChange(this, {
@@ -412,10 +544,13 @@ export class ListState<T extends {}> {
    * Sets the current anchor item and pixel offset.
    */
   setAnchor(position: number, offset = 0): void {
-    this.position = Number.isFinite(position)
-      ? Math.trunc(position)
-      : undefined;
-    this.offset = Number.isFinite(offset) ? offset : 0;
+    this.#writeScrollState(
+      {
+        position: normalizePosition(position),
+        offset: normalizeOffset(offset),
+      },
+      "external",
+    );
   }
 
   /**
@@ -426,19 +561,70 @@ export class ListState<T extends {}> {
     assertUniqueItemReferences(nextItems);
     this.#items = nextItems;
     this.#pendingDeletes.clear();
-    this.offset = 0;
-    this.position = undefined;
+    this.#writeScrollState(
+      {
+        position: undefined,
+        offset: 0,
+      },
+      "internal",
+    );
     emitListStateChange(this, { type: "reset" });
   }
 
   /** Clears the current scroll anchor while keeping the items. */
   resetScroll(): void {
-    this.offset = 0;
-    this.position = undefined;
+    this.#writeScrollState(
+      {
+        position: undefined,
+        offset: 0,
+      },
+      "external",
+    );
   }
 
   /** Applies a relative pixel scroll delta. */
   applyScroll(delta: number): void {
-    this.offset += delta;
+    this.#writeScrollState(
+      {
+        offset: this.#offset + delta,
+      },
+      "external",
+    );
+  }
+
+  [WRITE_LIST_SCROLL_STATE](
+    patch: ListScrollStatePatch,
+    source: ListScrollMutationSource,
+  ): void {
+    this.#writeScrollState(patch, source);
+  }
+
+  #writeScrollState(
+    patch: ListScrollStatePatch,
+    source: ListScrollMutationSource,
+  ): void {
+    let changed = false;
+
+    if ("position" in patch) {
+      const nextPosition = normalizePosition(patch.position);
+      if (!Object.is(this.#position, nextPosition)) {
+        this.#position = nextPosition;
+        changed = true;
+      }
+    }
+
+    if ("offset" in patch) {
+      const nextOffset = normalizeOffset(patch.offset ?? 0);
+      if (!Object.is(this.#offset, nextOffset)) {
+        this.#offset = nextOffset;
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    markListScrollMutation(this as unknown as ListState<{}>, source);
   }
 }
