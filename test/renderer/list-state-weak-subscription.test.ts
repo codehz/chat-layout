@@ -1,69 +1,58 @@
 import { describe, expect, test } from "bun:test";
 
-import { ListRenderer, ListState, memoRenderItem } from "../../src/renderer";
-import type { Box, Context, HitTest, Node } from "../../src/types";
-import { createGraphics, mockPerformanceNow } from "../helpers/graphics";
+import type {
+  DrawProbe,
+  VirtualizedProbeItem,
+} from "../helpers/virtualized-fixtures";
+import {
+  createTopTrackedRenderer,
+  withMockedNow,
+} from "../helpers/virtualized-fixtures";
 
-type C = CanvasRenderingContext2D;
-
-type Item = {
-  id: string;
-  height: number;
-};
-
-function createProbeNode(item: Item, draws: string[]): Node<C> {
-  return {
-    measure(_ctx: Context<C>): Box {
-      return { width: 320, height: item.height };
-    },
-    draw(_ctx: Context<C>, _x: number, _y: number): boolean {
-      draws.push(item.id);
-      return false;
-    },
-    hittest(_ctx: Context<C>, _test: HitTest): boolean {
-      return false;
-    },
-  };
-}
+type Item = VirtualizedProbeItem;
 
 describe("ListState queued renderer updates", () => {
   test("ListRenderer drains queued update, delete, push, set, and reset changes on render", () => {
     const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
+    withMockedNow(now, () => {
       const draws: string[] = [];
       const oldItem = { id: "old", height: 20 };
-      const list = new ListState<Item>([oldItem, { id: "tail", height: 10 }]);
-      const renderer = new ListRenderer(createGraphics(120), {
-        anchorMode: "top",
-        list,
-        renderItem: memoRenderItem<C, Item>((item) =>
-          createProbeNode(item, draws),
-        ),
-      });
+      const trackedDraws: DrawProbe[] = [];
+      const { list, renderer } = createTopTrackedRenderer(
+        [oldItem, { id: "tail", height: 10 }],
+        trackedDraws,
+      );
 
       list.update(oldItem, { id: "new", height: 30 }, { duration: 100 });
       now.current = 50;
       renderer.render();
+      draws.push(...trackedDraws.map((draw) => draw.id));
       expect(draws).toEqual(["old", "new", "tail"]);
 
       draws.length = 0;
+      trackedDraws.length = 0;
       list.delete(list.items[0]!, { duration: 100 });
       now.current = 150;
       renderer.render();
+      draws.push(...trackedDraws.map((draw) => draw.id));
       expect(draws).toEqual(["tail"]);
 
       draws.length = 0;
+      trackedDraws.length = 0;
       list.push({ id: "pushed", height: 15 });
       renderer.render();
+      draws.push(...trackedDraws.map((draw) => draw.id));
       expect(draws).toEqual(["tail", "pushed"]);
 
       draws.length = 0;
+      trackedDraws.length = 0;
       list.items = [{ id: "set", height: 25 }];
       renderer.render();
+      draws.push(...trackedDraws.map((draw) => draw.id));
       expect(draws).toEqual(["set"]);
 
       draws.length = 0;
+      trackedDraws.length = 0;
       list.update(
         list.items[0]!,
         { id: "set-next", height: 35 },
@@ -71,42 +60,38 @@ describe("ListState queued renderer updates", () => {
       );
       now.current = 200;
       renderer.render();
+      draws.push(...trackedDraws.map((draw) => draw.id));
       expect(draws).toEqual(["set", "set-next"]);
 
       draws.length = 0;
+      trackedDraws.length = 0;
       list.reset([{ id: "reset", height: 18 }]);
       renderer.render();
+      draws.push(...trackedDraws.map((draw) => draw.id));
       expect(draws).toEqual(["reset"]);
-    } finally {
-      restoreNow();
-    }
+    });
   });
 
   test("multiple queued changes are applied in order on the next render", () => {
     const now = { current: 0 };
-    const restoreNow = mockPerformanceNow(now);
-    try {
+    withMockedNow(now, () => {
       const draws: string[] = [];
+      const trackedDraws: DrawProbe[] = [];
       const first = { id: "first", height: 20 };
       const second = { id: "second", height: 20 };
       const third = { id: "third", height: 20 };
-      const list = new ListState<Item>([first]);
-      const renderer = new ListRenderer(createGraphics(120), {
-        anchorMode: "top",
-        list,
-        renderItem: memoRenderItem<C, Item>((item) =>
-          createProbeNode(item, draws),
-        ),
-      });
+      const { list, renderer } = createTopTrackedRenderer(
+        [first],
+        trackedDraws,
+      );
 
       list.push(second);
       list.push(third);
       renderer.render();
 
+      draws.push(...trackedDraws.map((draw) => draw.id));
       expect(draws).toEqual(["first", "second", "third"]);
       expect(list.items).toEqual([first, second, third]);
-    } finally {
-      restoreNow();
-    }
+    });
   });
 });

@@ -1,43 +1,20 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ListAnchorMode } from "../../src/renderer";
+import { ListState } from "../../src/renderer";
+import type { Box, Context, HitTest, RenderFeedback } from "../../src/types";
 import {
-  ListRenderer,
-  ListState,
-  type ListPadding,
-  type ListUnderflowAlign,
-} from "../../src/renderer";
-import type {
-  Box,
-  Context,
-  HitTest,
-  Node,
-  RenderFeedback,
-} from "../../src/types";
-import { createGraphics } from "../helpers/graphics";
-import {
-  createFeedback,
   createHitNode,
   createNode,
   expectFiniteFeedback,
   expectNaNFeedback,
   type ProbeHit,
 } from "../helpers/renderer-fixtures";
+import {
+  createFeedback,
+  createListRenderer,
+} from "../helpers/virtualized-fixtures";
 
 type C = CanvasRenderingContext2D;
-
-function createRenderer<T extends {}>(
-  viewportHeight: number,
-  options: {
-    anchorMode: ListAnchorMode;
-    underflowAlign?: ListUnderflowAlign;
-    padding?: ListPadding;
-    list: ListState<T>;
-    renderItem: (item: T) => Node<C>;
-  },
-): ListRenderer<C, T> {
-  return new ListRenderer(createGraphics(viewportHeight), options);
-}
 
 describe("virtualized visible window", () => {
   test("top-anchor hittest is stable before the first render", () => {
@@ -45,7 +22,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(20);
     const node = createHitNode(20, hits);
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: () => node,
@@ -71,7 +48,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(20);
     const node = createHitNode(20, hits);
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "bottom",
       list,
       renderItem: () => node,
@@ -97,7 +74,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(20);
     const node = createHitNode(20, hits);
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       underflowAlign: "bottom",
       list,
@@ -121,7 +98,7 @@ describe("virtualized visible window", () => {
     list.push(0, 1, 2, 3, 4, 5);
 
     const renderSeen: number[] = [];
-    const renderRenderer = createRenderer(60, {
+    const renderRenderer = createListRenderer(60, {
       anchorMode: "top",
       list,
       renderItem: (item) => {
@@ -132,7 +109,7 @@ describe("virtualized visible window", () => {
     renderRenderer.render();
 
     const hittestSeen: number[] = [];
-    const hittestRenderer = createRenderer(60, {
+    const hittestRenderer = createListRenderer(60, {
       anchorMode: "top",
       list,
       renderItem: (item) => {
@@ -151,7 +128,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.pushAll(items);
 
-    const renderer = createRenderer(120, {
+    const renderer = createListRenderer(120, {
       anchorMode: "bottom",
       list,
       renderItem: () => ({
@@ -177,7 +154,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(200);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
@@ -199,7 +176,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(200);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
@@ -221,7 +198,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(40, 300, 40);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
@@ -253,7 +230,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(40, 300, 40);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
@@ -286,7 +263,7 @@ describe("virtualized visible window", () => {
     list.push(50, 50, 50);
     list.applyScroll(-25);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
@@ -306,7 +283,7 @@ describe("virtualized visible window", () => {
     list.push(50, 50, 50);
     list.applyScroll(25);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "bottom",
       list,
       renderItem: (height) => createNode(height),
@@ -325,7 +302,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(200);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
@@ -346,7 +323,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(50, 0, 100);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
@@ -366,7 +343,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(50, 50, 50);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
@@ -394,7 +371,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(20, 20);
 
-    const renderer = createRenderer(120, {
+    const renderer = createListRenderer(120, {
       anchorMode: "top",
       list,
       renderItem: (height) => createNode(height),
@@ -411,7 +388,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(0);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       list,
       renderItem: () => ({
@@ -450,7 +427,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(50, 50);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       padding: { top: 10, bottom: 10 },
       list,
@@ -473,7 +450,7 @@ describe("virtualized visible window", () => {
     const list = new ListState<number>();
     list.push(30);
 
-    const renderer = createRenderer(100, {
+    const renderer = createListRenderer(100, {
       anchorMode: "top",
       padding: { top: 60, bottom: 50 },
       list,

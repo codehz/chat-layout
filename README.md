@@ -194,6 +194,24 @@ Type-check:
 bun run typecheck
 ```
 
+Run tests:
+
+```bash
+bun run test
+```
+
+Run tests with coverage:
+
+```bash
+bun run test:coverage
+```
+
+Run the local verification bundle:
+
+```bash
+bun run check
+```
+
 Build distributable files:
 
 ```bash
