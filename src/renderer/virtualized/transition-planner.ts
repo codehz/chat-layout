@@ -17,6 +17,7 @@ import { TransitionStore } from "./transition-store";
 import { clamp, getNow, interpolate } from "./virtualized-animation";
 import {
   ALPHA_EPSILON,
+  type AutoFollowBoundary,
   type VirtualizedResolvedItem,
 } from "./virtualized-types";
 
@@ -333,6 +334,83 @@ function planExistingItemTransition<C extends CanvasRenderingContext2D>(
     ),
     retention: "drawn",
   };
+}
+
+function resolveAutoFollowBoundaryRisk<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  index: number,
+  ctx: TransitionPlanningAdapter<C, T>,
+  snapshot: VisibilitySnapshot<T>,
+): AutoFollowBoundary | undefined {
+  const drawnRange = snapshot.readDrawnIndexRange();
+  if (
+    index < 0 ||
+    !snapshot.hasSnapshot ||
+    drawnRange == null ||
+    !Number.isFinite(drawnRange.minIndex) ||
+    !Number.isFinite(drawnRange.maxIndex)
+  ) {
+    return undefined;
+  }
+  if (ctx.anchorMode === "bottom") {
+    return index <= drawnRange.minIndex ? "top" : undefined;
+  }
+  return index >= drawnRange.maxIndex ? "bottom" : undefined;
+}
+
+function canClassifyAutoFollowBoundaryRisk<T extends {}>(
+  index: number,
+  snapshot: VisibilitySnapshot<T>,
+): boolean {
+  return (
+    index >= 0 && snapshot.hasSnapshot && snapshot.readDrawnIndexRange() != null
+  );
+}
+
+function beginTransitionAutoFollowObservation<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  transition: ActiveItemTransition<C>,
+  lifecycle: TransitionLifecycleAdapter<T>,
+): void {
+  if (transition.observedAutoFollowBoundary == null) {
+    return;
+  }
+  lifecycle.beginAutoFollowBoundaryObservation(
+    transition.observedAutoFollowBoundary,
+  );
+}
+
+function endTransitionAutoFollowObservation<
+  C extends CanvasRenderingContext2D,
+  T extends {},
+>(
+  transition: ActiveItemTransition<C> | undefined,
+  lifecycle: TransitionLifecycleAdapter<T>,
+): void {
+  if (transition?.observedAutoFollowBoundary == null) {
+    return;
+  }
+  lifecycle.endAutoFollowBoundaryObservation(
+    transition.observedAutoFollowBoundary,
+  );
+}
+
+function invalidateAutoFollowBoundaryRisk<T extends {}>(
+  boundary: AutoFollowBoundary | undefined,
+  canClassify: boolean,
+  lifecycle: TransitionLifecycleAdapter<T>,
+): void {
+  if (boundary != null) {
+    lifecycle.invalidateAutoFollowBoundary(boundary);
+    return;
+  }
+  if (!canClassify) {
+    lifecycle.invalidateAutoFollowBoundary(undefined);
+  }
 }
 
 function planBoundaryInsertItems<
@@ -659,6 +737,16 @@ export function handleTransitionStateChange<
 ): void {
   switch (change.type) {
     case "update": {
+      const nextIndex = ctx.items.indexOf(change.nextItem);
+      const canClassifyRisk = canClassifyAutoFollowBoundaryRisk(
+        nextIndex,
+        snapshot,
+      );
+      const observedBoundary = resolveAutoFollowBoundaryRisk(
+        nextIndex,
+        ctx,
+        snapshot,
+      );
       const currentVisualState = readCurrentVisualState(
         change.prevItem,
         now,
@@ -676,13 +764,36 @@ export function handleTransitionStateChange<
         store,
       );
       if (transition == null) {
-        store.delete(change.prevItem);
+        endTransitionAutoFollowObservation(
+          store.delete(change.prevItem),
+          lifecycle,
+        );
+        invalidateAutoFollowBoundaryRisk(
+          observedBoundary,
+          canClassifyRisk,
+          lifecycle,
+        );
         return;
       }
-      store.replace(change.prevItem, change.nextItem, transition);
+      transition.observedAutoFollowBoundary = observedBoundary;
+      endTransitionAutoFollowObservation(
+        store.replace(change.prevItem, change.nextItem, transition),
+        lifecycle,
+      );
+      beginTransitionAutoFollowObservation(transition, lifecycle);
       return;
     }
     case "delete": {
+      const index = ctx.items.indexOf(change.item);
+      const canClassifyRisk = canClassifyAutoFollowBoundaryRisk(
+        index,
+        snapshot,
+      );
+      const observedBoundary = resolveAutoFollowBoundaryRisk(
+        index,
+        ctx,
+        snapshot,
+      );
       const currentVisualState = readCurrentVisualState(
         change.item,
         now,
@@ -699,15 +810,29 @@ export function handleTransitionStateChange<
         store,
       );
       if (transition == null) {
-        store.delete(change.item);
+        endTransitionAutoFollowObservation(
+          store.delete(change.item),
+          lifecycle,
+        );
+        invalidateAutoFollowBoundaryRisk(
+          observedBoundary,
+          canClassifyRisk,
+          lifecycle,
+        );
         lifecycle.onDeleteComplete(change.item);
         return;
       }
-      store.set(change.item, transition);
+      transition.observedAutoFollowBoundary = observedBoundary;
+      endTransitionAutoFollowObservation(
+        store.set(change.item, transition),
+        lifecycle,
+      );
+      beginTransitionAutoFollowObservation(transition, lifecycle);
       return;
     }
     case "delete-finalize":
-      store.delete(change.item);
+      endTransitionAutoFollowObservation(store.delete(change.item), lifecycle);
+      lifecycle.invalidateAutoFollowBoundary(undefined);
       return;
     case "unshift":
     case "push": {
@@ -723,7 +848,10 @@ export function handleTransitionStateChange<
         return;
       }
       for (const entry of plan.entries) {
-        store.set(entry.item, entry.transition);
+        endTransitionAutoFollowObservation(
+          store.set(entry.item, entry.transition),
+          lifecycle,
+        );
       }
       if (
         ctx.position == null &&
@@ -741,6 +869,9 @@ export function handleTransitionStateChange<
     }
     case "reset":
     case "set":
+      for (const entry of store.entries()) {
+        endTransitionAutoFollowObservation(entry.transition, lifecycle);
+      }
       store.reset();
       snapshot.reset();
       return;

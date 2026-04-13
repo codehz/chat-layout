@@ -98,6 +98,15 @@ function createController(params?: {
     recompute(top: boolean, bottom: boolean) {
       return controller.recomputeAutoFollowCapabilities({ top, bottom });
     },
+    beginObservation(boundary: "top" | "bottom") {
+      controller.beginAutoFollowBoundaryObservation(boundary);
+    },
+    endObservation(boundary: "top" | "bottom") {
+      controller.endAutoFollowBoundaryObservation(boundary);
+    },
+    invalidateBoundary(boundary?: "top" | "bottom") {
+      controller.invalidateAutoFollowBoundary(boundary);
+    },
   };
 }
 
@@ -454,6 +463,96 @@ describe("jump controller", () => {
     } finally {
       restoreNow();
     }
+  });
+
+  test("observed boundaries sync from false to true with rendered capability", () => {
+    const harness = createController({
+      heights: [20, 20, 20],
+      state: { position: 0, offset: 0 },
+      viewportHeight: 40,
+    });
+
+    expect(harness.recompute(false, false)).toEqual({
+      top: false,
+      bottom: false,
+    });
+
+    harness.beginObservation("top");
+
+    expect(harness.recompute(true, false)).toEqual({
+      top: true,
+      bottom: false,
+    });
+  });
+
+  test("observed boundaries sync from true to false with rendered capability", () => {
+    const harness = createController({
+      heights: [20, 20, 20],
+      state: { position: 0, offset: 0 },
+      viewportHeight: 40,
+    });
+
+    expect(harness.recompute(true, false)).toEqual({
+      top: true,
+      bottom: false,
+    });
+
+    harness.beginObservation("top");
+
+    expect(harness.recompute(false, false)).toEqual({
+      top: false,
+      bottom: false,
+    });
+  });
+
+  test("observed boundary ref-counts keep strict sync until the last observer ends", () => {
+    const harness = createController({
+      heights: [20, 20, 20],
+      state: { position: 0, offset: 0 },
+      viewportHeight: 40,
+    });
+
+    harness.beginObservation("top");
+    harness.beginObservation("top");
+    expect(harness.recompute(true, false)).toEqual({
+      top: true,
+      bottom: false,
+    });
+
+    harness.endObservation("top");
+    expect(harness.recompute(false, false)).toEqual({
+      top: false,
+      bottom: false,
+    });
+
+    harness.endObservation("top");
+    expect(harness.recompute(true, false)).toEqual({
+      top: false,
+      bottom: false,
+    });
+  });
+
+  test("invalidated boundaries strict-sync on the next recompute only", () => {
+    const harness = createController({
+      heights: [20, 20, 20],
+      state: { position: 0, offset: 0 },
+      viewportHeight: 40,
+    });
+
+    expect(harness.recompute(false, false)).toEqual({
+      top: false,
+      bottom: false,
+    });
+
+    harness.invalidateBoundary("top");
+    expect(harness.recompute(true, false)).toEqual({
+      top: true,
+      bottom: false,
+    });
+    expect(harness.recompute(false, false)).toEqual({
+      top: true,
+      bottom: false,
+    });
   });
 
   test("dual latched follow preserves the most recently armed boundary when settle makes them incompatible", () => {

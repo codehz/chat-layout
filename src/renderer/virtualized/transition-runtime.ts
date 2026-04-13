@@ -4,7 +4,10 @@ import type {
   ResolvedListLayoutOptions,
   VisibleWindowResult,
 } from "./solver";
-import type { ListScrollStateSnapshot } from "./virtualized-types";
+import type {
+  AutoFollowBoundary,
+  ListScrollStateSnapshot,
+} from "./virtualized-types";
 
 export type VisibleRange = {
   top: number;
@@ -19,6 +22,11 @@ export type TransitionLifecycleAdapter<T extends {}> = {
   readItemIndex: (item: T) => number;
   snapItemToViewportBoundary: (item: T, boundary: "top" | "bottom") => void;
   onTransitionSettleScrollAdjusted: () => void;
+  beginAutoFollowBoundaryObservation: (boundary: AutoFollowBoundary) => void;
+  endAutoFollowBoundaryObservation: (boundary: AutoFollowBoundary) => void;
+  invalidateAutoFollowBoundary: (
+    boundary: AutoFollowBoundary | undefined,
+  ) => void;
 };
 
 export type VirtualizedRuntime<
@@ -77,6 +85,7 @@ export type ActiveItemTransition<C extends CanvasRenderingContext2D> = {
   layers: LayerAnimation<C>[];
   height: ScalarAnimation;
   retention: "drawn" | "visible";
+  observedAutoFollowBoundary?: AutoFollowBoundary;
 };
 
 export type SampledLayer<C extends CanvasRenderingContext2D> = {

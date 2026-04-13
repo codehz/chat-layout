@@ -48,7 +48,8 @@ type AutoFollowSetReason =
   | "dual-boundary-promotion"
   | "jump-to-boundary"
   | "jump-to-boundary-settle"
-  | "jump-to-boundary-instant";
+  | "jump-to-boundary-instant"
+  | "transition-observation";
 
 export interface JumpControllerOptions<T extends {}> {
   minJumpDuration: number;
@@ -76,6 +77,10 @@ export class JumpController<T extends {}> {
   #pendingAutoFollowRecomputeReasonTop: AutoFollowRecomputeReason = "init";
   #pendingAutoFollowRecomputeReasonBottom: AutoFollowRecomputeReason = "init";
   #pendingTransitionSettleReconcile = false;
+  #autoFollowObservationCountTop = 0;
+  #autoFollowObservationCountBottom = 0;
+  #pendingAutoFollowInvalidationTop = false;
+  #pendingAutoFollowInvalidationBottom = false;
   #lastArmedAutoFollowBoundary: AutoFollowBoundary | undefined;
   #lastObservedRenderedAutoFollowTop = false;
   #lastObservedRenderedAutoFollowBottom = false;
@@ -207,6 +212,37 @@ export class JumpController<T extends {}> {
     );
   }
 
+  beginAutoFollowBoundaryObservation(boundary: AutoFollowBoundary): void {
+    if (boundary === "top") {
+      this.#autoFollowObservationCountTop += 1;
+      return;
+    }
+    this.#autoFollowObservationCountBottom += 1;
+  }
+
+  endAutoFollowBoundaryObservation(boundary: AutoFollowBoundary): void {
+    if (boundary === "top") {
+      this.#autoFollowObservationCountTop = Math.max(
+        0,
+        this.#autoFollowObservationCountTop - 1,
+      );
+      return;
+    }
+    this.#autoFollowObservationCountBottom = Math.max(
+      0,
+      this.#autoFollowObservationCountBottom - 1,
+    );
+  }
+
+  invalidateAutoFollowBoundary(boundary: AutoFollowBoundary | undefined): void {
+    if (boundary == null || boundary === "top") {
+      this.#pendingAutoFollowInvalidationTop = true;
+    }
+    if (boundary == null || boundary === "bottom") {
+      this.#pendingAutoFollowInvalidationBottom = true;
+    }
+  }
+
   recomputeAutoFollowCapabilities(
     capabilities: AutoFollowCapabilities,
   ): AutoFollowCapabilities {
@@ -220,6 +256,9 @@ export class JumpController<T extends {}> {
       this.#setAutoFollowBoundary("top", true, "dual-boundary-promotion");
       this.#setAutoFollowBoundary("bottom", true, "dual-boundary-promotion");
     }
+
+    this.#syncObservedOrInvalidatedBoundary("top", capabilities);
+    this.#syncObservedOrInvalidatedBoundary("bottom", capabilities);
 
     if (this.#pendingAutoFollowRecomputeTop) {
       this.#setAutoFollowBoundary(
@@ -268,6 +307,7 @@ export class JumpController<T extends {}> {
         this.#cancelJumpAnimation();
         this.#clearPendingPostJumpBoundary();
         this.#clearPendingTransitionSettleReconcile();
+        this.#clearAutoFollowObservationState();
         this.#syncScrollMutationVersion();
         this.#markAutoFollowRecompute(undefined, change.type);
         return change;
@@ -491,6 +531,13 @@ export class JumpController<T extends {}> {
     this.#pendingTransitionSettleReconcile = false;
   }
 
+  #clearAutoFollowObservationState(): void {
+    this.#autoFollowObservationCountTop = 0;
+    this.#autoFollowObservationCountBottom = 0;
+    this.#pendingAutoFollowInvalidationTop = false;
+    this.#pendingAutoFollowInvalidationBottom = false;
+  }
+
   #materializeAnimatedAnchor(
     now: number,
     direction?: "push" | "unshift",
@@ -524,6 +571,36 @@ export class JumpController<T extends {}> {
     } else {
       this.#canAutoFollowBottom = value;
     }
+  }
+
+  #syncObservedOrInvalidatedBoundary(
+    boundary: AutoFollowBoundary,
+    capabilities: AutoFollowCapabilities,
+  ): void {
+    const isObserved = this.#readAutoFollowObservationCount(boundary) > 0;
+    const isInvalidated =
+      boundary === "top"
+        ? this.#pendingAutoFollowInvalidationTop
+        : this.#pendingAutoFollowInvalidationBottom;
+    if (!isObserved && !isInvalidated) {
+      return;
+    }
+    this.#setAutoFollowBoundary(
+      boundary,
+      this.#readCapabilityForBoundary(capabilities, boundary),
+      "transition-observation",
+    );
+    if (boundary === "top") {
+      this.#pendingAutoFollowInvalidationTop = false;
+      return;
+    }
+    this.#pendingAutoFollowInvalidationBottom = false;
+  }
+
+  #readAutoFollowObservationCount(boundary: AutoFollowBoundary): number {
+    return boundary === "top"
+      ? this.#autoFollowObservationCountTop
+      : this.#autoFollowObservationCountBottom;
   }
 
   #syncLastArmedBoundaryFromLatchedState(): void {

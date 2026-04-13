@@ -213,7 +213,15 @@ export class TransitionController<
           completedDeleteIndices.push(index);
         }
       }
-      this.#store.delete(item);
+      const removedTransition = this.#store.delete(item);
+      if (removedTransition?.observedAutoFollowBoundary != null) {
+        lifecycle.endAutoFollowBoundaryObservation(
+          removedTransition.observedAutoFollowBoundary,
+        );
+        lifecycle.invalidateAutoFollowBoundary(
+          removedTransition.observedAutoFollowBoundary,
+        );
+      }
       if (transition.kind === "delete") {
         lifecycle.onDeleteComplete(item);
       }

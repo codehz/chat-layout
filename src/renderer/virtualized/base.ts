@@ -527,6 +527,12 @@ export abstract class VirtualizedRenderer<
       snapItemToViewportBoundary: this.#snapItemToViewportBoundary.bind(this),
       onTransitionSettleScrollAdjusted: () =>
         this.#jumpController.reconcileAutoFollowAfterTransitionSettle(),
+      beginAutoFollowBoundaryObservation: (boundary) =>
+        this.#jumpController.beginAutoFollowBoundaryObservation(boundary),
+      endAutoFollowBoundaryObservation: (boundary) =>
+        this.#jumpController.endAutoFollowBoundaryObservation(boundary),
+      invalidateAutoFollowBoundary: (boundary) =>
+        this.#jumpController.invalidateAutoFollowBoundary(boundary),
     };
   }
 

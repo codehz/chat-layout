@@ -21,13 +21,24 @@ export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
     return this.#transitions.has(item);
   }
 
-  set(item: T, transition: ActiveItemTransition<C>): void {
+  set(
+    item: T,
+    transition: ActiveItemTransition<C>,
+  ): ActiveItemTransition<C> | undefined {
+    const previous = this.#transitions.get(item);
     this.#transitions.set(item, transition);
+    return previous;
   }
 
-  replace(prevItem: T, nextItem: T, transition: ActiveItemTransition<C>): void {
+  replace(
+    prevItem: T,
+    nextItem: T,
+    transition: ActiveItemTransition<C>,
+  ): ActiveItemTransition<C> | undefined {
+    const previous = this.#transitions.get(prevItem);
     this.#transitions.delete(prevItem);
     this.#transitions.set(nextItem, transition);
+    return previous;
   }
 
   delete(item: T): ActiveItemTransition<C> | undefined {
@@ -71,6 +82,13 @@ export class TransitionStore<C extends CanvasRenderingContext2D, T extends {}> {
           !(transition.kind === "insert" && !snapshot.wasVisible(item)),
       )
       .map(([item, transition]) => ({ item, transition }));
+  }
+
+  entries(): StoredTransitionEntry<C, T>[] {
+    return [...this.#transitions.entries()].map(([item, transition]) => ({
+      item,
+      transition,
+    }));
   }
 
   reset(): void {

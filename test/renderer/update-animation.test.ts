@@ -1148,6 +1148,99 @@ describe("update animation", () => {
     }
   });
 
+  test("bottom-anchor opposite-side shrink updates can turn on top auto-follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createBottomRenderer(
+        [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.jumpToBottom({ animated: false });
+      const initialFeedback = createFeedback();
+      renderer.render(initialFeedback);
+      expect(initialFeedback.canAutoFollowTop).toBe(false);
+      expect(initialFeedback.canAutoFollowBottom).toBe(true);
+
+      list.update(item, { id: "new", height: 20 }, { duration: 100 });
+
+      now.current = 100;
+      const settledFeedback = createFeedback();
+      expect(renderer.render(settledFeedback)).toBe(false);
+      expect(settledFeedback.canAutoFollowTop).toBe(true);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("bottom-anchor opposite-side growth updates can turn off top auto-follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 20 };
+      const { list, renderer } = createBottomRenderer(
+        [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.jumpToBottom({ animated: false });
+      const initialFeedback = createFeedback();
+      renderer.render(initialFeedback);
+      expect(initialFeedback.canAutoFollowTop).toBe(true);
+      expect(initialFeedback.canAutoFollowBottom).toBe(true);
+
+      list.update(item, { id: "new", height: 80 }, { duration: 100 });
+
+      now.current = 100;
+      const settledFeedback = createFeedback();
+      expect(renderer.render(settledFeedback)).toBe(false);
+      expect(settledFeedback.canAutoFollowTop).toBe(false);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("top-anchor opposite-side shrink updates can turn on bottom auto-follow", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: DrawProbe[] = [];
+      const item = { id: "item", height: 80 };
+      const { list, renderer } = createTopRenderer(
+        [{ id: "head", height: 40 }, { id: "middle", height: 40 }, item],
+        draws,
+        [],
+        100,
+      );
+
+      renderer.jumpToTop({ animated: false });
+      const initialFeedback = createFeedback();
+      renderer.render(initialFeedback);
+      expect(initialFeedback.canAutoFollowTop).toBe(true);
+      expect(initialFeedback.canAutoFollowBottom).toBe(false);
+
+      list.update(item, { id: "new", height: 20 }, { duration: 100 });
+
+      now.current = 100;
+      const settledFeedback = createFeedback();
+      expect(renderer.render(settledFeedback)).toBe(false);
+      expect(settledFeedback.canAutoFollowTop).toBe(true);
+      expect(settledFeedback.canAutoFollowBottom).toBe(true);
+    } finally {
+      restoreNow();
+    }
+  });
+
   test("insert animation disables hittest for the animated slot while neighbors stay interactive", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
@@ -1638,6 +1731,30 @@ describe("delete animation", () => {
     } finally {
       restoreNow();
     }
+  });
+
+  test("hard-cut deletes invalidate boundary follow on the next render", () => {
+    const draws: DrawProbe[] = [];
+    const item = { id: "item", height: 80 };
+    const { list, renderer } = createBottomRenderer(
+      [item, { id: "middle", height: 40 }, { id: "tail", height: 40 }],
+      draws,
+      [],
+      100,
+    );
+
+    renderer.jumpToBottom({ animated: false });
+    const initialFeedback = createFeedback();
+    renderer.render(initialFeedback);
+    expect(initialFeedback.canAutoFollowTop).toBe(false);
+    expect(initialFeedback.canAutoFollowBottom).toBe(true);
+
+    list.delete(item);
+
+    const settledFeedback = createFeedback();
+    expect(renderer.render(settledFeedback)).toBe(false);
+    expect(settledFeedback.canAutoFollowTop).toBe(true);
+    expect(settledFeedback.canAutoFollowBottom).toBe(true);
   });
 
   test("bottom auto-follow keeps only the inserted boundary when push leaves underflow", () => {
