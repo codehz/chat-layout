@@ -258,7 +258,10 @@ export class JumpController<T extends {}> {
     this.#pendingTransitionSettleReconcile = true;
   }
 
-  handleListStateChange(change: ListStateChange<T>): ListStateChange<T> {
+  handleListStateChange(
+    change: ListStateChange<T>,
+    now = getNow(),
+  ): ListStateChange<T> {
     switch (change.type) {
       case "reset":
       case "set":
@@ -270,7 +273,7 @@ export class JumpController<T extends {}> {
         return change;
       case "push":
       case "unshift":
-        return this.#handleBoundaryInsert(change);
+        return this.#handleBoundaryInsert(change, now);
       default:
         return change;
     }
@@ -278,6 +281,7 @@ export class JumpController<T extends {}> {
 
   #handleBoundaryInsert(
     change: Extract<ListStateChange<T>, { type: "push" } | { type: "unshift" }>,
+    now: number,
   ): ListStateChange<T> {
     if (this.#handlePendingExternalScrollMutation()) {
       return change;
@@ -311,7 +315,7 @@ export class JumpController<T extends {}> {
 
     this.#clearPendingPostJumpBoundary();
     this.#materializeAnimatedAnchor(
-      getNow(),
+      now,
       followChange.direction,
       followChange.count,
     );
@@ -321,6 +325,7 @@ export class JumpController<T extends {}> {
         block: followChange.boundary === "bottom" ? "end" : "start",
         duration: followChange.animation?.duration,
       },
+      now,
     );
     return change;
   }
@@ -329,7 +334,7 @@ export class JumpController<T extends {}> {
     this.#jumpAnimation = undefined;
   }
 
-  #startJumpToIndex(index: number, options: JumpOptions): void {
+  #startJumpToIndex(index: number, options: JumpOptions, now = getNow()): void {
     const targetIndex = this.#options.clampItemIndex(index);
     const targetBlock = options.block ?? this.#options.getDefaultJumpBlock();
     const settleBoundary = this.#resolveBoundaryLatchTarget(
@@ -337,7 +342,7 @@ export class JumpController<T extends {}> {
       targetBlock,
     );
 
-    this.#materializeAnimatedAnchor(getNow());
+    this.#materializeAnimatedAnchor(now);
 
     const currentState = this.#options.normalizeListState(
       this.#options.readListState(),
@@ -400,7 +405,7 @@ export class JumpController<T extends {}> {
 
     this.#jumpAnimation = {
       path,
-      startTime: getNow(),
+      startTime: now,
       duration,
       needsMoreFrames: true,
       onComplete: options.onComplete,

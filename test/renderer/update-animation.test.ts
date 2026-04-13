@@ -2047,7 +2047,7 @@ describe("delete animation", () => {
     }
   });
 
-  test("list-state weak subscriptions: renderer responds to delete and delete-finalize", () => {
+  test("list-state queued changes: renderer responds to delete and delete-finalize", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {

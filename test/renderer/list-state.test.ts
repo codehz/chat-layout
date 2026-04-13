@@ -1,25 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
-import { ListState, subscribeListState } from "../../src/renderer/list-state";
+import {
+  drainInternalListStateChanges,
+  ListState,
+} from "../../src/renderer/list-state";
 
 type Item = {
   id: string;
 };
 
 describe("ListState item identity", () => {
-  test("update replaces by item reference and emits an index-free change", () => {
+  test("update replaces by item reference and queues an index-free change", () => {
     const first = { id: "first" };
     const second = { id: "second" };
     const next = { id: "next" };
     const list = new ListState<Item>([first, second]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.update(first, next, { duration: 180 });
+    const changes = drainInternalListStateChanges(list);
 
     expect(list.items).toEqual([next, second]);
     expect(changes).toHaveLength(1);
@@ -32,18 +30,13 @@ describe("ListState item identity", () => {
     expect("index" in changes[0]!).toBe(false);
   });
 
-  test("delete emits an index-free change and defers removal while animated", () => {
+  test("delete queues an index-free change and defers removal while animated", () => {
     const first = { id: "first" };
     const second = { id: "second" };
     const list = new ListState<Item>([first, second]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.delete(first, { duration: 180 });
+    const changes = drainInternalListStateChanges(list);
 
     expect(list.items).toEqual([first, second]);
     expect(changes).toHaveLength(1);
@@ -55,18 +48,13 @@ describe("ListState item identity", () => {
     expect("index" in changes[0]!).toBe(false);
   });
 
-  test("delete with zero duration removes immediately and emits finalize change", () => {
+  test("delete with zero duration removes immediately and queues finalize change", () => {
     const first = { id: "first" };
     const second = { id: "second" };
     const list = new ListState<Item>([first, second]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.delete(first, { duration: 0 });
+    const changes = drainInternalListStateChanges(list);
 
     expect(list.items).toEqual([second]);
     expect(changes).toEqual([
@@ -92,15 +80,10 @@ describe("ListState item identity", () => {
     const first = { id: "first" };
     const second = { id: "second" };
     const list = new ListState<Item>([first, second]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.delete(first, { duration: 180 });
     list.delete(first, { duration: 180 });
+    const changes = drainInternalListStateChanges(list);
 
     expect(changes).toHaveLength(1);
     expect(() => list.update(first, { id: "next" })).toThrow(
@@ -172,15 +155,10 @@ describe("ListState item identity", () => {
   test("pushAll and unshiftAll keep hard-cut behavior by default", () => {
     const existing = { id: "existing" };
     const list = new ListState<Item>([existing]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.pushAll([{ id: "tail" }]);
     list.unshiftAll([{ id: "head" }]);
+    const changes = drainInternalListStateChanges(list);
 
     expect(changes).toEqual([
       {
@@ -198,12 +176,6 @@ describe("ListState item identity", () => {
 
   test("pushAll and unshiftAll normalize animated insertion options", () => {
     const list = new ListState<Item>([{ id: "existing" }]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.pushAll([{ id: "tail" }], {
       duration: 180,
@@ -213,6 +185,7 @@ describe("ListState item identity", () => {
       duration: 180,
       autoFollow: true,
     });
+    const changes = drainInternalListStateChanges(list);
 
     expect(changes).toEqual([
       {
@@ -236,12 +209,6 @@ describe("ListState item identity", () => {
 
   test("pushAll and unshiftAll default follow duration to the insert animation default", () => {
     const list = new ListState<Item>([{ id: "existing" }]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.pushAll([{ id: "tail" }], {
       autoFollow: true,
@@ -249,6 +216,7 @@ describe("ListState item identity", () => {
     list.unshiftAll([{ id: "head" }], {
       autoFollow: true,
     });
+    const changes = drainInternalListStateChanges(list);
 
     expect(changes).toEqual([
       {
@@ -272,12 +240,6 @@ describe("ListState item identity", () => {
 
   test("pushAll and unshiftAll drop animation payloads when duration is non-positive", () => {
     const list = new ListState<Item>([{ id: "existing" }]);
-    const owner = {};
-    const changes: object[] = [];
-
-    subscribeListState(list, owner, (_owner, change) => {
-      changes.push(change);
-    });
 
     list.pushAll([{ id: "tail" }], {
       duration: 0,
@@ -287,6 +249,7 @@ describe("ListState item identity", () => {
       duration: -1,
       autoFollow: true,
     });
+    const changes = drainInternalListStateChanges(list);
 
     expect(changes).toEqual([
       {
@@ -300,5 +263,30 @@ describe("ListState item identity", () => {
         animation: undefined,
       },
     ]);
+  });
+
+  test("drain returns queued changes in order and clears the queue", () => {
+    const first = { id: "first" };
+    const second = { id: "second" };
+    const replacement = { id: "replacement" };
+    const list = new ListState<Item>([first]);
+
+    list.push(second);
+    list.update(first, replacement, { duration: 80 });
+
+    expect(drainInternalListStateChanges(list)).toEqual([
+      {
+        type: "push",
+        count: 1,
+        animation: undefined,
+      },
+      {
+        type: "update",
+        prevItem: first,
+        nextItem: replacement,
+        animation: { duration: 80 },
+      },
+    ]);
+    expect(drainInternalListStateChanges(list)).toEqual([]);
   });
 });

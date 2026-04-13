@@ -1,11 +1,14 @@
 import type { HitTest, Node, RenderFeedback } from "../../types";
 import { BaseRenderer } from "../base";
 import {
+  drainInternalListStateChanges,
   finalizeInternalListDelete,
   ListState,
+  readInternalListStateChangeSnapshot,
+  readInternalListStateChangeTime,
   readListScrollMutation,
-  subscribeListState,
   writeInternalListScrollState,
+  type InternalListStateChangeSnapshot,
   type ListStateChange,
 } from "../list-state";
 import { prepareFrameSession } from "./frame-session";
@@ -66,6 +69,9 @@ export abstract class VirtualizedRenderer<
 
   #jumpController: JumpController<T>;
   #transitionController = new TransitionController<C, T>();
+  #listStateOverride:
+    | (InternalListStateChangeSnapshot<T> & { items: T[] })
+    | undefined;
 
   constructor(
     graphics: C,
@@ -91,24 +97,21 @@ export abstract class VirtualizedRenderer<
       clampItemIndex: this._clampItemIndex.bind(this),
       getItemHeight: this._getItemHeight.bind(this),
     });
-    subscribeListState(options.list, this, (owner, change) => {
-      owner.#handleListStateChange(change);
-    });
   }
 
   /** Current anchor item index. */
   get position(): number | undefined {
-    return this.options.list.position;
+    return this.#listStateOverride?.position ?? this.options.list.position;
   }
 
   /** Pixel offset from the anchored item edge. */
   get offset(): number {
-    return this.options.list.offset;
+    return this.#listStateOverride?.offset ?? this.options.list.offset;
   }
 
   /** Items currently available to the renderer. */
   get items(): T[] {
-    return this.options.list.items;
+    return this.#listStateOverride?.items ?? this.options.list.items;
   }
 
   /** Replaces the current item collection. */
@@ -118,6 +121,7 @@ export abstract class VirtualizedRenderer<
 
   /** Renders the current visible window. */
   render(feedback?: RenderFeedback): boolean {
+    this.#drainPendingListStateChanges();
     this.#jumpController.beforeFrame();
     this.#jumpController.noteViewportWidth(this.graphics.canvas.clientWidth);
     const now = getNow();
@@ -159,6 +163,7 @@ export abstract class VirtualizedRenderer<
     y: number;
     type: "click" | "auxclick" | "hover";
   }): boolean {
+    this.#drainPendingListStateChanges();
     this.#jumpController.beforeFrame();
     this.#jumpController.noteViewportWidth(this.graphics.canvas.clientWidth);
     const now = getNow();
@@ -509,6 +514,7 @@ export abstract class VirtualizedRenderer<
 
   #handleDeleteComplete(item: T): void {
     finalizeInternalListDelete(this.options.list, item);
+    this.#drainPendingListStateChanges();
   }
 
   #getTransitionLifecycleAdapter(): TransitionLifecycleAdapter<T> {
@@ -559,12 +565,48 @@ export abstract class VirtualizedRenderer<
     };
   }
 
-  #handleListStateChange(change: ListStateChange<T>): void {
-    const nextChange = this.#jumpController.handleListStateChange(change);
-    this.#transitionController.handleListStateChange(
-      nextChange,
-      this.#getTransitionPlanningAdapter(),
-      this.#getTransitionLifecycleAdapter(),
-    );
+  #handleListStateChange(
+    change: ListStateChange<T>,
+    now = getNow(),
+    snapshot?: InternalListStateChangeSnapshot<T>,
+  ): void {
+    this.#listStateOverride =
+      snapshot == null
+        ? undefined
+        : {
+            items: [...snapshot.items],
+            position: snapshot.position,
+            offset: snapshot.offset,
+          };
+    try {
+      const nextChange = this.#jumpController.handleListStateChange(
+        change,
+        now,
+      );
+      this.#transitionController.handleListStateChange(
+        nextChange,
+        this.#getTransitionPlanningAdapter(),
+        this.#getTransitionLifecycleAdapter(),
+        now,
+      );
+    } finally {
+      this.#listStateOverride = undefined;
+    }
+  }
+
+  #drainPendingListStateChanges(): void {
+    while (true) {
+      const changes = drainInternalListStateChanges(this.options.list);
+      if (changes.length === 0) {
+        return;
+      }
+      for (const change of changes) {
+        this.#handleListStateChange(
+          change,
+          readInternalListStateChangeTime(change),
+          readInternalListStateChangeSnapshot(change),
+        );
+      }
+    }
   }
 }

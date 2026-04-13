@@ -26,8 +26,8 @@ function createProbeNode(item: Item, draws: string[]): Node<C> {
   };
 }
 
-describe("ListState weak subscriptions", () => {
-  test("ListRenderer still responds to update, delete, push, set, and reset changes", () => {
+describe("ListState queued renderer updates", () => {
+  test("ListRenderer drains queued update, delete, push, set, and reset changes on render", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -77,6 +77,34 @@ describe("ListState weak subscriptions", () => {
       list.reset([{ id: "reset", height: 18 }]);
       renderer.render();
       expect(draws).toEqual(["reset"]);
+    } finally {
+      restoreNow();
+    }
+  });
+
+  test("multiple queued changes are applied in order on the next render", () => {
+    const now = { current: 0 };
+    const restoreNow = mockPerformanceNow(now);
+    try {
+      const draws: string[] = [];
+      const first = { id: "first", height: 20 };
+      const second = { id: "second", height: 20 };
+      const third = { id: "third", height: 20 };
+      const list = new ListState<Item>([first]);
+      const renderer = new ListRenderer(createGraphics(120), {
+        anchorMode: "top",
+        list,
+        renderItem: memoRenderItem<C, Item>((item) =>
+          createProbeNode(item, draws),
+        ),
+      });
+
+      list.push(second);
+      list.push(third);
+      renderer.render();
+
+      expect(draws).toEqual(["first", "second", "third"]);
+      expect(list.items).toEqual([first, second, third]);
     } finally {
       restoreNow();
     }

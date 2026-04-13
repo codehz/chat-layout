@@ -153,8 +153,8 @@ export class TransitionController<
     change: ListStateChange<T>,
     ctx: TransitionPlanningAdapter<C, T>,
     lifecycle: TransitionLifecycleAdapter<T>,
+    now = getNow(),
   ): void {
-    const now = getNow();
     this.settle(now, lifecycle);
     handleTransitionStateChange(
       this.#store,
@@ -162,6 +162,7 @@ export class TransitionController<
       change,
       ctx,
       lifecycle,
+      now,
     );
   }
 

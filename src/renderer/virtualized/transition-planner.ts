@@ -655,10 +655,10 @@ export function handleTransitionStateChange<
   change: ListStateChange<T>,
   ctx: TransitionPlanningAdapter<C, T>,
   lifecycle: TransitionLifecycleAdapter<T>,
+  now = getNow(),
 ): void {
   switch (change.type) {
     case "update": {
-      const now = getNow();
       const currentVisualState = readCurrentVisualState(
         change.prevItem,
         now,
@@ -683,7 +683,6 @@ export function handleTransitionStateChange<
       return;
     }
     case "delete": {
-      const now = getNow();
       const currentVisualState = readCurrentVisualState(
         change.item,
         now,
@@ -712,7 +711,6 @@ export function handleTransitionStateChange<
       return;
     case "unshift":
     case "push": {
-      const now = getNow();
       const plan = planBoundaryInsertTransition(
         change.type,
         change.count,

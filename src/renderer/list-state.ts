@@ -1,9 +1,3 @@
-import {
-  emitWeakListeners,
-  pruneWeakListenerMap,
-  type WeakListenerRecord,
-} from "./weak-listeners";
-
 /**
  * Mutable list state shared with virtualized renderers.
  */
@@ -75,10 +69,6 @@ export type ListStateChange<T extends {}> =
   | ListResetChange
   | ListSetChange;
 
-export type ListStateChangeListener<T extends {}> = (
-  change: ListStateChange<T>,
-) => void;
-
 export type ListScrollMutationSource = "external" | "internal";
 
 export type ListScrollMutation = {
@@ -86,33 +76,15 @@ export type ListScrollMutation = {
   source: ListScrollMutationSource;
 };
 
-type WeakListStateListenerRecord = WeakListenerRecord<
-  object,
-  ListStateChange<{}>
->;
-
-const listStateListeners = new WeakMap<
-  ListState<{}>,
-  Map<symbol, WeakListStateListenerRecord>
->();
-const listStateListenerRegistry =
-  typeof FinalizationRegistry === "function"
-    ? new FinalizationRegistry<{
-        listRef: WeakRef<ListState<{}>>;
-        token: symbol;
-      }>(({ listRef, token }) => {
-        const list = listRef.deref();
-        if (list == null) {
-          return;
-        }
-        deleteListStateListener(list, token);
-      })
-    : null;
-
 type MutableListScrollMutation = {
   version: number;
   source: ListScrollMutationSource;
 };
+
+const listStateChangeQueues = new WeakMap<
+  ListState<{}>,
+  ListStateChange<{}>[]
+>();
 
 const listScrollMutations = new WeakMap<
   ListState<{}>,
@@ -126,6 +98,8 @@ type ListScrollStatePatch = {
 
 const WRITE_LIST_SCROLL_STATE = Symbol("writeListScrollState");
 const FINALIZE_LIST_DELETE = Symbol("finalizeListDelete");
+const LIST_STATE_CHANGE_TIME = Symbol("listStateChangeTime");
+const LIST_STATE_CHANGE_SNAPSHOT = Symbol("listStateChangeSnapshot");
 
 type InternalListStateWriter = {
   [WRITE_LIST_SCROLL_STATE]: (
@@ -136,6 +110,17 @@ type InternalListStateWriter = {
 
 type InternalListStateDeleteFinalizer<T extends {}> = {
   [FINALIZE_LIST_DELETE]: (item: T) => void;
+};
+
+type TimestampedListStateChange<T extends {}> = ListStateChange<T> & {
+  [LIST_STATE_CHANGE_TIME]?: number;
+  [LIST_STATE_CHANGE_SNAPSHOT]?: InternalListStateChangeSnapshot<T>;
+};
+
+export type InternalListStateChangeSnapshot<T extends {}> = {
+  items: readonly T[];
+  position: number | undefined;
+  offset: number;
 };
 
 function normalizePosition(value: number | undefined): number | undefined {
@@ -203,53 +188,54 @@ export function finalizeInternalListDelete<T extends {}>(
   ](item);
 }
 
-function deleteListStateListener(list: ListState<{}>, token: symbol): void {
-  const listeners = listStateListeners.get(list);
-  if (listeners == null) {
-    return;
-  }
-  listeners.delete(token);
-  if (listeners.size === 0) {
-    listStateListeners.delete(list);
-  }
-}
-
-function emitListStateChange<T extends {}>(
+function enqueueListStateChange<T extends {}>(
   list: ListState<T>,
   change: ListStateChange<T>,
 ): void {
-  const listeners = listStateListeners.get(list as unknown as ListState<{}>);
-  if (listeners == null) {
-    return;
+  const key = list as unknown as ListState<{}>;
+  let queue = listStateChangeQueues.get(key);
+  if (queue == null) {
+    queue = [];
+    listStateChangeQueues.set(key, queue);
   }
-  emitWeakListeners(listeners, change as ListStateChange<{}>);
-  if (listeners.size === 0) {
-    listStateListeners.delete(list as unknown as ListState<{}>);
-  }
+  const timestampedChange = change as TimestampedListStateChange<T>;
+  Object.defineProperty(timestampedChange, LIST_STATE_CHANGE_TIME, {
+    value: performance.now(),
+    configurable: true,
+  });
+  Object.defineProperty(timestampedChange, LIST_STATE_CHANGE_SNAPSHOT, {
+    value: {
+      items: [...list.items],
+      position: list.position,
+      offset: list.offset,
+    } satisfies InternalListStateChangeSnapshot<T>,
+    configurable: true,
+  });
+  queue.push(timestampedChange as ListStateChange<{}>);
 }
 
-export function subscribeListState<T extends {}, O extends object>(
+export function drainInternalListStateChanges<T extends {}>(
   list: ListState<T>,
-  owner: O,
-  listener: (owner: O, change: ListStateChange<T>) => void,
-): void {
+): ListStateChange<T>[] {
   const key = list as unknown as ListState<{}>;
-  let listeners = listStateListeners.get(key);
-  if (listeners == null) {
-    listeners = new Map();
-    listStateListeners.set(key, listeners);
-  } else {
-    pruneWeakListenerMap(listeners);
+  const queue = listStateChangeQueues.get(key);
+  if (queue == null || queue.length === 0) {
+    return [];
   }
-  const token = Symbol();
-  listeners.set(token, {
-    ownerRef: new WeakRef(owner),
-    notify: listener as (owner: object, change: ListStateChange<{}>) => void,
-  });
-  listStateListenerRegistry?.register(owner, {
-    listRef: new WeakRef(key),
-    token,
-  });
+  listStateChangeQueues.delete(key);
+  return queue as ListStateChange<T>[];
+}
+
+export function readInternalListStateChangeTime<T extends {}>(
+  change: ListStateChange<T>,
+): number | undefined {
+  return (change as TimestampedListStateChange<T>)[LIST_STATE_CHANGE_TIME];
+}
+
+export function readInternalListStateChangeSnapshot<T extends {}>(
+  change: ListStateChange<T>,
+): InternalListStateChangeSnapshot<T> | undefined {
+  return (change as TimestampedListStateChange<T>)[LIST_STATE_CHANGE_SNAPSHOT];
 }
 
 function isObjectIdentityCandidate(value: unknown): value is object {
@@ -364,7 +350,7 @@ export class ListState<T extends {}> {
     assertUniqueItemReferences(nextItems);
     this.#items = nextItems;
     this.#pendingDeletes.clear();
-    emitListStateChange(this, { type: "set" });
+    enqueueListStateChange(this, { type: "set" });
   }
 
   /**
@@ -397,7 +383,7 @@ export class ListState<T extends {}> {
       );
     }
     this.#items = items.concat(this.#items);
-    emitListStateChange(this, {
+    enqueueListStateChange(this, {
       type: "unshift",
       count: items.length,
       animation: normalizedAnimation,
@@ -417,7 +403,7 @@ export class ListState<T extends {}> {
     assertUniqueItemReferences(items, this.#items);
     const normalizedAnimation = normalizeInsertAnimation(animation);
     this.#items.push(...items);
-    emitListStateChange(this, {
+    enqueueListStateChange(this, {
       type: "push",
       count: items.length,
       animation: normalizedAnimation,
@@ -455,7 +441,7 @@ export class ListState<T extends {}> {
     }
     const prevItem = this.#items[index]!;
     this.#items[index] = nextItem;
-    emitListStateChange(this, {
+    enqueueListStateChange(this, {
       type: "update",
       prevItem,
       nextItem,
@@ -485,7 +471,7 @@ export class ListState<T extends {}> {
       return;
     }
     this.#pendingDeletes.add(item);
-    emitListStateChange(this, {
+    enqueueListStateChange(this, {
       type: "delete",
       item,
       animation: normalizedAnimation,
@@ -530,7 +516,7 @@ export class ListState<T extends {}> {
         );
       }
     }
-    emitListStateChange(this, {
+    enqueueListStateChange(this, {
       type: "delete-finalize",
       item,
     });
@@ -551,7 +537,7 @@ export class ListState<T extends {}> {
       },
       "internal",
     );
-    emitListStateChange(this, { type: "reset" });
+    enqueueListStateChange(this, { type: "reset" });
   }
 
   /** Applies a relative pixel scroll delta. */
