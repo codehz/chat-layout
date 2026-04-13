@@ -10,13 +10,13 @@ import {
   ShrinkWrap,
   Text,
   Wrapper,
+  initRenderFeedback,
   memoRenderItem,
   type Context,
   type DynValue,
   type HitTest,
   type InlineSpan,
   type Node,
-  type RenderFeedback,
 } from "..";
 
 const sampleWords = [
@@ -507,16 +507,9 @@ const renderer = new ListRenderer(ctx, {
 });
 renderer.padding = { top: 32, bottom: 32 };
 let nextMessageId = list.items.length + 1;
+const feedback = initRenderFeedback();
 
 function drawFrame(): void {
-  const feedback: RenderFeedback = {
-    minIdx: Number.NaN,
-    maxIdx: Number.NaN,
-    min: Number.NaN,
-    max: Number.NaN,
-    canAutoFollowTop: false,
-    canAutoFollowBottom: false,
-  };
   renderer.render(feedback);
 
   ctx.save();

@@ -29,6 +29,22 @@ export interface RenderFeedback {
 }
 
 /**
+ * Creates or resets a render feedback object to its default empty state.
+ */
+export function initRenderFeedback(
+  feedback: Partial<RenderFeedback> = {},
+): RenderFeedback {
+  const target = feedback as RenderFeedback;
+  target.minIdx = Number.NaN;
+  target.maxIdx = Number.NaN;
+  target.min = Number.NaN;
+  target.max = Number.NaN;
+  target.canAutoFollowTop = false;
+  target.canAutoFollowBottom = false;
+  return target;
+}
+
+/**
  * The main axis direction used by flex containers.
  */
 export type Axis = "row" | "column";

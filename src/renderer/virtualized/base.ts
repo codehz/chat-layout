@@ -1,4 +1,9 @@
-import type { HitTest, Node, RenderFeedback } from "../../types";
+import {
+  initRenderFeedback,
+  type HitTest,
+  type Node,
+  type RenderFeedback,
+} from "../../types";
 import { BaseRenderer } from "../base";
 import {
   drainInternalListStateChanges,
@@ -226,12 +231,7 @@ export abstract class VirtualizedRenderer<
     if (feedback == null) {
       return;
     }
-    feedback.minIdx = Number.NaN;
-    feedback.maxIdx = Number.NaN;
-    feedback.min = Number.NaN;
-    feedback.max = Number.NaN;
-    feedback.canAutoFollowTop = false;
-    feedback.canAutoFollowBottom = false;
+    initRenderFeedback(feedback);
   }
 
   protected _accumulateRenderFeedback(
