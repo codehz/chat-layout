@@ -3,3 +3,5 @@ example/build/
 node_modules/
 .git/
 coverage/
+.drafts/
+.vscode/

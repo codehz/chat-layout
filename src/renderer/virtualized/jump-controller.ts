@@ -182,19 +182,20 @@ export class JumpController<T extends {}> {
       this.#options.readScrollMutation().version;
   }
 
-  jumpTo(index: number, options: JumpOptions = {}): void {
+  jumpTo(index: number, options: JumpOptions = {}, now = getNow()): void {
     this.#clearPendingTransitionSettleReconcile();
     this.#clearPendingPostJumpBoundary();
     if (this.#options.getItemCount() === 0) {
       this.#cancelJumpAnimation();
       return;
     }
-    this.#startJumpToIndex(index, options);
+    this.#startJumpToIndex(index, options, now);
   }
 
   jumpToBoundary(
     boundary: AutoFollowBoundary,
     options: JumpOptions = {},
+    now = getNow(),
   ): void {
     this.#clearPendingTransitionSettleReconcile();
     this.#clearPendingPostJumpBoundary();
@@ -209,6 +210,7 @@ export class JumpController<T extends {}> {
         ...options,
         block: boundary === "bottom" ? "end" : "start",
       },
+      now,
     );
   }
 

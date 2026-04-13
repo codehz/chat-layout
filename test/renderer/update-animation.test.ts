@@ -833,7 +833,7 @@ describe("update animation", () => {
         viewportHeight,
       );
 
-      renderer.jumpTo(items.length - 1, {
+      list.scrollTo(items.length - 1, {
         animated: false,
         block: "end",
       });
@@ -860,7 +860,7 @@ describe("update animation", () => {
         [],
         viewportHeight,
       );
-      expected.renderer.jumpTo(expected.list.items.length - 1, {
+      expected.list.scrollTo(expected.list.items.length - 1, {
         animated: false,
         block: "end",
       });
@@ -886,7 +886,7 @@ describe("update animation", () => {
         40,
       );
 
-      renderer.jumpToBottom({ animated: false });
+      list.scrollToBottom({ animated: false });
       renderer.render();
 
       writeInternalListScrollState(list, {
@@ -932,7 +932,7 @@ describe("update animation", () => {
         [],
         40,
       );
-      expected.renderer.jumpToBottom({ animated: false });
+      expected.list.scrollToBottom({ animated: false });
       expected.renderer.render();
 
       expect(list.position).toBe(expected.list.position);
@@ -961,7 +961,7 @@ describe("update animation", () => {
         { top: 20, bottom: 20 },
       );
 
-      renderer.jumpToTop({ animated: false });
+      list.scrollToTop({ animated: false });
       renderer.render();
 
       list.unshiftAll([{ id: "new", height: 30 }], {
@@ -1001,7 +1001,7 @@ describe("update animation", () => {
         40,
       );
 
-      renderer.jumpToTop({ animated: false });
+      list.scrollToTop({ animated: false });
       renderer.render();
 
       writeInternalListScrollState(list, {
@@ -1047,7 +1047,7 @@ describe("update animation", () => {
         [],
         40,
       );
-      expected.renderer.jumpToTop({ animated: false });
+      expected.list.scrollToTop({ animated: false });
       expected.renderer.render();
 
       expect(list.position).toBe(expected.list.position);
@@ -1070,7 +1070,7 @@ describe("update animation", () => {
         100,
       );
 
-      renderer.jumpToBottom({ animated: false });
+      list.scrollToBottom({ animated: false });
       const initialFeedback = createFeedback();
       renderer.render(initialFeedback);
       expect(initialFeedback.canAutoFollowTop).toBe(false);
@@ -1101,7 +1101,7 @@ describe("update animation", () => {
         100,
       );
 
-      renderer.jumpToBottom({ animated: false });
+      list.scrollToBottom({ animated: false });
       const initialFeedback = createFeedback();
       renderer.render(initialFeedback);
       expect(initialFeedback.canAutoFollowTop).toBe(true);
@@ -1132,7 +1132,7 @@ describe("update animation", () => {
         100,
       );
 
-      renderer.jumpToTop({ animated: false });
+      list.scrollToTop({ animated: false });
       const initialFeedback = createFeedback();
       renderer.render(initialFeedback);
       expect(initialFeedback.canAutoFollowTop).toBe(true);

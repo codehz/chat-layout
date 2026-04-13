@@ -1,11 +1,10 @@
 import type { Node } from "../../types";
-import type { ListState } from "../list-state";
+import type { ListState, ScrollToOptions } from "../list-state";
 import {
   applyAnchorToState,
   getTargetAnchorForItem,
   readAnchorFromState,
 } from "./anchor-model";
-import type { JumpToOptions } from "./base";
 import { VirtualizedRenderer } from "./base";
 import {
   normalizeListPadding,
@@ -85,7 +84,7 @@ export class ListRenderer<
     );
   }
 
-  protected _getDefaultJumpBlock(): NonNullable<JumpToOptions["block"]> {
+  protected _getDefaultJumpBlock(): NonNullable<ScrollToOptions["block"]> {
     return this.#layout.anchorMode === "top" ? "start" : "end";
   }
 
@@ -120,7 +119,7 @@ export class ListRenderer<
 
   protected _getTargetAnchor(
     index: number,
-    block: NonNullable<JumpToOptions["block"]>,
+    block: NonNullable<ScrollToOptions["block"]>,
   ): number {
     return getTargetAnchorForItem(
       this.items.length,

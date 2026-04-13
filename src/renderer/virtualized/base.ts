@@ -6,15 +6,19 @@ import {
 } from "../../types";
 import { BaseRenderer } from "../base";
 import {
+  drainInternalListScrollCommands,
   drainInternalListStateChanges,
   finalizeInternalListDelete,
   ListState,
+  readInternalListScrollCommandTime,
   readInternalListStateChangeSnapshot,
   readInternalListStateChangeTime,
   readListScrollMutation,
   writeInternalListScrollState,
   type InternalListStateChangeSnapshot,
+  type ListScrollCommand,
   type ListStateChange,
+  type ScrollToOptions,
 } from "../list-state";
 import { prepareFrameSession } from "./frame-session";
 import { JumpController } from "./jump-controller";
@@ -40,20 +44,6 @@ import type {
   VirtualizedResolvedItem,
 } from "./virtualized-types";
 import { VIEWPORT_BOUNDARY_EPSILON } from "./virtualized-types";
-
-/**
- * Options for programmatic scrolling to a target item.
- */
-export interface JumpToOptions {
-  /** Whether to animate the jump. Defaults to `true`. */
-  animated?: boolean;
-  /** Which edge of the item should align with the viewport. */
-  block?: "start" | "center" | "end";
-  /** Animation duration in milliseconds. */
-  duration?: number;
-  /** Called after the jump completes or finishes animating. */
-  onComplete?: () => void;
-}
 
 /**
  * Shared base class for virtualized list renderers.
@@ -127,8 +117,9 @@ export abstract class VirtualizedRenderer<
   /** Renders the current visible window. */
   render(feedback?: RenderFeedback): boolean {
     this.#drainPendingListStateChanges();
-    this.#jumpController.beforeFrame();
     this.#jumpController.noteViewportWidth(this.graphics.canvas.clientWidth);
+    this.#drainPendingListScrollCommands();
+    this.#jumpController.beforeFrame();
     const now = getNow();
     const keepAnimating = this._prepareRender(now);
     const { clientWidth: viewportWidth, clientHeight: viewportHeight } =
@@ -169,8 +160,9 @@ export abstract class VirtualizedRenderer<
     type: "click" | "auxclick" | "hover";
   }): boolean {
     this.#drainPendingListStateChanges();
-    this.#jumpController.beforeFrame();
     this.#jumpController.noteViewportWidth(this.graphics.canvas.clientWidth);
+    this.#drainPendingListScrollCommands();
+    this.#jumpController.beforeFrame();
     const now = getNow();
     this.#transitionController.settle(
       now,
@@ -204,27 +196,6 @@ export abstract class VirtualizedRenderer<
   protected _commitListState(state: NormalizedListState): void {
     writeInternalListScrollState(this.options.list, state);
     this.#jumpController.commit(state);
-  }
-
-  /**
-   * Scrolls the viewport to the requested item index.
-   */
-  jumpTo(index: number, options: JumpToOptions = {}): void {
-    this.#jumpController.jumpTo(index, options);
-  }
-
-  /**
-   * Scrolls the viewport to the visual top edge and arms top auto-follow immediately.
-   */
-  jumpToTop(options: JumpToOptions = {}): void {
-    this.#jumpController.jumpToBoundary("top", options);
-  }
-
-  /**
-   * Scrolls the viewport to the visual bottom edge and arms bottom auto-follow immediately.
-   */
-  jumpToBottom(options: JumpToOptions = {}): void {
-    this.#jumpController.jumpToBoundary("bottom", options);
   }
 
   protected _resetRenderFeedback(feedback?: RenderFeedback): void {
@@ -498,11 +469,11 @@ export abstract class VirtualizedRenderer<
   ): number;
   protected abstract _applyAnchor(anchor: number): void;
   protected abstract _getDefaultJumpBlock(): NonNullable<
-    JumpToOptions["block"]
+    ScrollToOptions["block"]
   >;
   protected abstract _getTargetAnchor(
     index: number,
-    block: NonNullable<JumpToOptions["block"]>,
+    block: NonNullable<ScrollToOptions["block"]>,
   ): number;
 
   protected _getViewportMetrics(): ListViewportMetrics {
@@ -613,6 +584,31 @@ export abstract class VirtualizedRenderer<
           readInternalListStateChangeSnapshot(change),
         );
       }
+    }
+  }
+
+  #handleListScrollCommand(
+    command: ListScrollCommand,
+    now: number | undefined,
+  ): void {
+    if (command.type === "boundary") {
+      this.#jumpController.jumpToBoundary(
+        command.boundary,
+        command.options,
+        now,
+      );
+      return;
+    }
+    this.#jumpController.jumpTo(command.index, command.options, now);
+  }
+
+  #drainPendingListScrollCommands(): void {
+    const commands = drainInternalListScrollCommands(this.options.list);
+    for (const command of commands) {
+      this.#handleListScrollCommand(
+        command,
+        readInternalListScrollCommandTime(command),
+      );
     }
   }
 }

@@ -52,7 +52,7 @@ function expectedPixelAtTime(
   return start + (target - start) * eased;
 }
 
-describe("jumpTo", () => {
+describe("scrollTo", () => {
   test("ListState exposes explicit seed, reset, and relative scroll helpers", () => {
     const list = new ListState<number>([1, 2, 3]);
 
@@ -87,7 +87,7 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    jumpedRenderer.jumpTo(3, { animated: false });
+    jumpedList.scrollTo(3, { animated: false });
     const jumpedFeedback = createFeedback();
     jumpedRenderer.render(jumpedFeedback);
 
@@ -120,7 +120,7 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    jumpedRenderer.jumpTo(1, { animated: false });
+    jumpedList.scrollTo(1, { animated: false });
     const jumpedFeedback = createFeedback();
     jumpedRenderer.render(jumpedFeedback);
 
@@ -150,7 +150,7 @@ describe("jumpTo", () => {
       list: emptyTimelineList,
       renderItem: (height) => createNode(height),
     });
-    emptyTimeline.jumpTo(10);
+    emptyTimelineList.scrollTo(10);
     expect(emptyTimeline.render()).toBe(false);
 
     const timelineList = new ListState<number>();
@@ -160,7 +160,7 @@ describe("jumpTo", () => {
       list: timelineList,
       renderItem: (height) => createNode(height),
     });
-    timeline.jumpTo(-10, { animated: false });
+    timelineList.scrollTo(-10, { animated: false });
     timeline.render();
     expect(timelineList.position).toBe(0);
 
@@ -171,7 +171,7 @@ describe("jumpTo", () => {
       list: chatList,
       renderItem: (height) => createNode(height),
     });
-    chat.jumpTo(99, { animated: false });
+    chatList.scrollTo(99, { animated: false });
     chat.render();
     expect(chatList.position).toBe(2);
   });
@@ -195,8 +195,8 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    defaultRenderer.jumpTo(2, { animated: false });
-    explicitRenderer.jumpTo(2, { animated: false, block: "start" });
+    defaultList.scrollTo(2, { animated: false });
+    explicitList.scrollTo(2, { animated: false, block: "start" });
     defaultRenderer.render();
     explicitRenderer.render();
 
@@ -224,8 +224,8 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    defaultRenderer.jumpTo(1, { animated: false });
-    explicitRenderer.jumpTo(1, { animated: false, block: "end" });
+    defaultList.scrollTo(1, { animated: false });
+    explicitList.scrollTo(1, { animated: false, block: "end" });
     defaultRenderer.render();
     explicitRenderer.render();
 
@@ -245,7 +245,7 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    renderer.jumpTo(2, { animated: false, block: "center" });
+    list.scrollTo(2, { animated: false, block: "center" });
     renderer.render();
 
     expect(readAnchor(list, heights, "top")).toBeCloseTo(
@@ -264,7 +264,7 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    renderer.jumpTo(1, { animated: false, block: "center" });
+    list.scrollTo(1, { animated: false, block: "center" });
     renderer.render();
 
     expect(readAnchor(list, heights, "bottom")).toBeCloseTo(
@@ -283,7 +283,7 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    renderer.jumpTo(2, { animated: false, block: "end" });
+    list.scrollTo(2, { animated: false, block: "end" });
     renderer.render();
 
     expect(readAnchor(list, heights, "top")).toBeCloseTo(
@@ -302,7 +302,7 @@ describe("jumpTo", () => {
       renderItem: (height) => createNode(height),
     });
 
-    renderer.jumpTo(1, { animated: false, block: "start" });
+    list.scrollTo(1, { animated: false, block: "start" });
     renderer.render();
 
     expect(readAnchor(list, heights, "bottom")).toBeCloseTo(
@@ -321,7 +321,7 @@ describe("jumpTo", () => {
       list: timelineList,
       renderItem: (height) => createNode(height),
     });
-    timeline.jumpTo(1, { animated: false, block: "center" });
+    timelineList.scrollTo(1, { animated: false, block: "center" });
     timeline.render();
     expect(readAnchor(timelineList, heights, "top")).toBeCloseTo(
       expectedAnchor(heights, viewportHeight, 1, "center", "top"),
@@ -334,7 +334,7 @@ describe("jumpTo", () => {
       list: chatList,
       renderItem: (height) => createNode(height),
     });
-    chat.jumpTo(1, { animated: false, block: "center" });
+    chatList.scrollTo(1, { animated: false, block: "center" });
     chat.render();
     expect(readAnchor(chatList, heights, "bottom")).toBeCloseTo(
       expectedAnchor(heights, viewportHeight, 1, "center", "bottom"),
@@ -352,7 +352,7 @@ describe("jumpTo", () => {
       list: timelineList,
       renderItem: (height) => createNode(height),
     });
-    timeline.jumpTo(0, { animated: false, block: "end" });
+    timelineList.scrollTo(0, { animated: false, block: "end" });
     timeline.render();
     expect(readAnchor(timelineList, heights, "top")).toBeCloseTo(
       expectedAnchor(heights, viewportHeight, 0, "end", "top"),
@@ -367,7 +367,7 @@ describe("jumpTo", () => {
       list: chatList,
       renderItem: (height) => createNode(height),
     });
-    chat.jumpTo(2, { animated: false, block: "start" });
+    chatList.scrollTo(2, { animated: false, block: "start" });
     chat.render();
     expect(readAnchor(chatList, heights, "bottom")).toBeCloseTo(
       expectedAnchor(heights, viewportHeight, 2, "start", "bottom"),
@@ -392,12 +392,12 @@ describe("jumpTo", () => {
       renderItem: (item) => createTrackedItemNode(item, draws, []),
     });
 
-    renderer.jumpTo(1, { animated: false, block: "start" });
+    list.scrollTo(1, { animated: false, block: "start" });
     renderer.render();
     expect(draws.find((draw) => draw.id === "b")?.y).toBeCloseTo(20);
 
     draws.length = 0;
-    renderer.jumpTo(2, { animated: false, block: "end" });
+    list.scrollTo(2, { animated: false, block: "end" });
     renderer.render();
     expect(draws.find((draw) => draw.id === "c")?.y).toBeCloseTo(60);
   });
@@ -430,7 +430,7 @@ describe("jumpTo", () => {
     expect(list.offset).toBeCloseTo(-10);
   });
 
-  test("jumpTo onComplete runs immediately for non-animated success", () => {
+  test("non-animated scrollTo runs onComplete when the command is consumed", () => {
     const list = new ListState<number>();
     list.push(40, 50, 60);
     const renderer = createRenderer(100, {
@@ -440,16 +440,72 @@ describe("jumpTo", () => {
     });
 
     let completed = 0;
-    renderer.jumpTo(1, {
+    list.scrollTo(1, {
       animated: false,
       onComplete: () => {
         completed += 1;
       },
     });
 
-    expect(completed).toBe(1);
+    expect(completed).toBe(0);
     renderer.render();
+    expect(completed).toBe(1);
     expect(list.position).toBe(1);
+    expect(list.offset).toBe(0);
+  });
+
+  test("same-frame scrollTo commands keep the last command", () => {
+    const list = new ListState<number>();
+    list.push(40, 40, 40, 40, 40, 40, 40);
+    const renderer = createRenderer(100, {
+      anchorMode: "top",
+      list,
+      renderItem: (height) => createNode(height),
+    });
+
+    let firstCompleted = 0;
+    let secondCompleted = 0;
+    list.scrollTo(6, {
+      onComplete: () => {
+        firstCompleted += 1;
+      },
+    });
+    list.scrollTo(2, {
+      animated: false,
+      onComplete: () => {
+        secondCompleted += 1;
+      },
+    });
+
+    expect(renderer.render()).toBe(false);
+    expect(firstCompleted).toBe(0);
+    expect(secondCompleted).toBe(1);
+    expect(list.position).toBe(2);
+    expect(list.offset).toBe(0);
+  });
+
+  test("hittest drains pending scrollTo commands before resolving hits", () => {
+    const hits: string[] = [];
+    const list = new ListState([
+      { id: "a", height: 30, hit: true },
+      { id: "b", height: 30, hit: true },
+      { id: "c", height: 30, hit: true },
+    ]);
+    const renderer = createRenderer(30, {
+      anchorMode: "top",
+      list,
+      renderItem: (item) => createTrackedItemNode(item, [], hits),
+    });
+
+    renderer.render();
+    list.scrollTo(2, {
+      animated: false,
+      block: "start",
+    });
+
+    expect(renderer.hittest({ x: 10, y: 10, type: "click" })).toBe(true);
+    expect(hits).toEqual(["c"]);
+    expect(list.position).toBe(2);
     expect(list.offset).toBe(0);
   });
 
@@ -467,7 +523,7 @@ describe("jumpTo", () => {
       });
 
       renderer.render();
-      renderer.jumpTo(3);
+      list.scrollTo(3);
 
       const anchors: number[] = [];
       const feedbacks: RenderFeedback[] = [];
@@ -508,7 +564,7 @@ describe("jumpTo", () => {
       });
 
       renderer.render();
-      renderer.jumpTo(4);
+      list.scrollTo(4);
 
       const anchors: number[] = [];
       const feedbacks: RenderFeedback[] = [];
@@ -549,7 +605,7 @@ describe("jumpTo", () => {
 
       renderer.render();
       let completed = 0;
-      renderer.jumpTo(3, {
+      list.scrollTo(3, {
         duration: 200,
         onComplete: () => {
           completed += 1;
@@ -584,11 +640,11 @@ describe("jumpTo", () => {
       });
 
       renderer.render();
-      renderer.jumpTo(6);
+      list.scrollTo(6);
       now.current = 80;
       renderer.render();
 
-      renderer.jumpTo(2);
+      list.scrollTo(2);
       for (const time of [80, 160, 240, 320]) {
         now.current = time;
         renderer.render();
@@ -629,7 +685,7 @@ describe("jumpTo", () => {
       renderer.render();
       let firstCompleted = 0;
       let secondCompleted = 0;
-      renderer.jumpTo(6, {
+      list.scrollTo(6, {
         duration: 200,
         onComplete: () => {
           firstCompleted += 1;
@@ -639,7 +695,7 @@ describe("jumpTo", () => {
       now.current = 100;
       renderer.render();
 
-      renderer.jumpTo(2, {
+      list.scrollTo(2, {
         duration: 200,
         onComplete: () => {
           secondCompleted += 1;
@@ -672,7 +728,7 @@ describe("jumpTo", () => {
       });
 
       renderer.render();
-      renderer.jumpTo(2);
+      list.scrollTo(2);
       now.current = 80;
       expect(renderer.render()).toBe(true);
 
@@ -718,7 +774,7 @@ describe("jumpTo", () => {
 
       renderer.render();
       let completed = 0;
-      renderer.jumpTo(2, {
+      list.scrollTo(2, {
         duration: 200,
         onComplete: () => {
           completed += 1;
@@ -764,7 +820,7 @@ describe("jumpTo", () => {
       renderItem,
     });
 
-    renderer.jumpTo(700, { animated: false });
+    list.scrollTo(700, { animated: false });
     renderer.render();
 
     expect(measureCount.count).toBeLessThan(20);
@@ -785,7 +841,7 @@ describe("jumpTo", () => {
       });
 
       renderer.render();
-      renderer.jumpTo(1, { block: "start", duration: 200 });
+      list.scrollTo(1, { block: "start", duration: 200 });
 
       for (const time of [0, 100, 200]) {
         now.current = time;
@@ -824,8 +880,8 @@ describe("jumpTo", () => {
 
       shortRenderer.render();
       tallRenderer.render();
-      shortRenderer.jumpTo(1);
-      tallRenderer.jumpTo(1);
+      shortList.scrollTo(1);
+      tallList.scrollTo(1);
 
       now.current = 200;
       expect(shortRenderer.render()).toBe(false);
@@ -861,7 +917,7 @@ describe("jumpTo", () => {
         heights,
         readAnchor(list, heights, "top"),
       );
-      renderer.jumpTo(1, { block: "end", duration: 200 });
+      list.scrollTo(1, { block: "end", duration: 200 });
       const targetPixel = pixelAtAnchor(
         heights,
         expectedAnchor(heights, viewportHeight, 1, "end", "top"),
@@ -898,7 +954,7 @@ describe("jumpTo", () => {
         heights,
         readAnchor(list, heights, "bottom"),
       );
-      renderer.jumpTo(1, { block: "start", duration: 200 });
+      list.scrollTo(1, { block: "start", duration: 200 });
       const targetPixel = pixelAtAnchor(
         heights,
         expectedAnchor(heights, viewportHeight, 1, "start", "bottom"),

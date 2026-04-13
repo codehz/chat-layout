@@ -237,7 +237,7 @@ describe("delete animation", () => {
         40,
       );
 
-      renderer.jumpToBottom({ animated: false });
+      list.scrollToBottom({ animated: false });
       renderer.render();
 
       writeInternalListScrollState(list, {
@@ -273,7 +273,7 @@ describe("delete animation", () => {
         [],
         40,
       );
-      expected.renderer.jumpToBottom({ animated: false });
+      expected.list.scrollToBottom({ animated: false });
       expected.renderer.render();
 
       expect(list.position).toBe(expected.list.position);
@@ -296,7 +296,7 @@ describe("delete animation", () => {
         100,
       );
 
-      renderer.jumpToBottom({ animated: false });
+      list.scrollToBottom({ animated: false });
       const initialFeedback = createFeedback();
       renderer.render(initialFeedback);
       expect(initialFeedback.canAutoFollowTop).toBe(false);
@@ -324,7 +324,7 @@ describe("delete animation", () => {
       100,
     );
 
-    renderer.jumpToBottom({ animated: false });
+    list.scrollToBottom({ animated: false });
     const initialFeedback = createFeedback();
     renderer.render(initialFeedback);
     expect(initialFeedback.canAutoFollowTop).toBe(false);
@@ -353,7 +353,7 @@ describe("delete animation", () => {
         100,
       );
 
-      renderer.jumpToBottom({ animated: false });
+      list.scrollToBottom({ animated: false });
       const initialFeedback = createFeedback();
       renderer.render(initialFeedback);
       expect(initialFeedback.canAutoFollowTop).toBe(true);

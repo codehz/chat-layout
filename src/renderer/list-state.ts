@@ -22,6 +22,17 @@ export type PushListItemsAnimationOptions = InsertListItemsAnimationOptions;
 
 export type UnshiftListItemsAnimationOptions = InsertListItemsAnimationOptions;
 
+export interface ScrollToOptions {
+  /** Whether to animate the jump. Defaults to `true`. */
+  animated?: boolean;
+  /** Which edge of the item should align with the viewport. */
+  block?: "start" | "center" | "end";
+  /** Animation duration in milliseconds. */
+  duration?: number;
+  /** Called after the scroll completes or finishes animating. */
+  onComplete?: () => void;
+}
+
 type ListUpdateChange<T extends {}> = {
   type: "update";
   prevItem: T;
@@ -69,6 +80,22 @@ export type ListStateChange<T extends {}> =
   | ListResetChange
   | ListSetChange;
 
+type ListScrollToIndexCommand = {
+  type: "index";
+  index: number;
+  options: ScrollToOptions;
+};
+
+type ListScrollToBoundaryCommand = {
+  type: "boundary";
+  boundary: "top" | "bottom";
+  options: ScrollToOptions;
+};
+
+export type ListScrollCommand =
+  | ListScrollToIndexCommand
+  | ListScrollToBoundaryCommand;
+
 export type ListScrollMutationSource = "external" | "internal";
 
 export type ListScrollMutation = {
@@ -85,6 +112,10 @@ const listStateChangeQueues = new WeakMap<
   ListState<{}>,
   ListStateChange<{}>[]
 >();
+const listScrollCommandQueues = new WeakMap<
+  ListState<{}>,
+  ListScrollCommand[]
+>();
 
 const listScrollMutations = new WeakMap<
   ListState<{}>,
@@ -100,6 +131,7 @@ const WRITE_LIST_SCROLL_STATE = Symbol("writeListScrollState");
 const FINALIZE_LIST_DELETE = Symbol("finalizeListDelete");
 const LIST_STATE_CHANGE_TIME = Symbol("listStateChangeTime");
 const LIST_STATE_CHANGE_SNAPSHOT = Symbol("listStateChangeSnapshot");
+const LIST_SCROLL_COMMAND_TIME = Symbol("listScrollCommandTime");
 
 type InternalListStateWriter = {
   [WRITE_LIST_SCROLL_STATE]: (
@@ -115,6 +147,10 @@ type InternalListStateDeleteFinalizer<T extends {}> = {
 type TimestampedListStateChange<T extends {}> = ListStateChange<T> & {
   [LIST_STATE_CHANGE_TIME]?: number;
   [LIST_STATE_CHANGE_SNAPSHOT]?: InternalListStateChangeSnapshot<T>;
+};
+
+type TimestampedListScrollCommand = ListScrollCommand & {
+  [LIST_SCROLL_COMMAND_TIME]?: number;
 };
 
 export type InternalListStateChangeSnapshot<T extends {}> = {
@@ -188,6 +224,29 @@ export function finalizeInternalListDelete<T extends {}>(
   ](item);
 }
 
+function normalizeScrollToOptions(
+  options: ScrollToOptions | undefined,
+): ScrollToOptions {
+  const normalized: ScrollToOptions = {};
+  if (typeof options?.animated === "boolean") {
+    normalized.animated = options.animated;
+  }
+  if (
+    options?.block === "start" ||
+    options?.block === "center" ||
+    options?.block === "end"
+  ) {
+    normalized.block = options.block;
+  }
+  if (options?.duration != null && Number.isFinite(options.duration)) {
+    normalized.duration = options.duration;
+  }
+  if (typeof options?.onComplete === "function") {
+    normalized.onComplete = options.onComplete;
+  }
+  return normalized;
+}
+
 function enqueueListStateChange<T extends {}>(
   list: ListState<T>,
   change: ListStateChange<T>,
@@ -214,6 +273,24 @@ function enqueueListStateChange<T extends {}>(
   queue.push(timestampedChange as ListStateChange<{}>);
 }
 
+function enqueueListScrollCommand<T extends {}>(
+  list: ListState<T>,
+  command: ListScrollCommand,
+): void {
+  const key = list as unknown as ListState<{}>;
+  let queue = listScrollCommandQueues.get(key);
+  if (queue == null) {
+    queue = [];
+    listScrollCommandQueues.set(key, queue);
+  }
+  const timestampedCommand = command as TimestampedListScrollCommand;
+  Object.defineProperty(timestampedCommand, LIST_SCROLL_COMMAND_TIME, {
+    value: performance.now(),
+    configurable: true,
+  });
+  queue.push(timestampedCommand);
+}
+
 export function drainInternalListStateChanges<T extends {}>(
   list: ListState<T>,
 ): ListStateChange<T>[] {
@@ -226,6 +303,18 @@ export function drainInternalListStateChanges<T extends {}>(
   return queue as ListStateChange<T>[];
 }
 
+export function drainInternalListScrollCommands<T extends {}>(
+  list: ListState<T>,
+): ListScrollCommand[] {
+  const key = list as unknown as ListState<{}>;
+  const queue = listScrollCommandQueues.get(key);
+  if (queue == null || queue.length === 0) {
+    return [];
+  }
+  listScrollCommandQueues.delete(key);
+  return queue;
+}
+
 export function readInternalListStateChangeTime<T extends {}>(
   change: ListStateChange<T>,
 ): number | undefined {
@@ -236,6 +325,12 @@ export function readInternalListStateChangeSnapshot<T extends {}>(
   change: ListStateChange<T>,
 ): InternalListStateChangeSnapshot<T> | undefined {
   return (change as TimestampedListStateChange<T>)[LIST_STATE_CHANGE_SNAPSHOT];
+}
+
+export function readInternalListScrollCommandTime(
+  command: ListScrollCommand,
+): number | undefined {
+  return (command as TimestampedListScrollCommand)[LIST_SCROLL_COMMAND_TIME];
 }
 
 function isObjectIdentityCandidate(value: unknown): value is object {
@@ -548,6 +643,37 @@ export class ListState<T extends {}> {
       },
       "external",
     );
+  }
+
+  /** Scrolls the viewport to the requested item index. */
+  scrollTo(index: number, options: ScrollToOptions = {}): void {
+    enqueueListScrollCommand(this, {
+      type: "index",
+      index,
+      options: normalizeScrollToOptions(options),
+    });
+  }
+
+  /**
+   * Scrolls the viewport to the visual top edge and arms top auto-follow immediately.
+   */
+  scrollToTop(options: ScrollToOptions = {}): void {
+    enqueueListScrollCommand(this, {
+      type: "boundary",
+      boundary: "top",
+      options: normalizeScrollToOptions(options),
+    });
+  }
+
+  /**
+   * Scrolls the viewport to the visual bottom edge and arms bottom auto-follow immediately.
+   */
+  scrollToBottom(options: ScrollToOptions = {}): void {
+    enqueueListScrollCommand(this, {
+      type: "boundary",
+      boundary: "bottom",
+      options: normalizeScrollToOptions(options),
+    });
   }
 
   [WRITE_LIST_SCROLL_STATE](

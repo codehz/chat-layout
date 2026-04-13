@@ -8,6 +8,7 @@ import type {
   MultilineTextOptions,
   Node,
   PushListItemsAnimationOptions,
+  ScrollToOptions,
   TextEllipsisPosition,
   TextJustifyMode,
   TextJustifyOptions,
@@ -96,6 +97,12 @@ const invalidPushAnimationOptionsTypecheck:
   | undefined =
   // @ts-expect-error fade was removed from insert animations
   { duration: 180, fade: false };
+const scrollToOptionsTypecheck: ScrollToOptions = {
+  animated: false,
+  block: "center",
+  duration: 180,
+  onComplete: () => undefined,
+};
 
 void flexItemOptionsTypecheck;
 void nodeWithMinContentTypecheck;
@@ -112,6 +119,7 @@ void deleteAnimationOptionsTypecheck;
 void insertAnimationOptionsTypecheck;
 void unshiftAnimationOptionsTypecheck;
 void invalidPushAnimationOptionsTypecheck;
+void scrollToOptionsTypecheck;
 
 describe("root exports", () => {
   test("stable public API stays available while internal registry stays hidden", () => {

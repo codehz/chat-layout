@@ -10,8 +10,8 @@ import {
   createListRenderer as createRenderer,
 } from "../helpers/virtualized-fixtures";
 
-describe("jumpTo auto-follow", () => {
-  test("jumpToBottom arms bottom auto-follow before the first render", () => {
+describe("scrollTo auto-follow", () => {
+  test("scrollToBottom arms bottom auto-follow before the first render", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -26,7 +26,7 @@ describe("jumpTo auto-follow", () => {
       });
 
       renderer.render();
-      renderer.jumpToBottom({ duration: 200 });
+      list.scrollToBottom({ duration: 200 });
       list.pushAll([30], {
         duration: 200,
         autoFollow: true,
@@ -48,7 +48,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpToBottom({ animated: false });
+      expectedList.scrollToBottom({ animated: false });
       expectedRenderer.render();
 
       expect(feedbacks[0]?.canAutoFollowBottom).toBe(true);
@@ -59,7 +59,7 @@ describe("jumpTo auto-follow", () => {
     }
   });
 
-  test("jumpToTop arms top auto-follow before the first render", () => {
+  test("scrollToTop arms top auto-follow before the first render", () => {
     const now = { current: 0 };
     const restoreNow = mockPerformanceNow(now);
     try {
@@ -74,7 +74,7 @@ describe("jumpTo auto-follow", () => {
       });
 
       renderer.render();
-      renderer.jumpToTop({ duration: 200 });
+      list.scrollToTop({ duration: 200 });
       list.unshiftAll([30], {
         duration: 200,
         autoFollow: true,
@@ -96,7 +96,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpToTop({ animated: false });
+      expectedList.scrollToTop({ animated: false });
       expectedRenderer.render();
 
       expect(feedbacks[0]?.canAutoFollowTop).toBe(true);
@@ -122,7 +122,7 @@ describe("jumpTo auto-follow", () => {
       });
 
       renderer.render();
-      renderer.jumpTo(heights.length - 1, {
+      list.scrollTo(heights.length - 1, {
         duration: 200,
         block: "end",
       });
@@ -158,7 +158,7 @@ describe("jumpTo auto-follow", () => {
       });
 
       renderer.render();
-      renderer.jumpTo(heights.length - 1, {
+      list.scrollTo(heights.length - 1, {
         duration: 200,
         block: "end",
       });
@@ -190,7 +190,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedAfterFollowList,
         renderItem: (height) => createNode(height),
       });
-      expectedAfterFollowRenderer.jumpToBottom({ animated: false });
+      expectedAfterFollowList.scrollToBottom({ animated: false });
       expectedAfterFollowRenderer.render();
 
       expect(list.position).toBe(expectedAfterFollowList.position);
@@ -214,7 +214,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(heights.length - 1, {
+      list.scrollTo(heights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -238,7 +238,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+      expectedList.scrollTo(expectedHeights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -265,7 +265,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(0, {
+      list.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -289,7 +289,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(0, {
+      expectedList.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -331,7 +331,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedPushList,
         renderItem: (height) => createNode(height),
       });
-      expectedPushRenderer.jumpTo(2, {
+      expectedPushList.scrollTo(2, {
         animated: false,
         block: "end",
       });
@@ -362,7 +362,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedUnshiftList,
         renderItem: (height) => createNode(height),
       });
-      expectedUnshiftRenderer.jumpTo(0, {
+      expectedUnshiftList.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -443,7 +443,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+      expectedList.scrollTo(expectedHeights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -470,7 +470,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(heights.length - 1, {
+      list.scrollTo(heights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -502,7 +502,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+      expectedList.scrollTo(expectedHeights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -529,7 +529,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(0, {
+      list.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -561,7 +561,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(0, {
+      expectedList.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -590,7 +590,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(0, {
+      list.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -628,7 +628,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(0, {
+      expectedList.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -657,7 +657,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(heights.length - 1, {
+      list.scrollTo(heights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -695,7 +695,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpTo(expectedHeights.length - 1, {
+      expectedList.scrollTo(expectedHeights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -722,7 +722,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(heights.length - 1, {
+      list.scrollTo(heights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -784,7 +784,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(0, {
+      list.scrollTo(0, {
         animated: false,
         block: "start",
       });
@@ -847,7 +847,7 @@ describe("jumpTo auto-follow", () => {
         renderItem: (height) => createNode(height),
       });
 
-      renderer.jumpTo(heights.length - 1, {
+      list.scrollTo(heights.length - 1, {
         animated: false,
         block: "end",
       });
@@ -862,7 +862,7 @@ describe("jumpTo auto-follow", () => {
         renderer.render();
       }
 
-      renderer.jumpTo(1, {
+      list.scrollTo(1, {
         animated: false,
       });
       const jumpedFeedback = createFeedback();
@@ -885,7 +885,7 @@ describe("jumpTo auto-follow", () => {
         list: expectedList,
         renderItem: (height) => createNode(height),
       });
-      expectedRenderer.jumpToBottom({
+      expectedList.scrollToBottom({
         animated: false,
       });
       expectedRenderer.render();

@@ -360,7 +360,7 @@ describe("virtualized visible window", () => {
     expect(middleFeedback.canAutoFollowTop).toBe(false);
     expect(middleFeedback.canAutoFollowBottom).toBe(false);
 
-    renderer.jumpToBottom({ animated: false });
+    list.scrollToBottom({ animated: false });
     const bottomFeedback = createFeedback();
     renderer.render(bottomFeedback);
     expect(bottomFeedback.canAutoFollowTop).toBe(false);

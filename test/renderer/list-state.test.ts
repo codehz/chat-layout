@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  drainInternalListScrollCommands,
   drainInternalListStateChanges,
   ListState,
+  readInternalListScrollCommandTime,
 } from "../../src/renderer/list-state";
 
 type Item = {
@@ -288,5 +290,52 @@ describe("ListState item identity", () => {
       },
     ]);
     expect(drainInternalListStateChanges(list)).toEqual([]);
+  });
+
+  test("scrollTo helpers queue independent scroll commands in order", () => {
+    const list = new ListState<Item>([{ id: "existing" }]);
+
+    list.scrollTo(8.9, {
+      animated: false,
+      block: "center",
+      duration: 180,
+    });
+    list.scrollToTop();
+    list.scrollToBottom({
+      duration: Number.NaN,
+      onComplete: () => undefined,
+    });
+
+    const commands = drainInternalListScrollCommands(list);
+
+    expect(commands).toHaveLength(3);
+    expect(commands).toEqual([
+      {
+        type: "index",
+        index: 8.9,
+        options: {
+          animated: false,
+          block: "center",
+          duration: 180,
+        },
+      },
+      {
+        type: "boundary",
+        boundary: "top",
+        options: {},
+      },
+      {
+        type: "boundary",
+        boundary: "bottom",
+        options: {
+          onComplete: expect.any(Function),
+        },
+      },
+    ]);
+    expect(readInternalListScrollCommandTime(commands[0]!)).toEqual(
+      expect.any(Number),
+    );
+    expect(drainInternalListStateChanges(list)).toEqual([]);
+    expect(drainInternalListScrollCommands(list)).toEqual([]);
   });
 });
